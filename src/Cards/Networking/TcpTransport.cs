@@ -15,7 +15,6 @@ public sealed class TcpTransport : IMultiplayerTransport
     private TcpClient?     _serverConnection;  // client role only
     private readonly ConcurrentDictionary<string, TcpPeer> _peers = new();
     private readonly string _endpointId;
-    private bool _isServer;
 
     public TcpTransport()
     {
@@ -33,7 +32,6 @@ public sealed class TcpTransport : IMultiplayerTransport
 
     public async Task<string> ListenAsync(CancellationToken ct = default)
     {
-        _isServer = true;
         _listener = new TcpListener(IPAddress.Any, 0);  // OS picks a free port
         _listener.Start();
 

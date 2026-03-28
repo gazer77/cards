@@ -20,6 +20,9 @@ public class GameDefinition
     [JsonPropertyName("deck")]
     public JsonElement Deck { get; set; }
 
+    [JsonPropertyName("deal")]
+    public DealDefinition? Deal { get; set; }
+
     [JsonPropertyName("players")]
     public PlayerConfig? Players { get; set; }
 
@@ -145,6 +148,67 @@ public class GameUiConfig
     /// <summary>Multiplier on the base card width (default 1.0).</summary>
     [JsonPropertyName("card_scale")]
     public float CardScale { get; set; } = 1.0f;
+
+    /// <summary>
+    /// Automatically sort the player's hand after every action.
+    /// "none" (default) — no auto-sort.
+    /// "rank"           — group same ranks; Ace low (A 2 3 … K).
+    /// "rank_ace_high"  — group same ranks; Ace high (2 3 … K A).
+    /// "suit"           — sort by suit, then rank within suit.
+    /// </summary>
+    [JsonPropertyName("auto_sort_hand")]
+    public string AutoSortHand { get; set; } = "none";
+
+    /// <summary>
+    /// When true a Sort button appears in the HUD so the player can manually sort
+    /// their hand at any time.  Defaults to true.
+    /// </summary>
+    [JsonPropertyName("allow_sort")]
+    public bool AllowSort { get; set; } = true;
+
+    /// <summary>
+    /// When true a Log button appears in the HUD so the player can review the
+    /// full game event history.  Defaults to true.
+    /// </summary>
+    [JsonPropertyName("show_game_log")]
+    public bool ShowGameLog { get; set; } = true;
+}
+
+public class DealDefinition
+{
+    /// <summary>
+    /// Cards dealt per player.  Either a plain integer, or an array of
+    /// <c>{ "max_players": N, "cards": N }</c> rules evaluated top-to-bottom —
+    /// the first rule whose max_players is ≥ the actual player count wins.
+    /// Omit max_players on the last entry to serve as a catch-all default.
+    /// </summary>
+    [JsonPropertyName("cards_per_player")]
+    public JsonElement CardsPerPlayer { get; set; }
+
+    [JsonPropertyName("remainder_to")]
+    public string? RemainderTo { get; set; }
+
+    [JsonPropertyName("face")]
+    public string? Face { get; set; }
+
+    public int GetCardsPerPlayer(int playerCount)
+    {
+        if (CardsPerPlayer.ValueKind == JsonValueKind.Number)
+            return CardsPerPlayer.GetInt32();
+
+        if (CardsPerPlayer.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in CardsPerPlayer.EnumerateArray())
+            {
+                bool hasMax = item.TryGetProperty("max_players", out var mp);
+                int cards   = item.GetProperty("cards").GetInt32();
+                if (!hasMax || playerCount <= mp.GetInt32())
+                    return cards;
+            }
+        }
+
+        return 5; // fallback
+    }
 }
 
 public class HouseRule

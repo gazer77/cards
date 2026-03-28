@@ -14,7 +14,6 @@ public sealed class GameServer : IAsyncDisposable
 
     private readonly IMultiplayerTransport _transport;
     private readonly IGameLogic            _logic;
-    private readonly GameSaveService       _saves;
 
     // ── Game state ────────────────────────────────────────────────────────────
 
@@ -47,10 +46,9 @@ public sealed class GameServer : IAsyncDisposable
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
-    public GameServer(IMultiplayerTransport transport, IGameLogic logic, GameSaveService saves)
+    public GameServer(IMultiplayerTransport transport, IGameLogic logic)
     {
         _transport = transport;
-        _saves     = saves;
         _logic     = logic;
 
         _transport.MessageReceived  += OnMessageReceived;
@@ -95,6 +93,45 @@ public sealed class GameServer : IAsyncDisposable
     {
         _state = state;
     }
+
+    /// <summary>
+    /// Initialise the game state and broadcast it to all connected clients.
+    /// Called by the host when they press "Start Game" in the lobby.
+    /// </summary>
+    public async Task StartGameAsync(GameState state)
+    {
+        _logic.Initialize(state, _playerCount, _enabledRules);
+        _state = state;
+        await _transport.BroadcastAsync(
+            NetworkEnvelope.Encode(MessageType.StateSync, _transport.EndpointId,
+                new StateSyncMsg
+                {
+                    SerializedState = System.Text.Json.JsonSerializer.Serialize(
+                        GameSaveService.Snapshot(state, _playerCount, _enabledRules),
+                        new System.Text.Json.JsonSerializerOptions
+                        {
+                            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                        }),
+                    PlayerCount  = _playerCount,
+                    EnabledRules = [.. _enabledRules],
+                }));
+    }
+
+    /// <summary>
+    /// Apply an action as the host player (bypasses transport; goes straight through
+    /// the server's validation and broadcast pipeline).
+    /// </summary>
+    public Task ApplyLocalActionAsync(GameAction action)
+        => HandleActionAsync(_hostEndpointId,
+            new ActionMsg
+            {
+                ActionType = action.Type,
+                PlayerId   = action.PlayerId,
+                ZoneId     = action.ZoneId,
+                CardId     = action.CardId,
+                Label      = action.Label,
+                Sequence   = _actionSequence + 1,
+            });
 
     /// <summary>
     /// Manually transfer host role to another connected player.

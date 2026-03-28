@@ -16,25 +16,16 @@
             HorizontalOptions="Fill"
             VerticalOptions="Fill" />
 
-        <!-- Status message overlay (centered over canvas) -->
-        <Border
+        <!-- Stacking message overlay (centered over canvas) -->
+        <VerticalStackLayout
+            x:Name="StatusMessagesPanel"
             Grid.Row="0"
             VerticalOptions="Center"
             HorizontalOptions="Center"
             Margin="0,-60,0,0"
-            Padding="18,10"
-            BackgroundColor="#CC0D2518"
-            StrokeShape="RoundRectangle 10"
-            StrokeThickness="0"
-            IsVisible="{Binding Source={x:Reference StatusLabel}, Path=IsVisible}">
-            <Label
-                x:Name="StatusLabel"
-                HorizontalTextAlignment="Center"
-                TextColor="{StaticResource Gold}"
-                FontSize="16"
-                FontAttributes="Bold"
-                IsVisible="False" />
-        </Border>
+            Spacing="6"
+            MaximumWidthRequest="300"
+            InputTransparent="True" />
 
         <!-- HUD overlay — game title -->
         <Grid
@@ -54,23 +45,72 @@
             Grid.Row="1"
             BackgroundColor="{StaticResource HudBackground}"
             StrokeThickness="0">
-            <Grid ColumnDefinitions="Auto,*,Auto" Padding="16,12">
-                <Button
-                    Grid.Column="0"
-                    Text="Rules"
-                    Style="{StaticResource HudButton}"
-                    Clicked="OnRulesClicked" />
+            <Grid ColumnDefinitions="*,Auto" Padding="12,12">
                 <HorizontalStackLayout
                     x:Name="ActionButtonsPanel"
-                    Grid.Column="1"
+                    Grid.Column="0"
                     HorizontalOptions="Center"
                     Spacing="12" />
                 <Button
-                    Grid.Column="2"
-                    Text="Menu"
+                    x:Name="GearButton"
+                    Grid.Column="1"
+                    Text="⚙"
+                    FontSize="18"
                     Style="{StaticResource HudButton}"
-                    Clicked="OnMenuClicked" />
+                    Clicked="OnGearClicked" />
             </Grid>
+        </Border>
+
+        <!-- Gear menu backdrop — tap to dismiss -->
+        <BoxView
+            x:Name="GearMenuBackdrop"
+            Grid.Row="0"
+            Color="Transparent"
+            IsVisible="False">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnGearMenuDismissed" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+
+        <!-- Gear menu panel -->
+        <Border
+            x:Name="GearMenuPanel"
+            Grid.Row="0"
+            IsVisible="False"
+            VerticalOptions="End"
+            HorizontalOptions="End"
+            Margin="0,0,8,4"
+            BackgroundColor="{StaticResource SurfaceDark}"
+            StrokeShape="RoundRectangle 12"
+            Stroke="{StaticResource Gold}"
+            StrokeThickness="1"
+            Padding="0">
+            <VerticalStackLayout Spacing="0" MinimumWidthRequest="170">
+                <Button
+                    x:Name="GearSortButton"
+                    Text="Sort Hand"
+                    Style="{StaticResource HudButton}"
+                    IsVisible="False"
+                    HorizontalOptions="Fill"
+                    Clicked="OnGearSortClicked" />
+                <Button
+                    x:Name="GearLogButton"
+                    Text="Game Log"
+                    Style="{StaticResource HudButton}"
+                    IsVisible="False"
+                    HorizontalOptions="Fill"
+                    Clicked="OnGearLogClicked" />
+                <Button
+                    Text="Rules"
+                    Style="{StaticResource HudButton}"
+                    HorizontalOptions="Fill"
+                    Clicked="OnGearRulesClicked" />
+                <Button
+                    Text="Leave Game"
+                    Style="{StaticResource HudButton}"
+                    HorizontalOptions="Fill"
+                    Clicked="OnGearLeaveClicked" />
+            </VerticalStackLayout>
         </Border>
 
         <!-- Game-over overlay — covers entire screen including bottom bar -->
@@ -117,6 +157,89 @@
                         Clicked="OnMenuClicked" />
 
                 </VerticalStackLayout>
+            </Border>
+        </Grid>
+
+        <!-- Game log overlay -->
+        <Grid
+            x:Name="GameLogOverlay"
+            Grid.Row="0"
+            Grid.RowSpan="2"
+            BackgroundColor="#D9000000"
+            IsVisible="False">
+            <!-- Tap backdrop to dismiss -->
+            <BoxView Color="Transparent">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnLogOverlayDismissed" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
+
+            <Border
+                VerticalOptions="Fill"
+                HorizontalOptions="Fill"
+                Margin="20,60,20,20"
+                BackgroundColor="{StaticResource SurfaceDark}"
+                StrokeShape="RoundRectangle 16"
+                StrokeThickness="0">
+                <Grid RowDefinitions="Auto,*,Auto" Padding="0">
+
+                    <!-- Header -->
+                    <Border
+                        Grid.Row="0"
+                        BackgroundColor="{StaticResource SurfaceMid}"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 16,16,0,0"
+                        Padding="20,16">
+                        <Label
+                            Text="GAME LOG"
+                            Style="{StaticResource FieldLabel}"
+                            VerticalOptions="Center" />
+                    </Border>
+
+                    <!-- Log entries -->
+                    <CollectionView
+                        x:Name="GameLogList"
+                        Grid.Row="1"
+                        Margin="0">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <Grid ColumnDefinitions="Auto,*" Padding="16,8" ColumnSpacing="12">
+                                    <BoxView
+                                        Grid.Column="0"
+                                        Color="{StaticResource Gold}"
+                                        WidthRequest="3"
+                                        HeightRequest="14"
+                                        VerticalOptions="Center"
+                                        CornerRadius="2" />
+                                    <Label
+                                        Grid.Column="1"
+                                        Text="{Binding .}"
+                                        TextColor="{StaticResource TextPrimary}"
+                                        FontSize="13"
+                                        LineBreakMode="WordWrap" />
+                                </Grid>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                        <CollectionView.Footer>
+                            <BoxView HeightRequest="8" Color="Transparent" />
+                        </CollectionView.Footer>
+                    </CollectionView>
+
+                    <!-- Close button -->
+                    <Border
+                        Grid.Row="2"
+                        BackgroundColor="{StaticResource SurfaceMid}"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 0,0,16,16"
+                        Padding="20,12">
+                        <Button
+                            Text="Close"
+                            Style="{StaticResource HudButton}"
+                            HorizontalOptions="Center"
+                            Clicked="OnLogOverlayDismissed" />
+                    </Border>
+
+                </Grid>
             </Border>
         </Grid>
 

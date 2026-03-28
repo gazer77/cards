@@ -82,17 +82,24 @@
         </CollectionView>
 
         <!-- Bottom bar -->
-        <HorizontalStackLayout
+        <Grid
             Grid.Row="3"
             Padding="24,12"
-            HorizontalOptions="End">
+            ColumnDefinitions="*,Auto">
+            <Button
+                Text="Join Game"
+                Style="{StaticResource HudButton}"
+                HorizontalOptions="Start"
+                VerticalOptions="Center"
+                Clicked="OnJoinGameClicked" />
             <ImageButton
+                Grid.Column="1"
                 Source="settings.png"
                 WidthRequest="28"
                 HeightRequest="28"
                 Opacity="0.6"
                 Clicked="OnSettingsClicked" />
-        </HorizontalStackLayout>
+        </Grid>
 
         <!-- Game preview overlay (covers all rows) -->
         <Grid

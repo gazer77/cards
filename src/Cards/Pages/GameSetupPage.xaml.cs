@@ -37,6 +37,17 @@ public partial class GameSetupPage : ContentPage
         });
     }
 
+    private async void OnHostMultiplayerClicked(object? sender, EventArgs e)
+    {
+        if (_viewModel.Game is null) return;
+        await Shell.Current.GoToAsync("lobbyhost", new Dictionary<string, object>
+        {
+            ["GameId"]      = _viewModel.Game.Id,
+            ["PlayerCount"] = _viewModel.PlayerCount,
+            ["HouseRules"]  = _viewModel.EnabledRules,
+        });
+    }
+
     private async void OnViewRulesClicked(object? sender, EventArgs e)
     {
         if (_viewModel.Game is null) return;

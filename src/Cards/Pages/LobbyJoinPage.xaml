@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="Cards.Pages.LobbyJoinPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:Cards.ViewModels"
+    Shell.NavBarIsVisible="False"
+    BackgroundColor="{StaticResource TableBackground}">
+
+    <Grid RowDefinitions="Auto,*,Auto" Padding="24,48,24,36">
+
+        <!-- Header -->
+        <VerticalStackLayout Grid.Row="0" Spacing="4" Margin="0,0,0,32">
+            <Label
+                Text="JOIN GAME"
+                Style="{StaticResource AppTitle}"
+                HorizontalOptions="Start" />
+        </VerticalStackLayout>
+
+        <!-- Body -->
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout Spacing="32">
+
+                <!-- Room code entry (pre-join) -->
+                <VerticalStackLayout Spacing="10" IsVisible="{Binding IsNotWaiting}">
+                    <Label Text="ROOM CODE" Style="{StaticResource FieldLabel}" />
+                    <Border
+                        BackgroundColor="{StaticResource SurfaceMid}"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 12"
+                        Padding="16,4">
+                        <Entry
+                            Text="{Binding RoomCode}"
+                            Placeholder="e.g. ABC-DEF-7777"
+                            PlaceholderColor="{StaticResource TextMuted}"
+                            TextColor="{StaticResource TextPrimary}"
+                            FontSize="20"
+                            FontAttributes="Bold"
+                            CharacterSpacing="2"
+                            TextTransform="Uppercase"
+                            ReturnType="Go"
+                            Completed="OnJoinClicked" />
+                    </Border>
+                    <Label
+                        Text="{Binding StatusText}"
+                        Style="{StaticResource BodyText}"
+                        TextColor="#e05050"
+                        IsVisible="{Binding HasError}"
+                        HorizontalOptions="Center" />
+                </VerticalStackLayout>
+
+                <!-- Waiting state (post-join) -->
+                <VerticalStackLayout Spacing="24" IsVisible="{Binding IsWaiting}">
+
+                    <Label
+                        Text="{Binding StatusText}"
+                        Style="{StaticResource AppSubtitle}"
+                        HorizontalOptions="Center" />
+
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="PLAYERS" Style="{StaticResource FieldLabel}" />
+                        <CollectionView ItemsSource="{Binding Players}">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:LobbyPlayer">
+                                    <Grid ColumnDefinitions="*,Auto" Padding="0,8">
+                                        <Label
+                                            Text="{Binding DisplayName}"
+                                            Style="{StaticResource BodyText}"
+                                            VerticalOptions="Center" />
+                                        <Border
+                                            Grid.Column="1"
+                                            IsVisible="{Binding IsHost}"
+                                            BackgroundColor="{StaticResource Gold}"
+                                            StrokeThickness="0"
+                                            StrokeShape="RoundRectangle 4"
+                                            Padding="8,3">
+                                            <Label
+                                                Text="{Binding Badge}"
+                                                FontSize="10"
+                                                FontAttributes="Bold"
+                                                TextColor="#1a1a1a" />
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </VerticalStackLayout>
+
+                </VerticalStackLayout>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Buttons -->
+        <VerticalStackLayout Grid.Row="2" Spacing="12">
+            <ActivityIndicator
+                IsRunning="{Binding IsBusy}"
+                IsVisible="{Binding IsBusy}"
+                Color="{StaticResource Gold}"
+                HorizontalOptions="Center"
+                Margin="0,0,0,8" />
+            <Button
+                Text="Join"
+                Style="{StaticResource PrimaryButton}"
+                IsEnabled="{Binding CanJoin}"
+                IsVisible="{Binding IsNotWaiting}"
+                Clicked="OnJoinClicked" />
+            <Button
+                Text="Leave"
+                Style="{StaticResource HudButton}"
+                IsVisible="{Binding IsWaiting}"
+                HorizontalOptions="Center"
+                Clicked="OnLeaveClicked" />
+            <Button
+                Text="Back"
+                Style="{StaticResource HudButton}"
+                IsVisible="{Binding IsNotWaiting}"
+                HorizontalOptions="Center"
+                Clicked="OnBackClicked" />
+        </VerticalStackLayout>
+
+    </Grid>
+</ContentPage>

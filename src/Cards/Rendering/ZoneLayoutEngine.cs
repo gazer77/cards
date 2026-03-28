@@ -225,6 +225,13 @@ public static class ZoneLayoutEngine
             .Cast<Zone>()
             .ToList();
 
+        // Per-player spread zones (e.g. books) are placed in the center alongside shared zones
+        foreach (var player in state.Players)
+        {
+            var z = state.FindZone($"books:{player.Id}");
+            if (z is not null) centerZones.Add(z);
+        }
+
         if (centerZones.Count == 0) return;
 
         float spacing = centerBounds.Width / (centerZones.Count + 1);
@@ -238,12 +245,20 @@ public static class ZoneLayoutEngine
 
             var hint  = ZoneHintFor(zone);
             bool faceUp = zone.Visibility is "top" or "all";
+            string? label = ZoneLabelFor(zone.Id)
+                         ?? (zone.Id.StartsWith("books:") ? BooksLabelFor(state, zone) : null);
 
             layouts.Add(new ZoneLayout(zone, bounds, cardW, cardH, hint,
                 FaceUp: faceUp, RotationDegrees: 0f,
-                Label: ZoneLabelFor(zone.Id),
+                Label: label,
                 IsCurrentPlayer: false));
         }
+    }
+
+    private static string BooksLabelFor(GameState state, Zone zone)
+    {
+        var owner = state.Players.FirstOrDefault(p => p.Id == zone.OwnerId);
+        return owner is not null ? $"{owner.Name.ToUpperInvariant()} BOOKS" : "BOOKS";
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

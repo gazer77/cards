@@ -66,8 +66,9 @@ public partial class HomePage : ContentPage
 
     // ── Bottom bar ────────────────────────────────────────────────────────────
 
+    private async void OnJoinGameClicked(object? sender, EventArgs e)
+        => await Shell.Current.GoToAsync("lobbyjoin");
+
     private async void OnSettingsClicked(object? sender, EventArgs e)
-    {
-        await Shell.Current.GoToAsync("settings");
-    }
+        => await Shell.Current.GoToAsync("settings");
 }

@@ -64,6 +64,9 @@ public class GameSetupViewModel : INotifyPropertyChanged
 
     public ObservableCollection<HouseRule> HouseRules { get; private set; } = [];
 
+    /// <summary>The currently enabled house rule IDs (for passing to the lobby).</summary>
+    public List<string> EnabledRules => HouseRules.Where(r => r.IsEnabled).Select(r => r.Id).ToList();
+
     public ICommand StartGameCommand { get; }
     public event Action<GameDefinition, int, List<string>>? StartGameRequested;
 

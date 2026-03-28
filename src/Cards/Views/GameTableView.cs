@@ -20,6 +20,7 @@ public class GameTableView : SKCanvasView
     private IReadOnlyList<string> _dropZoneIds       = [];
 
     private string? _dragCardId;
+    private string? _dragSourceZoneId;
     private SKPoint _touchStartPt;
     private SKPoint _dragCurrentPt;
     private bool    _isDragging;
@@ -32,12 +33,14 @@ public class GameTableView : SKCanvasView
     // ── Animation state ───────────────────────────────────────────────────────
 
     // Per-card animations: cardId → (startTimeMs, durationMs)
-    private readonly Dictionary<string, (long Start, float Duration)> _dealAnims = [];
-    private readonly Dictionary<string, (long Start, float Duration)> _flipAnims = [];
+    private readonly Dictionary<string, (long Start, float Duration)> _dealAnims    = [];
+    private readonly Dictionary<string, (long Start, float Duration)> _flipAnims    = [];
+    private readonly Dictionary<string, (long Start, float Duration)> _receiveAnims = [];
 
     // Scratch lists — populated during draw, cleared after
-    private readonly List<string> _finishedDealAnims = [];
-    private readonly List<string> _finishedFlipAnims = [];
+    private readonly List<string> _finishedDealAnims    = [];
+    private readonly List<string> _finishedFlipAnims    = [];
+    private readonly List<string> _finishedReceiveAnims = [];
 
     private IDispatcherTimer? _animTimer;
 
@@ -47,6 +50,8 @@ public class GameTableView : SKCanvasView
     public event Action<string>?         ZoneTapped;
     public event Action?                 CanvasTapped;
     public event Action<string, string>? CardDropped;
+    /// <summary>Card was dragged to a new position within its own hand zone.</summary>
+    public event Action<string, int>?    CardReorderedInHand;
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
@@ -70,6 +75,9 @@ public class GameTableView : SKCanvasView
                 .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet() ?? [];
             var oldFaceDown = _state?.Zones.Values
                 .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Id).ToHashSet() ?? [];
+            var oldHandIds = _state?.Zones.Values
+                .Where(z => z.Type == "hand")
+                .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet() ?? [];
 
             _state = value;
 
@@ -79,6 +87,9 @@ public class GameTableView : SKCanvasView
                     .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet();
                 var newFaceDown = value.Zones.Values
                     .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Id).ToHashSet();
+                var newHandIds = value.Zones.Values
+                    .Where(z => z.Type == "hand")
+                    .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet();
 
                 // Cards that just appeared → slide-up deal animation
                 foreach (var id in newIds.Except(oldCardIds))
@@ -88,9 +99,15 @@ public class GameTableView : SKCanvasView
                 foreach (var id in oldFaceDown.Except(newFaceDown))
                     if (newIds.Contains(id))
                         _flipAnims[id] = (now, 360f);
+
+                // Cards that moved INTO a hand zone (received mid-game) → bump animation
+                var justFlipped = oldFaceDown.Except(newFaceDown).ToHashSet();
+                foreach (var id in newHandIds.Except(oldHandIds).Intersect(oldCardIds))
+                    if (!justFlipped.Contains(id) && !_dealAnims.ContainsKey(id))
+                        _receiveAnims[id] = (now, 900f);
             }
 
-            if (_dealAnims.Count > 0 || _flipAnims.Count > 0)
+            if (_dealAnims.Count > 0 || _flipAnims.Count > 0 || _receiveAnims.Count > 0)
                 EnsureAnimTimer();
             else
                 InvalidateSurface();
@@ -124,6 +141,20 @@ public class GameTableView : SKCanvasView
     public void SetSkin(ICardSkin skin)     { _skin  = skin;  InvalidateSurface(); }
     public void SetTheme(ITableTheme theme) { _theme = theme; InvalidateSurface(); }
 
+    /// <summary>
+    /// Explicitly marks cards as having just arrived in a hand zone.
+    /// Call this before assigning GameState when the same state object was mutated in-place,
+    /// since the setter can't detect movements within the same object reference.
+    /// </summary>
+    public void MarkCardsReceivedInHand(IEnumerable<string> cardIds)
+    {
+        long now = NowMs();
+        foreach (var id in cardIds)
+            _receiveAnims[id] = (now, 900f);
+        if (_receiveAnims.Count > 0)
+            EnsureAnimTimer();
+    }
+
     // ── Animation timer ───────────────────────────────────────────────────────
 
     private void EnsureAnimTimer()
@@ -135,7 +166,7 @@ public class GameTableView : SKCanvasView
         _animTimer.Tick += (_, _) =>
         {
             InvalidateSurface();
-            if (_dealAnims.Count == 0 && _flipAnims.Count == 0)
+            if (_dealAnims.Count == 0 && _flipAnims.Count == 0 && _receiveAnims.Count == 0)
                 _animTimer.Stop();
         };
         _animTimer.Start();
@@ -170,10 +201,12 @@ public class GameTableView : SKCanvasView
         }
 
         // Clean up finished animations after all zones are drawn
-        foreach (var id in _finishedDealAnims) _dealAnims.Remove(id);
-        foreach (var id in _finishedFlipAnims) _flipAnims.Remove(id);
+        foreach (var id in _finishedDealAnims)    _dealAnims.Remove(id);
+        foreach (var id in _finishedFlipAnims)    _flipAnims.Remove(id);
+        foreach (var id in _finishedReceiveAnims) _receiveAnims.Remove(id);
         _finishedDealAnims.Clear();
         _finishedFlipAnims.Clear();
+        _finishedReceiveAnims.Clear();
 
         if (_isDragging && _dragCardId is not null)
             DrawDragGhost(canvas);
@@ -279,6 +312,15 @@ public class GameTableView : SKCanvasView
                 }
                 if (t >= 1f) _finishedFlipAnims.Add(card.Id);
                 continue;
+            }
+
+            // ── Receive animation (bump up then settle) ───────────────────────
+            if (_receiveAnims.TryGetValue(card.Id, out var ra))
+            {
+                float t    = Math.Clamp((now - ra.Start) / ra.Duration, 0f, 1f);
+                float bump = -cardH * 0.4f * MathF.Sin(MathF.PI * t);
+                rect = OffsetRect(rect, 0f, bump);
+                if (t >= 1f) _finishedReceiveAnims.Add(card.Id);
             }
 
             // ── Deal animation (slide up) ─────────────────────────────────────
@@ -507,7 +549,9 @@ public class GameTableView : SKCanvasView
                 _touchStartPt  = e.Location;
                 _dragCurrentPt = e.Location;
                 _isDragging    = false;
-                _dragCardId    = HitTestSelectableCard(e.Location);
+                _dragCardId    = HitTestSelectableCard(e.Location)
+                              ?? HitTestAnyHandCard(e.Location);
+                _dragSourceZoneId = _dragCardId is not null ? FindZoneOfCard(_dragCardId) : null;
                 break;
 
             case SKTouchAction.Moved:
@@ -529,8 +573,16 @@ public class GameTableView : SKCanvasView
                 if (_isDragging && _dragCardId is not null)
                 {
                     var zoneId = HitTestZone(e.Location);
-                    if (zoneId is not null)
+                    if (zoneId is not null && zoneId == _dragSourceZoneId && IsHandZoneId(zoneId))
+                    {
+                        // Reorder within the same hand zone
+                        int newIndex = CalcFanInsertIndex(zoneId, e.Location.X, _dragCardId);
+                        CardReorderedInHand?.Invoke(_dragCardId, newIndex);
+                    }
+                    else if (zoneId is not null && _selectableCardIds.Contains(_dragCardId))
+                    {
                         CardDropped?.Invoke(_dragCardId, zoneId);
+                    }
                 }
                 else
                 {
@@ -546,14 +598,16 @@ public class GameTableView : SKCanvasView
                             CanvasTapped?.Invoke();
                     }
                 }
-                _isDragging = false;
-                _dragCardId = null;
+                _isDragging       = false;
+                _dragCardId       = null;
+                _dragSourceZoneId = null;
                 InvalidateSurface();
                 break;
 
             case SKTouchAction.Cancelled:
-                _isDragging = false;
-                _dragCardId = null;
+                _isDragging       = false;
+                _dragCardId       = null;
+                _dragSourceZoneId = null;
                 InvalidateSurface();
                 break;
         }
@@ -589,6 +643,57 @@ public class GameTableView : SKCanvasView
             if (layout.Bounds.Contains(pt)) return layout.Zone.Id;
         }
         return null;
+    }
+
+    // Hits any card inside a non-rotated fan (hand) zone — for drag-reorder.
+    private string? HitTestAnyHandCard(SKPoint pt)
+    {
+        for (int i = _cardRects.Count - 1; i >= 0; i--)
+        {
+            var (id, rect) = _cardRects[i];
+            if (!rect.Contains(pt)) continue;
+            var zoneId = FindZoneOfCard(id);
+            if (zoneId is not null && IsHandZoneId(zoneId)) return id;
+        }
+        return null;
+    }
+
+    private bool IsHandZoneId(string zoneId)
+        => _lastLayouts.Any(l => l.Zone.Id == zoneId && l.Hint == ZoneRenderHint.Fan);
+
+    private string? FindZoneOfCard(string cardId)
+    {
+        if (_state is null) return null;
+        foreach (var (id, zone) in _state.Zones)
+            if (zone.Cards.Any(c => c.Id == cardId))
+                return id;
+        return null;
+    }
+
+    // Calculates the insertion index when a card is dropped at dropX within a fan zone.
+    private int CalcFanInsertIndex(string zoneId, float dropX, string dragCardId)
+    {
+        var layout = _lastLayouts.FirstOrDefault(l => l.Zone.Id == zoneId);
+        if (layout is null) return 0;
+
+        var cards = layout.Zone.Cards;
+        int count = cards.Count;
+        if (count <= 1) return 0;
+
+        float totalW = layout.Bounds.Width;
+        float cardW  = layout.CardWidth;
+        float step   = MathF.Min((totalW - cardW) / (count - 1), cardW * 0.75f);
+        float startX = layout.Bounds.Left + (totalW - (step * (count - 1) + cardW)) / 2f;
+
+        // Find the slot whose center is nearest to the drop X
+        int   best     = 0;
+        float bestDist = float.MaxValue;
+        for (int i = 0; i < count; i++)
+        {
+            float dist = MathF.Abs(dropX - (startX + i * step + cardW / 2f));
+            if (dist < bestDist) { bestDist = dist; best = i; }
+        }
+        return best;
     }
 
     // ── Labels and highlights ─────────────────────────────────────────────────

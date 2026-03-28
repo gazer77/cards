@@ -18,6 +18,9 @@ public class GameState
     /// <summary>Game-logic scratch space for phase state, results, etc.</summary>
     public Dictionary<string, string> Metadata { get; } = [];
 
+    /// <summary>Ordered record of every notable event shown to the player.</summary>
+    public List<string> GameLog { get; } = [];
+
     public Player CurrentPlayer => Players[CurrentPlayerIndex];
 
     public Zone GetZone(string id) => Zones[id];

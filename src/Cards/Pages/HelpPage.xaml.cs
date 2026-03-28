@@ -25,6 +25,47 @@ public partial class HelpPage : ContentPage
         await LoadHelpAsync();
     }
 
+    /// <summary>
+    /// Joins hard-wrapped lines within each paragraph into a single line so text
+    /// flows naturally on narrow screens.  Blank-line paragraph boundaries and
+    /// lines that start a new markdown block (headers, list items) are preserved.
+    /// </summary>
+    private static string ReflowMarkdown(string text)
+    {
+        text = text.Replace("\r\n", "\n").Replace("\r", "\n");
+
+        // Split on one or more blank lines to get paragraphs
+        var paragraphs = System.Text.RegularExpressions.Regex.Split(text, @"\n{2,}");
+
+        var output = new System.Text.StringBuilder();
+        foreach (var para in paragraphs)
+        {
+            var trimmed = para.Trim();
+            if (trimmed.Length == 0) continue;
+
+            if (output.Length > 0) output.Append("\n\n");
+
+            // Lines that are structural: headers, list items, horizontal rules.
+            // Keep each line separate so the block structure is intact.
+            if (trimmed.StartsWith('#') ||
+                trimmed.StartsWith('-') ||
+                trimmed.StartsWith('*') ||
+                trimmed.StartsWith('>') ||
+                trimmed.StartsWith("---"))
+            {
+                output.Append(trimmed);
+            }
+            else
+            {
+                // Ordinary paragraph: join hard-wrapped lines with a space.
+                var lines = trimmed.Split('\n');
+                output.Append(string.Join(" ", lines.Select(l => l.Trim())));
+            }
+        }
+
+        return output.ToString();
+    }
+
     private async Task LoadHelpAsync()
     {
         LoadingIndicator.IsVisible = true;
@@ -54,7 +95,7 @@ public partial class HelpPage : ContentPage
                 content = "No help file defined for this game.";
             }
 
-            ContentLabel.Text = content;
+            ContentLabel.Text = ReflowMarkdown(content);
         }
         finally
         {

@@ -8,7 +8,10 @@
   "teams": false,
   "dealer": "random",
   "deal": {
-    "cards_per_player": 5,
+    "cards_per_player": [
+      { "max_players": 3, "cards": 7 },
+      { "cards": 5 }
+    ],
     "remainder_to": "deck",
     "face": "down"
   },
@@ -34,9 +37,9 @@
   "win_condition": { "type": "most_books" },
   "house_rules": [
     {
-      "id": "seven_cards_two_players",
-      "name": "7 Cards (2–3 players)",
-      "description": "Deal 7 cards each when playing with 2 or 3 players.",
+      "id": "seven_cards_all",
+      "name": "7 Cards for All",
+      "description": "Deal 7 cards each regardless of player count.",
       "default": false,
       "affects": { "deal.cards_per_player": 7 }
     },
@@ -48,5 +51,10 @@
       "affects": { "play.book_size": 2 }
     }
   ],
+  "ui": {
+    "auto_sort_hand": "rank",
+    "allow_sort": true,
+    "show_game_log": true
+  },
   "help": "go-fish.md"
 }

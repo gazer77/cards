@@ -34,6 +34,7 @@ public sealed class GameSaveService
             RoundNumber  = state.RoundNumber,
             Scores       = new Dictionary<string, int>(state.Scores),
             Metadata     = new Dictionary<string, string>(state.Metadata),
+            GameLog      = [.. state.GameLog],
             Zones        = state.Zones.Values.Select(z => new SavedZone
             {
                 Id         = z.Id,
@@ -99,6 +100,9 @@ public sealed class GameSaveService
             state.Metadata.Clear();
             foreach (var (k, v) in dto.Metadata) state.Metadata[k] = v;
 
+            state.GameLog.Clear();
+            state.GameLog.AddRange(dto.GameLog);
+
             return true;
         }
         catch
@@ -126,6 +130,7 @@ public sealed class GameSaveService
             RoundNumber  = state.RoundNumber,
             Scores       = new Dictionary<string, int>(state.Scores),
             Metadata     = new Dictionary<string, string>(state.Metadata),
+            GameLog      = [.. state.GameLog],
             Zones        = state.Zones.Values.Select(z => new SavedZone
             {
                 Id         = z.Id,

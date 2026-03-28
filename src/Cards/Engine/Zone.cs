@@ -36,4 +36,15 @@ public class Zone
     public bool Remove(Card card) => Cards.Remove(card);
 
     public void Clear() => Cards.Clear();
+
+    /// <summary>
+    /// Replaces the card ordering in-place with the given sequence.
+    /// The sequence must contain exactly the same cards (same references).
+    /// </summary>
+    public void Reorder(IEnumerable<Card> newOrder)
+    {
+        var sorted = newOrder.ToList();
+        Cards.Clear();
+        Cards.AddRange(sorted);
+    }
 }

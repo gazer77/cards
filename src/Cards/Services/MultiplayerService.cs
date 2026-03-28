@@ -45,7 +45,6 @@ public sealed class MultiplayerService : IAsyncDisposable
     public async Task<string> HostAsync(
         string hostPlayerId,
         IGameLogic logic,
-        GameSaveService saves,
         int playerCount,
         IReadOnlyList<string> enabledRules,
         GameState? existingState = null,
@@ -58,7 +57,7 @@ public sealed class MultiplayerService : IAsyncDisposable
             ? new TcpTransport()
             : new LocalTransport(hostPlayerId);
 
-        var server = new GameServer(transport, logic, saves);
+        var server = new GameServer(transport, logic);
 
         if (existingState is not null)
             server.AttachState(existingState);
@@ -122,17 +121,24 @@ public sealed class MultiplayerService : IAsyncDisposable
     // ── Shared ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Send a game action.  When hosting, applies directly to the server.
+    /// Send a game action.  When hosting, injects directly into the server pipeline
+    /// (validates, applies, broadcasts) so the host's actions are authoritative.
     /// When a client, sends to the server and waits for ActionApplied.
     /// </summary>
     public async Task SendActionAsync(GameAction action, CancellationToken ct = default)
     {
-        if (Client is not null)
+        if (IsHost && Server is not null)
+            await Server.ApplyLocalActionAsync(action);
+        else if (Client is not null)
             await Client.SendActionAsync(action, ct);
-        // Server-side actions (host acting as a player) are handled by
-        // injecting them directly into the server's HandleActionAsync flow;
-        // for now the host also goes through the client path when acting as a player.
     }
+
+    /// <summary>
+    /// Start the game: initialise state on the server and broadcast to all clients.
+    /// Call this from the host's lobby page when the Start Game button is pressed.
+    /// </summary>
+    public Task StartGameAsync(GameState state)
+        => Server?.StartGameAsync(state) ?? Task.CompletedTask;
 
     /// <summary>Transfer the host role to another player (host only).</summary>
     public Task TransferHostAsync(string newHostEndpointId)

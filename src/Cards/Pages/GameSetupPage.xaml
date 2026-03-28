@@ -65,12 +65,18 @@
                 </CollectionView>
             </VerticalStackLayout>
 
-            <!-- Start button -->
+            <!-- Start buttons -->
             <Button
                 Text="Start Game"
                 Style="{StaticResource PrimaryButton}"
                 Command="{Binding StartGameCommand}"
                 Margin="0,16,0,0" />
+            <Button
+                Text="Host Multiplayer"
+                Style="{StaticResource HudButton}"
+                HorizontalOptions="Center"
+                Clicked="OnHostMultiplayerClicked"
+                Margin="0,4,0,0" />
 
             <!-- View Rules (only shown when a help file exists) -->
             <Button

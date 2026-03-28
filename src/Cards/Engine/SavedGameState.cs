@@ -15,7 +15,8 @@ public sealed class SavedGameState
     public int            RoundNumber  { get; set; } = 1;
     public Dictionary<string, int>    Scores   { get; set; } = [];
     public Dictionary<string, string> Metadata { get; set; } = [];
-    public List<SavedZone> Zones { get; set; } = [];
+    public List<string>   GameLog  { get; set; } = [];
+    public List<SavedZone> Zones   { get; set; } = [];
 }
 
 public sealed class SavedZone

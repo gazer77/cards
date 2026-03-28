@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="Cards.Pages.LobbyHostPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:Cards.ViewModels"
+    Shell.NavBarIsVisible="False"
+    BackgroundColor="{StaticResource TableBackground}">
+
+    <Grid RowDefinitions="Auto,*,Auto" Padding="24,48,24,36">
+
+        <!-- Header -->
+        <VerticalStackLayout Grid.Row="0" Spacing="4" Margin="0,0,0,32">
+            <Label
+                Text="HOST GAME"
+                Style="{StaticResource AppTitle}"
+                HorizontalOptions="Start" />
+            <Label
+                Text="{Binding StatusText}"
+                Style="{StaticResource AppSubtitle}"
+                HorizontalOptions="Start" />
+        </VerticalStackLayout>
+
+        <!-- Body -->
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout Spacing="32">
+
+                <!-- Room code -->
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="ROOM CODE" Style="{StaticResource FieldLabel}" />
+                    <Border
+                        BackgroundColor="{StaticResource SurfaceMid}"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 12"
+                        Padding="20,16">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label
+                                Text="{Binding RoomCode}"
+                                FontSize="26"
+                                FontAttributes="Bold"
+                                CharacterSpacing="3"
+                                TextColor="{StaticResource Gold}"
+                                VerticalOptions="Center" />
+                            <Button
+                                Grid.Column="1"
+                                Text="Copy"
+                                Style="{StaticResource HudButton}"
+                                Clicked="OnCopyCodeClicked"
+                                VerticalOptions="Center" />
+                        </Grid>
+                    </Border>
+                    <Label
+                        Text="Share this code with other players"
+                        Style="{StaticResource BodyText}"
+                        HorizontalOptions="Center" />
+                </VerticalStackLayout>
+
+                <!-- Player list -->
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="PLAYERS" Style="{StaticResource FieldLabel}" />
+                    <CollectionView ItemsSource="{Binding Players}">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:LobbyPlayer">
+                                <Grid ColumnDefinitions="*,Auto" Padding="0,8">
+                                    <Label
+                                        Text="{Binding DisplayName}"
+                                        Style="{StaticResource BodyText}"
+                                        VerticalOptions="Center" />
+                                    <Border
+                                        Grid.Column="1"
+                                        IsVisible="{Binding IsHost}"
+                                        BackgroundColor="{StaticResource Gold}"
+                                        StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 4"
+                                        Padding="8,3">
+                                        <Label
+                                            Text="{Binding Badge}"
+                                            FontSize="10"
+                                            FontAttributes="Bold"
+                                            TextColor="#1a1a1a" />
+                                    </Border>
+                                </Grid>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                </VerticalStackLayout>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Buttons -->
+        <VerticalStackLayout Grid.Row="2" Spacing="12">
+            <ActivityIndicator
+                IsRunning="{Binding IsBusy}"
+                IsVisible="{Binding IsBusy}"
+                Color="{StaticResource Gold}"
+                HorizontalOptions="Center"
+                Margin="0,0,0,8" />
+            <Button
+                Text="Start Game"
+                Style="{StaticResource PrimaryButton}"
+                IsEnabled="{Binding CanStart}"
+                Clicked="OnStartGameClicked" />
+            <Button
+                Text="Cancel"
+                Style="{StaticResource HudButton}"
+                HorizontalOptions="Center"
+                Clicked="OnCancelClicked" />
+        </VerticalStackLayout>
+
+    </Grid>
+</ContentPage>
