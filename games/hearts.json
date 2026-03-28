@@ -1,0 +1,113 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "hearts",
+  "name": "Hearts",
+  "version": "1.0",
+  "deck": "standard-52",
+  "players": { "min": 4, "max": 4 },
+  "teams": false,
+  "dealer": "random",
+  "rounds": {
+    "repeat_until": "win_condition",
+    "dealer": "rotates_left"
+  },
+  "deal": {
+    "cards_per_player": 13,
+    "face": "down",
+    "order": "clockwise"
+  },
+  "zones": [
+    { "id": "deck",       "type": "deck",   "visibility": "none" },
+    { "id": "hand",       "type": "hand",   "owner": "each_player", "visibility": "owner" },
+    { "id": "trick",      "type": "trick",  "visibility": "all" },
+    { "id": "won_tricks", "type": "pile",   "owner": "each_player", "visibility": "count_only" }
+  ],
+  "phases": [
+    {
+      "id": "pass",
+      "type": "pass_cards",
+      "count": 3,
+      "direction": "rotate",
+      "targets": ["left", "right", "across", "none"],
+      "next": "play"
+    },
+    {
+      "id": "play",
+      "type": "trick_taking",
+      "trump": null,
+      "lead_card": "2_of_clubs",
+      "follow_suit": true,
+      "lead_restrictions": [
+        { "suit": "hearts", "until": "hearts_broken" },
+        { "card": "Qs", "first_trick": false }
+      ],
+      "no_points_first_trick": true,
+      "winner": "highest",
+      "trick_winner_leads_next": true,
+      "collect_tricks_to": "won_tricks",
+      "next": "score"
+    },
+    {
+      "id": "score",
+      "type": "score",
+      "next": {
+        "if": "win_condition",
+        "then": "end",
+        "else": "deal_new_round"
+      }
+    },
+    {
+      "id": "deal_new_round",
+      "type": "deal",
+      "to": "each_player",
+      "count": 13,
+      "face": "down",
+      "next": "pass"
+    }
+  ],
+  "scoring": {
+    "type": "card_points",
+    "count_from": "won_tricks",
+    "card_values": [
+      { "suit": "hearts", "value": 1 },
+      { "card": "Qs", "value": 13 }
+    ],
+    "accumulate": true,
+    "special": [
+      {
+        "name": "shoot_the_moon",
+        "condition": "all_hearts_and_Qs_in_won_tricks",
+        "effect": "add_26_to_others"
+      }
+    ]
+  },
+  "win_condition": { "type": "lowest_score", "threshold": 100 },
+  "house_rules": [
+    {
+      "id": "jack_of_diamonds",
+      "name": "Jack of Diamonds -10",
+      "description": "Capturing the Jack of Diamonds subtracts 10 points from your score.",
+      "default": false,
+      "affects": {
+        "scoring.card_values": { "append": { "card": "Jd", "value": -10 } }
+      }
+    },
+    {
+      "id": "shoot_moon_subtract",
+      "name": "Shoot the Moon Subtracts",
+      "description": "Shooting the moon subtracts 26 from your own score instead of adding 26 to all others.",
+      "default": false,
+      "affects": {
+        "scoring.special[shoot_the_moon].effect": "subtract_26_from_self"
+      }
+    },
+    {
+      "id": "no_pass_round",
+      "name": "No Passing Round",
+      "description": "Skip the card-passing phase entirely.",
+      "default": false,
+      "affects": { "pass.skip": true }
+    }
+  ],
+  "help": "hearts.md"
+}

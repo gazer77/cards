@@ -1,0 +1,88 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "gin-rummy",
+  "name": "Gin Rummy",
+  "version": "1.0",
+  "deck": "standard-52",
+  "players": { "min": 2, "max": 2 },
+  "teams": false,
+  "dealer": "random",
+  "rounds": {
+    "repeat_until": "win_condition",
+    "dealer": "alternates"
+  },
+  "deal": {
+    "cards_per_player": 10,
+    "remainder_to": "deck",
+    "face": "down",
+    "then_flip_top_to": "discard"
+  },
+  "zones": [
+    { "id": "deck",    "type": "deck",   "visibility": "none" },
+    { "id": "discard", "type": "pile",   "visibility": "top" },
+    { "id": "hand",    "type": "hand",   "owner": "each_player", "visibility": "owner" },
+    { "id": "meld",    "type": "spread", "owner": "each_player", "visibility": "all" }
+  ],
+  "phases": [
+    {
+      "id": "play",
+      "type": "draw_discard",
+      "draw_from": ["deck", "discard"],
+      "draw_count": 1,
+      "discard_count": 1,
+      "target_zone": "hand",
+      "special_actions": ["knock", "gin"],
+      "knock_condition": "deadwood_lte_10",
+      "gin_condition": "deadwood_eq_0",
+      "next": "score"
+    },
+    {
+      "id": "score",
+      "type": "score",
+      "next": {
+        "if": "win_condition",
+        "then": "end",
+        "else": "deal_new_round"
+      }
+    },
+    {
+      "id": "deal_new_round",
+      "type": "deal",
+      "to": "each_player",
+      "count": 10,
+      "face": "down",
+      "then_flip_top_to": "discard",
+      "next": "play"
+    }
+  ],
+  "scoring": {
+    "type": "deadwood",
+    "card_values": {
+      "A": 1,
+      "J": 10, "Q": 10, "K": 10,
+      "default": "pip"
+    },
+    "knock_bonus": 25,
+    "gin_bonus": 25,
+    "undercut_bonus": 25,
+    "accumulate": true
+  },
+  "win_condition": { "type": "target_score", "score": 100, "winner": "first" },
+  "house_rules": [
+    {
+      "id": "oklahoma_gin",
+      "name": "Oklahoma Gin",
+      "description": "The value of the first upcard sets the maximum deadwood allowed to knock that hand.",
+      "default": false,
+      "affects": { "play.knock_condition": "deadwood_lte_first_discard" }
+    },
+    {
+      "id": "big_gin",
+      "name": "Big Gin",
+      "description": "Player may hold all 11 cards as a meld (no discard) for a big gin bonus.",
+      "default": false,
+      "affects": { "play.special_actions": ["knock", "gin", "big_gin"] }
+    }
+  ],
+  "help": "gin-rummy.md"
+}

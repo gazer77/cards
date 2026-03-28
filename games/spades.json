@@ -1,0 +1,106 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "spades",
+  "name": "Spades",
+  "version": "1.0",
+  "deck": "standard-52",
+  "players": { "min": 4, "max": 4 },
+  "teams": {
+    "count": 2,
+    "size": 2,
+    "arrangement": "alternating"
+  },
+  "dealer": "random",
+  "rounds": {
+    "repeat_until": "win_condition",
+    "dealer": "rotates_left"
+  },
+  "deal": {
+    "cards_per_player": 13,
+    "face": "down",
+    "order": "clockwise"
+  },
+  "zones": [
+    { "id": "deck",       "type": "deck",  "visibility": "none" },
+    { "id": "hand",       "type": "hand",  "owner": "each_player", "visibility": "owner" },
+    { "id": "trick",      "type": "trick", "visibility": "all" },
+    { "id": "won_tricks", "type": "pile",  "owner": "each_team",   "visibility": "count_only" }
+  ],
+  "phases": [
+    {
+      "id": "bid",
+      "type": "bidding",
+      "style": "number",
+      "order": "left_of_dealer",
+      "min_bid": 0,
+      "max_bid": 13,
+      "pass_allowed": false,
+      "special_bids": ["nil", "blind_nil"],
+      "next": "play"
+    },
+    {
+      "id": "play",
+      "type": "trick_taking",
+      "trump": "spades",
+      "follow_suit": true,
+      "lead_restrictions": [
+        { "suit": "spades", "until": "spades_broken", "unless": "only_spades_in_hand" }
+      ],
+      "winner": "highest_trump_then_lead",
+      "trick_winner_leads_next": true,
+      "collect_tricks_to": "won_tricks",
+      "next": "score"
+    },
+    {
+      "id": "score",
+      "type": "score",
+      "next": {
+        "if": "win_condition",
+        "then": "end",
+        "else": "deal_new_round"
+      }
+    },
+    {
+      "id": "deal_new_round",
+      "type": "deal",
+      "to": "each_player",
+      "count": 13,
+      "face": "down",
+      "next": "bid"
+    }
+  ],
+  "scoring": {
+    "type": "trick_bid",
+    "per_bid_trick": 10,
+    "bag_penalty": { "bags_per_penalty": 10, "penalty": -100 },
+    "count_by": "team",
+    "nil": { "success": 100, "failure": -100 },
+    "blind_nil": { "success": 200, "failure": -200 },
+    "accumulate": true
+  },
+  "win_condition": { "type": "target_score", "score": 500, "winner": "first" },
+  "house_rules": [
+    {
+      "id": "no_bags",
+      "name": "No Bag Penalty",
+      "description": "Overtricks are tracked but incur no penalty.",
+      "default": false,
+      "affects": { "scoring.bag_penalty": null }
+    },
+    {
+      "id": "jokers",
+      "name": "Jokers",
+      "description": "Add Big and Little Joker — both beat all spades; Big Joker beats Little Joker.",
+      "default": false,
+      "affects": { "deck": "standard-52-jokers" }
+    },
+    {
+      "id": "no_blind_nil",
+      "name": "No Blind Nil",
+      "description": "Blind nil bid is not allowed.",
+      "default": false,
+      "affects": { "bid.special_bids": ["nil"] }
+    }
+  ],
+  "help": "spades.md"
+}

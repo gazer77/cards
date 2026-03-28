@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="Cards.Pages.SettingsPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    Title="Settings"
+    BackgroundColor="{StaticResource TableBackground}">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="24" Spacing="32">
+
+            <!-- Card Style -->
+            <VerticalStackLayout Spacing="12">
+                <Label Text="CARD STYLE" Style="{StaticResource FieldLabel}" />
+                <Picker
+                    ItemsSource="{Binding CardSkinNames}"
+                    SelectedIndex="{Binding SelectedSkinIndex, Mode=TwoWay}"
+                    TextColor="{StaticResource TextPrimary}"
+                    BackgroundColor="{StaticResource SurfaceMid}"
+                    TitleColor="{StaticResource TextSecondary}" />
+            </VerticalStackLayout>
+
+            <!-- Table Theme -->
+            <VerticalStackLayout Spacing="12">
+                <Label Text="TABLE THEME" Style="{StaticResource FieldLabel}" />
+                <Picker
+                    ItemsSource="{Binding TableThemeNames}"
+                    SelectedIndex="{Binding SelectedThemeIndex, Mode=TwoWay}"
+                    TextColor="{StaticResource TextPrimary}"
+                    BackgroundColor="{StaticResource SurfaceMid}"
+                    TitleColor="{StaticResource TextSecondary}" />
+            </VerticalStackLayout>
+
+            <!-- About -->
+            <VerticalStackLayout Spacing="8">
+                <Label Text="ABOUT" Style="{StaticResource FieldLabel}" />
+                <Label Text="Cards" Style="{StaticResource RuleTitle}" />
+                <Label Text="{Binding AppVersion, StringFormat='Version {0}'}" Style="{StaticResource BodyText}" />
+            </VerticalStackLayout>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

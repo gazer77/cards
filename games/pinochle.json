@@ -1,0 +1,108 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "pinochle",
+  "name": "Pinochle",
+  "version": "1.0",
+  "deck": "pinochle-48",
+  "players": { "min": 4, "max": 4 },
+  "teams": {
+    "count": 2,
+    "size": 2,
+    "arrangement": "alternating"
+  },
+  "dealer": "random",
+  "rounds": {
+    "repeat_until": "win_condition",
+    "dealer": "rotates_left"
+  },
+  "deal": {
+    "cards_per_player": 12,
+    "face": "down",
+    "order": "clockwise"
+  },
+  "zones": [
+    { "id": "deck",       "type": "deck",   "visibility": "none" },
+    { "id": "hand",       "type": "hand",   "owner": "each_player", "visibility": "owner" },
+    { "id": "meld",       "type": "spread", "owner": "each_player", "visibility": "all" },
+    { "id": "trick",      "type": "trick",  "visibility": "all" },
+    { "id": "won_tricks", "type": "pile",   "owner": "each_team",   "visibility": "count_only" }
+  ],
+  "phases": [
+    {
+      "id": "bid",
+      "type": "bidding",
+      "style": "number",
+      "order": "left_of_dealer",
+      "min_bid": 250,
+      "bid_increment": 10,
+      "pass_allowed": true,
+      "stick_the_dealer": true,
+      "next": "meld"
+    },
+    {
+      "id": "meld",
+      "type": "meld",
+      "meld_types": ["pinochle"],
+      "layoff_allowed": false,
+      "next": "play"
+    },
+    {
+      "id": "play",
+      "type": "trick_taking",
+      "trump": "bidder_names_trump",
+      "follow_suit": true,
+      "must_play_higher": true,
+      "winner": "highest_trump_then_lead",
+      "trick_winner_leads_next": true,
+      "collect_tricks_to": "won_tricks",
+      "next": "score"
+    },
+    {
+      "id": "score",
+      "type": "score",
+      "next": {
+        "if": "win_condition",
+        "then": "end",
+        "else": "deal_new_round"
+      }
+    },
+    {
+      "id": "deal_new_round",
+      "type": "deal",
+      "to": "each_player",
+      "count": 12,
+      "face": "down",
+      "next": "bid"
+    }
+  ],
+  "scoring": {
+    "type": "pinochle",
+    "meld_table": {
+      "pinochle":               { "Jd+Qs": 40,  "Jd+Qs x2": 300 },
+      "around":                 { "AAAA": 100, "KKKK": 80, "QQQQ": 60, "JJJJ": 40,
+                                  "AAAA x2": 1000, "KKKK x2": 800, "QQQQ x2": 600, "JJJJ x2": 400 },
+      "flush":                  { "AKQJT trump": 150, "x2": 1500 },
+      "royal_marriage":         { "KQ trump": 40 },
+      "marriage":               { "KQ non-trump": 20 },
+      "nines":                  { "9 trump (dix)": 10 }
+    },
+    "trick_points": { "A": 11, "10": 10, "K": 4, "Q": 3, "J": 2, "9": 0 },
+    "last_trick_bonus": 10,
+    "bid_set_penalty": "bid_amount",
+    "count_by": "team",
+    "accumulate": true
+  },
+  "win_condition": { "type": "target_score", "score": 1500, "winner": "first" },
+  "house_rules": [
+    {
+      "id": "simplified_trick_points",
+      "name": "Simplified Trick Points",
+      "description": "Count only Aces (1pt each) and 10s (1pt each) instead of full card-point table.",
+      "default": false,
+      "affects": {
+        "scoring.trick_points": { "A": 1, "10": 1, "K": 0, "Q": 0, "J": 0, "9": 0 }
+      }
+    }
+  ],
+  "help": "pinochle.md"
+}

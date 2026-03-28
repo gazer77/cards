@@ -1,0 +1,52 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "go-fish",
+  "name": "Go Fish",
+  "version": "1.0",
+  "deck": "standard-52",
+  "players": { "min": 2, "max": 6 },
+  "teams": false,
+  "dealer": "random",
+  "deal": {
+    "cards_per_player": 5,
+    "remainder_to": "deck",
+    "face": "down"
+  },
+  "zones": [
+    { "id": "deck",  "type": "deck",   "visibility": "none" },
+    { "id": "hand",  "type": "hand",   "owner": "each_player", "visibility": "owner" },
+    { "id": "books", "type": "spread", "owner": "each_player", "visibility": "all" }
+  ],
+  "phases": [
+    {
+      "id": "play",
+      "type": "go_fish",
+      "book_size": 4,
+      "collect_to": "books",
+      "next": {
+        "if": "win_condition",
+        "then": "end",
+        "else": "play"
+      }
+    }
+  ],
+  "scoring": { "type": "none" },
+  "win_condition": { "type": "most_books" },
+  "house_rules": [
+    {
+      "id": "seven_cards_two_players",
+      "name": "7 Cards (2–3 players)",
+      "description": "Deal 7 cards each when playing with 2 or 3 players.",
+      "default": false,
+      "affects": { "deal.cards_per_player": 7 }
+    },
+    {
+      "id": "pairs",
+      "name": "Pairs Instead of Books",
+      "description": "Collect pairs of 2 matching cards instead of books of 4.",
+      "default": false,
+      "affects": { "play.book_size": 2 }
+    }
+  ],
+  "help": "go-fish.md"
+}

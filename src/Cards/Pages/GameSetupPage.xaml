@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="Cards.Pages.GameSetupPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:models="clr-namespace:Cards.Models"
+    Title="{Binding GameName}"
+    BackgroundColor="{StaticResource TableBackground}">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="24" Spacing="32">
+
+            <!-- Game title -->
+            <VerticalStackLayout Spacing="4">
+                <Label
+                    Text="{Binding GameName}"
+                    Style="{StaticResource SectionTitle}" />
+                <Label
+                    Text="{Binding PlayerRangeText}"
+                    Style="{StaticResource BodyText}" />
+            </VerticalStackLayout>
+
+            <!-- Player count -->
+            <VerticalStackLayout Spacing="12">
+                <Label Text="PLAYERS" Style="{StaticResource FieldLabel}" />
+                <HorizontalStackLayout Spacing="20" VerticalOptions="Center">
+                    <Button
+                        Text="−"
+                        Style="{StaticResource CounterButton}"
+                        IsEnabled="{Binding CanDecreasePlayers}"
+                        Clicked="OnDecreasePlayersClicked" />
+                    <Label
+                        Text="{Binding PlayerCount}"
+                        Style="{StaticResource CounterValue}"
+                        VerticalOptions="Center" />
+                    <Button
+                        Text="+"
+                        Style="{StaticResource CounterButton}"
+                        IsEnabled="{Binding CanIncreasePlayers}"
+                        Clicked="OnIncreasePlayersClicked" />
+                </HorizontalStackLayout>
+            </VerticalStackLayout>
+
+            <!-- House rules -->
+            <VerticalStackLayout
+                Spacing="12"
+                IsVisible="{Binding HasHouseRules}">
+                <Label Text="HOUSE RULES" Style="{StaticResource FieldLabel}" />
+                <CollectionView ItemsSource="{Binding HouseRules}" HeightRequest="300">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="models:HouseRule">
+                            <Grid ColumnDefinitions="*,Auto" Padding="0,8" RowSpacing="2">
+                                <VerticalStackLayout Grid.Column="0" Spacing="2">
+                                    <Label Text="{Binding Name}" Style="{StaticResource RuleTitle}" />
+                                    <Label Text="{Binding Description}" Style="{StaticResource RuleDescription}" />
+                                </VerticalStackLayout>
+                                <Switch
+                                    Grid.Column="1"
+                                    IsToggled="{Binding IsEnabled, Mode=TwoWay}"
+                                    OnColor="{StaticResource Gold}"
+                                    VerticalOptions="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </VerticalStackLayout>
+
+            <!-- Start button -->
+            <Button
+                Text="Start Game"
+                Style="{StaticResource PrimaryButton}"
+                Command="{Binding StartGameCommand}"
+                Margin="0,16,0,0" />
+
+            <!-- View Rules (only shown when a help file exists) -->
+            <Button
+                Text="View Rules"
+                Style="{StaticResource HudButton}"
+                IsVisible="{Binding HasHelp}"
+                HorizontalOptions="Center"
+                Clicked="OnViewRulesClicked"
+                Margin="0,8,0,0" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

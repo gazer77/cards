@@ -1,0 +1,124 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "euchre-4p",
+  "name": "Euchre (4-Player)",
+  "version": "1.0",
+  "deck": "euchre-24",
+  "players": { "min": 4, "max": 4 },
+  "teams": {
+    "count": 2,
+    "size": 2,
+    "arrangement": "alternating"
+  },
+  "dealer": "random",
+  "rounds": {
+    "repeat_until": "win_condition",
+    "dealer": "rotates_left"
+  },
+  "deal": {
+    "pattern": "3-2-3-2",
+    "face": "down",
+    "remainder_to": "kitty",
+    "then_turn_up_kitty_top": true
+  },
+  "zones": [
+    { "id": "deck",       "type": "deck",   "visibility": "none" },
+    { "id": "hand",       "type": "hand",   "owner": "each_player", "visibility": "owner" },
+    { "id": "kitty",      "type": "pile",   "visibility": "top_to_dealer" },
+    { "id": "trick",      "type": "trick",  "visibility": "all" },
+    { "id": "won_tricks", "type": "pile",   "owner": "each_team",   "visibility": "count_only" }
+  ],
+  "phases": [
+    {
+      "id": "order_up",
+      "type": "bidding",
+      "style": "accept_or_pass",
+      "order": "left_of_dealer",
+      "prompt": "Order up?",
+      "once_around": true,
+      "if_accepted": {
+        "sets": { "trump": "turned_card_suit", "maker": "accepting_player" },
+        "dealer_action": "swap_turned_card",
+        "next": "play"
+      },
+      "if_all_pass": "call_trump"
+    },
+    {
+      "id": "call_trump",
+      "type": "bidding",
+      "style": "suit_or_pass",
+      "order": "left_of_dealer",
+      "exclude_suit": "turned_card_suit",
+      "stick_the_dealer": true,
+      "going_alone": true,
+      "once_around": true,
+      "if_called": {
+        "sets": { "trump": "bidder_choice", "maker": "calling_player" },
+        "next": "play"
+      }
+    },
+    {
+      "id": "play",
+      "type": "trick_taking",
+      "trump": "bid_result",
+      "lead": "left_of_dealer",
+      "follow_suit": true,
+      "left_bower": true,
+      "winner": "highest_trump_then_lead",
+      "trick_winner_leads_next": true,
+      "collect_tricks_to": "won_tricks",
+      "loner_skips_partner": true,
+      "next": "score"
+    },
+    {
+      "id": "score",
+      "type": "score",
+      "next": {
+        "if": "win_condition",
+        "then": "end",
+        "else": "deal_new_round"
+      }
+    },
+    {
+      "id": "deal_new_round",
+      "type": "deal",
+      "pattern": "3-2-3-2",
+      "face": "down",
+      "remainder_to": "kitty",
+      "then_turn_up_kitty_top": true,
+      "next": "order_up"
+    }
+  ],
+  "scoring": {
+    "type": "euchre",
+    "makers_win": { "tricks_3_or_4": 1, "tricks_5": 2 },
+    "euchred": { "opponents_score": 2 },
+    "loner_win": { "tricks_5": 4 },
+    "count_by": "team",
+    "accumulate": true
+  },
+  "win_condition": { "type": "target_score", "score": 10, "winner": "first" },
+  "house_rules": [
+    {
+      "id": "no_stick_dealer",
+      "name": "No Stick the Dealer",
+      "description": "Dealer may pass in the second round of bidding (no forced call).",
+      "default": false,
+      "affects": { "call_trump.stick_the_dealer": false }
+    },
+    {
+      "id": "no_loner",
+      "name": "No Going Alone",
+      "description": "Players cannot go alone.",
+      "default": false,
+      "affects": { "call_trump.going_alone": false }
+    },
+    {
+      "id": "farmers_hand",
+      "name": "Farmer's Hand",
+      "description": "A player dealt three nines (or three nines and a ten) may throw in their hand and force a redeal.",
+      "default": false
+    }
+  ],
+  "help": "euchre.md"
+}

@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="Cards.Pages.HomePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:models="clr-namespace:Cards.Models"
+    Shell.NavBarIsVisible="False"
+    BackgroundColor="{StaticResource TableBackground}">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- Header -->
+        <VerticalStackLayout Grid.Row="0" Padding="24,48,24,16" Spacing="4">
+            <Label
+                Text="CARDS"
+                Style="{StaticResource AppTitle}"
+                HorizontalOptions="Start" />
+            <Label
+                Text="Choose a game"
+                Style="{StaticResource AppSubtitle}"
+                HorizontalOptions="Start" />
+        </VerticalStackLayout>
+
+        <!-- Search bar -->
+        <Border
+            Grid.Row="1"
+            Margin="16,0,16,12"
+            Padding="14,0"
+            BackgroundColor="{StaticResource SurfaceMid}"
+            StrokeThickness="0"
+            StrokeShape="RoundRectangle 10">
+            <Entry
+                Placeholder="Search games…"
+                PlaceholderColor="{StaticResource TextMuted}"
+                TextColor="{StaticResource TextPrimary}"
+                Text="{Binding FilterText}"
+                ReturnType="Search"
+                ClearButtonVisibility="WhileEditing" />
+        </Border>
+
+        <!-- Loading state -->
+        <ActivityIndicator
+            Grid.Row="2"
+            IsRunning="{Binding IsLoading}"
+            IsVisible="{Binding IsLoading}"
+            Color="{StaticResource Gold}"
+            VerticalOptions="Center"
+            HorizontalOptions="Center" />
+
+        <!-- Game grid -->
+        <CollectionView
+            Grid.Row="2"
+            ItemsSource="{Binding Games}"
+            IsVisible="{Binding IsNotLoading}"
+            SelectionMode="Single"
+            SelectionChanged="OnGameSelected"
+            Margin="16,0">
+            <CollectionView.ItemsLayout>
+                <GridItemsLayout
+                    Orientation="Vertical"
+                    Span="2"
+                    HorizontalItemSpacing="12"
+                    VerticalItemSpacing="12" />
+            </CollectionView.ItemsLayout>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="models:GameDefinition">
+                    <Border Style="{StaticResource GameCardBorder}">
+                        <VerticalStackLayout Padding="16" Spacing="4">
+                            <Label
+                                Text="{Binding Name}"
+                                Style="{StaticResource GameCardTitle}" />
+                            <Label
+                                Text="{Binding PlayerRangeText}"
+                                Style="{StaticResource GameCardSubtitle}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+            <CollectionView.Footer>
+                <BoxView HeightRequest="24" Color="Transparent" />
+            </CollectionView.Footer>
+        </CollectionView>
+
+        <!-- Bottom bar -->
+        <HorizontalStackLayout
+            Grid.Row="3"
+            Padding="24,12"
+            HorizontalOptions="End">
+            <ImageButton
+                Source="settings.png"
+                WidthRequest="28"
+                HeightRequest="28"
+                Opacity="0.6"
+                Clicked="OnSettingsClicked" />
+        </HorizontalStackLayout>
+
+        <!-- Game preview overlay (covers all rows) -->
+        <Grid
+            Grid.Row="0"
+            Grid.RowSpan="4"
+            IsVisible="{Binding IsPreviewVisible}">
+
+            <!-- Backdrop — tap to dismiss -->
+            <BoxView
+                Color="#CC000000"
+                InputTransparent="False">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnPreviewDismissed" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
+
+            <!-- Bottom sheet panel -->
+            <Border
+                VerticalOptions="End"
+                HorizontalOptions="Fill"
+                BackgroundColor="{StaticResource SurfaceDark}"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 20,20,0,0">
+                <Border.GestureRecognizers>
+                    <!-- Consume taps so they don't fall through to the backdrop -->
+                    <TapGestureRecognizer />
+                </Border.GestureRecognizers>
+
+                <VerticalStackLayout Padding="28,24,28,36" Spacing="0">
+
+                    <!-- Game name + player range -->
+                    <Label
+                        Text="{Binding SelectedGameName}"
+                        Style="{StaticResource SectionTitle}"
+                        Margin="0,0,0,4" />
+                    <Label
+                        Text="{Binding SelectedGamePlayerRange}"
+                        Style="{StaticResource BodyText}"
+                        Margin="0,0,0,28" />
+
+                    <!-- Start Game -->
+                    <Button
+                        Text="Start Game"
+                        Style="{StaticResource PrimaryButton}"
+                        Clicked="OnStartGameClicked"
+                        Margin="0,0,0,12" />
+
+                    <!-- View Rules (only when help file exists) -->
+                    <Button
+                        Text="View Rules"
+                        Style="{StaticResource HudButton}"
+                        IsVisible="{Binding SelectedGameHasHelp}"
+                        HorizontalOptions="Center"
+                        Clicked="OnViewRulesClicked" />
+
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+
+    </Grid>
+</ContentPage>

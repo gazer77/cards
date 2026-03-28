@@ -1,0 +1,63 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "blackjack",
+  "name": "Blackjack",
+  "version": "1.0",
+  "deck": "standard-52",
+  "players": { "min": 1, "max": 6 },
+  "teams": false,
+  "roles": [
+    { "id": "dealer", "count": 1, "type": "fixed_rules", "fills": "ai" }
+  ],
+  "zones": [
+    { "id": "deck",        "type": "deck",   "visibility": "none" },
+    { "id": "hand",        "type": "hand",   "owner": "each_player", "visibility": "all" },
+    { "id": "dealer_hand", "type": "hand",   "owner": "dealer",      "visibility": "top" },
+    { "id": "discard",     "type": "pile",   "visibility": "none" }
+  ],
+  "phases": [
+    {
+      "id": "round",
+      "type": "blackjack_round",
+      "dealer_hits_soft": 16,
+      "blackjack_pays": "3:2",
+      "allow_split": true,
+      "allow_double_down": true,
+      "allow_surrender": false,
+      "next": { "if": "win_condition", "then": "end", "else": "round" }
+    }
+  ],
+  "scoring": { "type": "blackjack" },
+  "win_condition": { "type": "fixed_rounds", "count": 5, "winner": "highest_score" },
+  "house_rules": [
+    {
+      "id": "dealer_hits_hard_17",
+      "name": "Dealer Hits Hard 17",
+      "description": "Dealer hits on hard 17 in addition to soft 17.",
+      "default": false,
+      "affects": { "round.dealer_hits_soft": 17 }
+    },
+    {
+      "id": "surrender",
+      "name": "Allow Surrender",
+      "description": "Players may surrender for half their bet back.",
+      "default": false,
+      "affects": { "round.allow_surrender": true }
+    },
+    {
+      "id": "no_split",
+      "name": "No Splitting",
+      "description": "Splitting pairs is not allowed.",
+      "default": false,
+      "affects": { "round.allow_split": false }
+    },
+    {
+      "id": "blackjack_pays_6_5",
+      "name": "Blackjack Pays 6:5",
+      "description": "Blackjack pays 6:5 instead of 3:2.",
+      "default": false,
+      "affects": { "round.blackjack_pays": "6:5" }
+    }
+  ],
+  "help": "blackjack.md"
+}

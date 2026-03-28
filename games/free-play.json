@@ -1,0 +1,47 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "free-play",
+  "name": "Free Play",
+  "version": "1.0",
+  "deck": "standard-52",
+  "players": { "min": 1, "max": 8 },
+  "teams": false,
+  "deal": {
+    "cards_per_player": 0,
+    "remainder_to": "deck"
+  },
+  "zones": [
+    { "id": "deck",         "type": "deck",   "visibility": "top" },
+    { "id": "discard",      "type": "pile",   "visibility": "top" },
+    { "id": "hand",         "type": "hand",   "owner": "each_player", "visibility": "owner" },
+    { "id": "table",        "type": "spread", "owner": "each_player", "visibility": "all" },
+    { "id": "shared_table", "type": "spread", "visibility": "all" }
+  ],
+  "phases": [
+    {
+      "id": "play",
+      "type": "free_play",
+      "end_turn": "manual",
+      "end_game": "manual"
+    }
+  ],
+  "scoring": { "type": "none" },
+  "win_condition": { "type": "manual" },
+  "house_rules": [
+    {
+      "id": "jokers",
+      "name": "Include Jokers",
+      "description": "Add 2 jokers to the deck.",
+      "default": false,
+      "affects": { "deck": "standard-52-jokers" }
+    },
+    {
+      "id": "two_decks",
+      "name": "Two Decks",
+      "description": "Use two shuffled standard decks.",
+      "default": false,
+      "affects": { "deck": "standard-104" }
+    }
+  ],
+  "help": "free-play.md"
+}

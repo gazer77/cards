@@ -1,0 +1,94 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "hand-and-foot",
+  "name": "Hand and Foot",
+  "version": "1.0",
+  "deck": "standard-104",
+  "players": { "min": 2, "max": 6 },
+  "teams": {
+    "count": 2,
+    "size": 2,
+    "arrangement": "alternating",
+    "only_when_players": [4, 6]
+  },
+  "dealer": "random",
+  "rounds": {
+    "repeat_until": "win_condition",
+    "dealer": "rotates_left"
+  },
+  "deal": {
+    "stacks_per_player": 2,
+    "cards_per_stack": 13,
+    "face": "down",
+    "remainder_to": "deck",
+    "then_flip_top_to": "discard"
+  },
+  "zones": [
+    { "id": "deck",      "type": "deck",   "visibility": "none" },
+    { "id": "discard",   "type": "pile",   "visibility": "top" },
+    { "id": "hand",      "type": "hand",   "owner": "each_player", "visibility": "owner" },
+    { "id": "foot",      "type": "hand",   "owner": "each_player", "visibility": "none", "locked_until": "hand_empty" },
+    { "id": "meld",      "type": "spread", "owner": "each_team",   "visibility": "all" }
+  ],
+  "phases": [
+    {
+      "id": "play",
+      "type": "draw_discard",
+      "draw_from": ["deck", "discard"],
+      "draw_count": { "from_deck": 2, "from_discard": "pile" },
+      "discard_count": 1,
+      "target_zone": "hand",
+      "special_actions": ["meld", "add_to_meld", "go_out"],
+      "go_out_condition": "all_melds_complete_and_hand_empty",
+      "next": "score"
+    },
+    {
+      "id": "score",
+      "type": "score",
+      "next": {
+        "if": "win_condition",
+        "then": "end",
+        "else": "deal_new_round"
+      }
+    },
+    {
+      "id": "deal_new_round",
+      "type": "deal",
+      "stacks_per_player": 2,
+      "cards_per_stack": 13,
+      "face": "down",
+      "remainder_to": "deck",
+      "then_flip_top_to": "discard",
+      "next": "play"
+    }
+  ],
+  "scoring": {
+    "type": "meld_points",
+    "meld_types": "canasta",
+    "card_values": {
+      "joker": 50, "2": 20, "A": 20,
+      "8": 10, "9": 10, "10": 10, "J": 10, "Q": 10, "K": 10,
+      "4": 5, "5": 5, "6": 5, "7": 5,
+      "3": -500,
+      "default": 5
+    },
+    "wild_cards": ["joker", "2"],
+    "red_three_penalty": -500,
+    "natural_canasta_bonus": 500,
+    "wild_canasta_bonus": 1000,
+    "go_out_bonus": 100,
+    "accumulate": true,
+    "count_by": "team"
+  },
+  "win_condition": { "type": "target_score", "score": 10000, "winner": "first" },
+  "house_rules": [
+    {
+      "id": "no_teams_4p",
+      "name": "No Teams (Cutthroat)",
+      "description": "Each player scores individually, even with 4 or 6 players.",
+      "default": false,
+      "affects": { "teams": false }
+    }
+  ],
+  "help": "hand-and-foot.md"
+}

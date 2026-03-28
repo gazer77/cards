@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="Cards.Pages.GameTablePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:views="clr-namespace:Cards.Views"
+    Shell.NavBarIsVisible="False"
+    BackgroundColor="Black">
+
+    <Grid RowDefinitions="*,Auto">
+
+        <!-- SkiaSharp game canvas (touch handled natively via EnableTouchEvents) -->
+        <views:GameTableView
+            x:Name="TableCanvas"
+            Grid.Row="0"
+            HorizontalOptions="Fill"
+            VerticalOptions="Fill" />
+
+        <!-- Status message overlay (centered over canvas) -->
+        <Border
+            Grid.Row="0"
+            VerticalOptions="Center"
+            HorizontalOptions="Center"
+            Margin="0,-60,0,0"
+            Padding="18,10"
+            BackgroundColor="#CC0D2518"
+            StrokeShape="RoundRectangle 10"
+            StrokeThickness="0"
+            IsVisible="{Binding Source={x:Reference StatusLabel}, Path=IsVisible}">
+            <Label
+                x:Name="StatusLabel"
+                HorizontalTextAlignment="Center"
+                TextColor="{StaticResource Gold}"
+                FontSize="16"
+                FontAttributes="Bold"
+                IsVisible="False" />
+        </Border>
+
+        <!-- HUD overlay — game title -->
+        <Grid
+            Grid.Row="0"
+            VerticalOptions="End"
+            HorizontalOptions="Fill"
+            Margin="0,0,0,80"
+            Padding="16,0">
+            <Label
+                x:Name="GameTitleLabel"
+                HorizontalOptions="Center"
+                Style="{StaticResource HudGameTitle}" />
+        </Grid>
+
+        <!-- Bottom action bar -->
+        <Border
+            Grid.Row="1"
+            BackgroundColor="{StaticResource HudBackground}"
+            StrokeThickness="0">
+            <Grid ColumnDefinitions="Auto,*,Auto" Padding="16,12">
+                <Button
+                    Grid.Column="0"
+                    Text="Rules"
+                    Style="{StaticResource HudButton}"
+                    Clicked="OnRulesClicked" />
+                <HorizontalStackLayout
+                    x:Name="ActionButtonsPanel"
+                    Grid.Column="1"
+                    HorizontalOptions="Center"
+                    Spacing="12" />
+                <Button
+                    Grid.Column="2"
+                    Text="Menu"
+                    Style="{StaticResource HudButton}"
+                    Clicked="OnMenuClicked" />
+            </Grid>
+        </Border>
+
+        <!-- Game-over overlay — covers entire screen including bottom bar -->
+        <Grid
+            x:Name="GameOverOverlay"
+            Grid.Row="0"
+            Grid.RowSpan="2"
+            BackgroundColor="#D9000000"
+            IsVisible="False">
+            <Border
+                VerticalOptions="Center"
+                HorizontalOptions="Center"
+                Padding="40,36"
+                BackgroundColor="{StaticResource SurfaceDark}"
+                StrokeShape="RoundRectangle 16"
+                Stroke="{StaticResource Gold}"
+                StrokeThickness="1.5">
+                <VerticalStackLayout Spacing="20" MinimumWidthRequest="260">
+
+                    <Label
+                        x:Name="GameOverResultLabel"
+                        HorizontalTextAlignment="Center"
+                        TextColor="{StaticResource Gold}"
+                        FontSize="22"
+                        FontAttributes="Bold" />
+
+                    <Label
+                        x:Name="GameOverSubLabel"
+                        HorizontalTextAlignment="Center"
+                        TextColor="{StaticResource TextSecondary}"
+                        FontSize="14"
+                        IsVisible="False" />
+
+                    <Button
+                        Text="Play Again"
+                        Style="{StaticResource PrimaryButton}"
+                        Margin="0,8,0,0"
+                        Clicked="OnPlayAgainClicked" />
+
+                    <Button
+                        Text="Main Menu"
+                        Style="{StaticResource HudButton}"
+                        HorizontalOptions="Center"
+                        Clicked="OnMenuClicked" />
+
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+
+    </Grid>
+</ContentPage>

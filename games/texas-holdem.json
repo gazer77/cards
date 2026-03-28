@@ -1,0 +1,137 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "texas-holdem",
+  "name": "Texas Hold'em",
+  "version": "1.0",
+  "deck": "standard-52",
+  "players": { "min": 2, "max": 9 },
+  "teams": false,
+  "dealer": "random",
+  "rounds": {
+    "repeat_until": "win_condition",
+    "dealer": "rotates_left"
+  },
+  "blinds": {
+    "small": { "position": "left_of_dealer",       "amount": 1 },
+    "big":   { "position": "two_left_of_dealer",   "amount": 2 }
+  },
+  "zones": [
+    { "id": "deck",      "type": "deck",   "visibility": "none" },
+    { "id": "hand",      "type": "hand",   "owner": "each_player", "visibility": "owner" },
+    { "id": "community", "type": "spread", "visibility": "all" },
+    { "id": "burn",      "type": "pile",   "visibility": "none" },
+    { "id": "pot",       "type": "pot",    "visibility": "all" }
+  ],
+  "phases": [
+    {
+      "id": "deal_hole",
+      "type": "deal",
+      "to": "each_player",
+      "count": 2,
+      "face": "down",
+      "next": "bet_preflop"
+    },
+    {
+      "id": "bet_preflop",
+      "type": "poker_betting",
+      "structure": "no_limit",
+      "starting_player": "three_left_of_dealer",
+      "can_check": false,
+      "next": "flop"
+    },
+    {
+      "id": "flop",
+      "type": "deal",
+      "burn_first": true,
+      "to": "community",
+      "count": 3,
+      "face": "up",
+      "next": "bet_flop"
+    },
+    {
+      "id": "bet_flop",
+      "type": "poker_betting",
+      "structure": "no_limit",
+      "starting_player": "left_of_dealer",
+      "can_check": true,
+      "next": "turn"
+    },
+    {
+      "id": "turn",
+      "type": "deal",
+      "burn_first": true,
+      "to": "community",
+      "count": 1,
+      "face": "up",
+      "next": "bet_turn"
+    },
+    {
+      "id": "bet_turn",
+      "type": "poker_betting",
+      "structure": "no_limit",
+      "starting_player": "left_of_dealer",
+      "can_check": true,
+      "next": "river"
+    },
+    {
+      "id": "river",
+      "type": "deal",
+      "burn_first": true,
+      "to": "community",
+      "count": 1,
+      "face": "up",
+      "next": "bet_river"
+    },
+    {
+      "id": "bet_river",
+      "type": "poker_betting",
+      "structure": "no_limit",
+      "starting_player": "left_of_dealer",
+      "can_check": true,
+      "next": "showdown"
+    },
+    {
+      "id": "showdown",
+      "type": "showdown",
+      "evaluator": "high_hand",
+      "community_zone": "community",
+      "hand_size": 5,
+      "use_from_hand": { "min": 0, "max": 2 },
+      "next": {
+        "if": "win_condition",
+        "then": "end",
+        "else": "deal_new_round"
+      }
+    },
+    {
+      "id": "deal_new_round",
+      "type": "deal",
+      "to": "each_player",
+      "count": 2,
+      "face": "down",
+      "next": "bet_preflop"
+    }
+  ],
+  "scoring": {
+    "type": "hand_rank",
+    "evaluator": "high_hand",
+    "wilds": []
+  },
+  "win_condition": { "type": "last_with_chips" },
+  "house_rules": [
+    {
+      "id": "limit",
+      "name": "Limit Hold'em",
+      "description": "Fixed betting limits instead of no-limit.",
+      "default": false,
+      "affects": {
+        "bet_preflop.structure": "limit",
+        "bet_flop.structure": "limit",
+        "bet_turn.structure": "limit",
+        "bet_river.structure": "limit"
+      }
+    }
+  ],
+  "help": "texas-holdem.md",
+  "tags": ["poker"]
+}

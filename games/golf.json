@@ -1,0 +1,98 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "golf",
+  "name": "Golf",
+  "version": "1.0",
+  "deck": "standard-52-jokers",
+  "players": { "min": 2, "max": 8 },
+  "teams": false,
+  "dealer": "random",
+  "rounds": {
+    "repeat_until": "win_condition",
+    "dealer": "rotates_left"
+  },
+  "deal": {
+    "cards_per_player": 6,
+    "target_zone": "grid",
+    "face": "down",
+    "remainder_to": "deck",
+    "then_flip_top_to": "discard"
+  },
+  "zones": [
+    { "id": "deck",    "type": "deck",   "visibility": "none" },
+    { "id": "discard", "type": "pile",   "visibility": "top" },
+    { "id": "grid",    "type": "grid",   "owner": "each_player", "rows": 2, "cols": 3, "initial_face": "down", "peek_count": 2 }
+  ],
+  "phases": [
+    {
+      "id": "play",
+      "type": "draw_discard",
+      "draw_from": ["deck", "discard"],
+      "draw_count": 1,
+      "discard_count": 1,
+      "target_zone": "grid",
+      "round_ends_when": "any_player_grid_all_face_up",
+      "remaining_players_get_one_more_turn": true,
+      "next": "score"
+    },
+    {
+      "id": "score",
+      "type": "score",
+      "next": {
+        "if": "win_condition",
+        "then": "end",
+        "else": "deal_new_round"
+      }
+    },
+    {
+      "id": "deal_new_round",
+      "type": "deal",
+      "to": "each_player",
+      "target_zone": "grid",
+      "count": 6,
+      "face": "down",
+      "then_flip_top_to": "discard",
+      "next": "play"
+    }
+  ],
+  "scoring": {
+    "type": "grid_values",
+    "card_values": {
+      "A": 1,
+      "2": -2,
+      "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9,
+      "10": 10, "J": 10, "Q": 10,
+      "K": 0,
+      "joker": -2,
+      "default": "pip"
+    },
+    "matching_columns": { "pair_value": 0 },
+    "face_down_penalty": 2,
+    "accumulate": true
+  },
+  "win_condition": { "type": "fixed_rounds", "count": 9, "winner": "lowest_score" },
+  "house_rules": [
+    {
+      "id": "no_jokers",
+      "name": "No Jokers",
+      "description": "Play with a standard 52-card deck (no jokers).",
+      "default": false,
+      "affects": { "deck": "standard-52" }
+    },
+    {
+      "id": "six_holes",
+      "name": "6-Hole Game",
+      "description": "Play 6 rounds instead of 9.",
+      "default": false,
+      "affects": { "win_condition.count": 6 }
+    },
+    {
+      "id": "eighteen_holes",
+      "name": "18-Hole Game",
+      "description": "Play 18 rounds instead of 9.",
+      "default": false,
+      "affects": { "win_condition.count": 18 }
+    }
+  ],
+  "help": "golf.md"
+}

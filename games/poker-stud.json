@@ -1,0 +1,134 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "poker-stud",
+  "name": "Stud",
+  "version": "1.0",
+  "deck": "standard-52",
+  "players": { "min": 2, "max": 8 },
+  "teams": false,
+  "dealer": "random",
+  "rounds": {
+    "repeat_until": "win_condition",
+    "dealer": "rotates_left"
+  },
+  "ante": { "amount": 1 },
+  "zones": [
+    { "id": "deck",  "type": "deck",   "visibility": "none" },
+    { "id": "hand",  "type": "hand",   "owner": "each_player", "visibility": "mixed" },
+    { "id": "burn",  "type": "pile",   "visibility": "none" },
+    { "id": "pot",   "type": "pot",    "visibility": "all" }
+  ],
+  "phases": [
+    {
+      "id": "deal_third_street",
+      "type": "deal",
+      "to": "each_player",
+      "cards": [
+        { "count": 2, "face": "down" },
+        { "count": 1, "face": "up" }
+      ],
+      "next": "bet_third"
+    },
+    {
+      "id": "bet_third",
+      "type": "poker_betting",
+      "structure": "limit",
+      "starting_player": "lowest_up_card",
+      "bring_in": true,
+      "can_check": false,
+      "next": "deal_fourth"
+    },
+    {
+      "id": "deal_fourth",
+      "type": "deal",
+      "to": "each_active_player",
+      "count": 1,
+      "face": "up",
+      "next": "bet_fourth"
+    },
+    {
+      "id": "bet_fourth",
+      "type": "poker_betting",
+      "structure": "limit",
+      "starting_player": "highest_up_cards",
+      "can_check": false,
+      "next": "deal_fifth"
+    },
+    {
+      "id": "deal_fifth",
+      "type": "deal",
+      "to": "each_active_player",
+      "count": 1,
+      "face": "up",
+      "next": "bet_fifth"
+    },
+    {
+      "id": "bet_fifth",
+      "type": "poker_betting",
+      "structure": "limit",
+      "starting_player": "highest_up_cards",
+      "can_check": false,
+      "next": "deal_sixth"
+    },
+    {
+      "id": "deal_sixth",
+      "type": "deal",
+      "to": "each_active_player",
+      "count": 1,
+      "face": "up",
+      "next": "bet_sixth"
+    },
+    {
+      "id": "bet_sixth",
+      "type": "poker_betting",
+      "structure": "limit",
+      "starting_player": "highest_up_cards",
+      "can_check": false,
+      "next": "deal_seventh"
+    },
+    {
+      "id": "deal_seventh",
+      "type": "deal",
+      "to": "each_active_player",
+      "count": 1,
+      "face": "down",
+      "next": "bet_seventh"
+    },
+    {
+      "id": "bet_seventh",
+      "type": "poker_betting",
+      "structure": "limit",
+      "starting_player": "highest_up_cards",
+      "can_check": false,
+      "next": "showdown"
+    },
+    {
+      "id": "showdown",
+      "type": "showdown",
+      "evaluator": "high_hand",
+      "hand_size": 5,
+      "use_from_hand": { "min": 5, "max": 7 },
+      "next": {
+        "if": "win_condition",
+        "then": "end",
+        "else": "deal_third_street"
+      }
+    }
+  ],
+  "scoring": {
+    "type": "hand_rank",
+    "evaluator": "high_hand",
+    "wilds": []
+  },
+  "win_condition": { "type": "last_with_chips" },
+  "house_rules": [
+    {
+      "id": "razz",
+      "name": "Razz (Low Hand Wins)",
+      "description": "Lowest hand wins. Aces are always low. Straights and flushes don't count against you.",
+      "default": false,
+      "affects": { "scoring.evaluator": "ace_to_five_low" }
+    }
+  ],
+  "help": "poker-stud.md"
+}

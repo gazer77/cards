@@ -1,0 +1,45 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "war",
+  "name": "War",
+  "version": "1.0",
+  "deck": "standard-52",
+  "players": { "min": 2, "max": 2 },
+  "teams": false,
+  "deal": {
+    "cards_per_player": 26,
+    "face": "down",
+    "order": "clockwise"
+  },
+  "zones": [
+    { "id": "hand", "type": "pile", "owner": "each_player", "visibility": "none" }
+  ],
+  "phases": [
+    {
+      "id": "battle",
+      "type": "war",
+      "war_face_down_count": 3,
+      "tie_resolution": "war",
+      "next": {
+        "if": "win_condition",
+        "then": "end",
+        "else": "battle"
+      }
+    }
+  ],
+  "scoring": { "type": "none" },
+  "win_condition": { "type": "last_with_cards" },
+  "house_rules": [
+    {
+      "id": "tie_split",
+      "name": "Ties Split the Pot",
+      "description": "On a tie, each player takes back their own card instead of going to war.",
+      "default": false,
+      "affects": { "battle.tie_resolution": "split" }
+    }
+  ],
+  "help": "war.md",
+  "ui": {
+    "card_scale": 1.8
+  }
+}

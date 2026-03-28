@@ -1,0 +1,21 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "euchre-3p",
+  "name": "Euchre (3-Player)",
+  "version": "1.0",
+  "extends": "euchre-4p",
+  "overrides": {
+    "players": { "min": 3, "max": 3 },
+    "teams": false,
+    "scoring": {
+      "type": "euchre",
+      "makers_win": { "tricks_3_to_5": 1 },
+      "euchred": { "opponents_each_score": 2 },
+      "loner_win": null,
+      "count_by": "player",
+      "accumulate": true
+    },
+    "play.loner_skips_partner": false
+  },
+  "help": "euchre.md"
+}

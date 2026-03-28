@@ -1,0 +1,22 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "poker-wilds",
+  "name": "Wilds",
+  "version": "1.0",
+  "extends": "texas-holdem",
+  "overrides": {
+    "scoring.wilds": [{ "rank": "2" }]
+  },
+  "house_rules": [
+    {
+      "id": "one_eyed_jacks",
+      "name": "One-Eyed Jacks Wild",
+      "description": "Add Jh and Js as additional wild cards.",
+      "default": false,
+      "affects": {
+        "scoring.wilds": { "append": [{ "card": "Jh" }, { "card": "Js" }] }
+      }
+    }
+  ],
+  "help": "poker-wilds.md"
+}
