@@ -237,6 +237,11 @@ public static class ZoneLayoutEngine
         float spacing = centerBounds.Width / (centerZones.Count + 1);
         float cy = centerBounds.MidY;
 
+        // If each zone's slot is narrower than 2 card-widths there isn't enough
+        // room to spread individual cards legibly (happens on phone screens with
+        // several center zones).  Collapse spread zones to stacks in that case.
+        bool compact = spacing < cardW * 2.5f;
+
         for (int i = 0; i < centerZones.Count; i++)
         {
             var zone = centerZones[i];
@@ -244,9 +249,12 @@ public static class ZoneLayoutEngine
             var bounds = new SKRect(cx - cardW / 2f, cy - cardH / 2f, cx + cardW / 2f, cy + cardH / 2f);
 
             var hint  = ZoneHintFor(zone);
+            if (compact && hint == ZoneRenderHint.Spread)
+                hint = ZoneRenderHint.Stack;
+
             bool faceUp = zone.Visibility is "top" or "all";
             string? label = ZoneLabelFor(zone.Id)
-                         ?? (zone.Id.StartsWith("books:") ? BooksLabelFor(state, zone) : null);
+                         ?? (zone.Id.StartsWith("books:") ? BooksLabelFor(state, zone, compact) : null);
 
             layouts.Add(new ZoneLayout(zone, bounds, cardW, cardH, hint,
                 FaceUp: faceUp, RotationDegrees: 0f,
@@ -255,10 +263,16 @@ public static class ZoneLayoutEngine
         }
     }
 
-    private static string BooksLabelFor(GameState state, Zone zone)
+    private static string BooksLabelFor(GameState state, Zone zone, bool compact = false)
     {
         var owner = state.Players.FirstOrDefault(p => p.Id == zone.OwnerId);
-        return owner is not null ? $"{owner.Name.ToUpperInvariant()} BOOKS" : "BOOKS";
+        string name = owner?.Name.ToUpperInvariant() ?? "BOOKS";
+        if (compact && owner is not null)
+        {
+            int score = state.GetScore(owner.Id);
+            return score > 0 ? $"{name}: {score}" : $"{name} BOOKS";
+        }
+        return $"{name} BOOKS";
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
