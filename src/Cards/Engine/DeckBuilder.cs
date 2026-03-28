@@ -30,14 +30,8 @@ public static class DeckBuilder
         _                     => BuildWith(StandardRanks, copies: 1)
     };
 
-    public static void Shuffle(List<Card> cards)
-    {
-        for (int i = cards.Count - 1; i > 0; i--)
-        {
-            int j = Random.Shared.Next(i + 1);
-            (cards[i], cards[j]) = (cards[j], cards[i]);
-        }
-    }
+    public static void Shuffle(List<Card> cards, IShuffleStrategy? strategy = null)
+        => (strategy ?? RandomShuffleStrategy.Instance).Shuffle(cards);
 
     private static List<Card> BuildWith(Rank[] ranks, int copies)
     {
