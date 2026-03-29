@@ -77,8 +77,12 @@ public sealed class GameSaveService
             if (dto is null) return false;
 
             // Re-run Initialize to set up logic-private state (e.g. house-rule flags).
-            // This also populates state.Players and initial zones, which we'll replace.
+            // This also populates state.Players and creates all expected zones.
             logic.Initialize(state, playerCount, enabledRules);
+
+            // Remember which zones Initialize created so we can restore any that the
+            // save file predates (forward-compatibility: new zones added after a save).
+            var initZones = new Dictionary<string, Zone>(state.Zones);
 
             // Overlay runtime state from the save.
             state.Zones.Clear();
@@ -89,6 +93,11 @@ public sealed class GameSaveService
                     zone.Add(new Card((Suit)sc.Suit, (Rank)sc.Rank, sc.IsFaceUp) { IsWild = sc.IsWild });
                 state.Zones[sz.Id] = zone;
             }
+
+            // Re-add any zones Initialize created that are absent from the save
+            // (e.g. books zones added after an existing save was written).
+            foreach (var (id, zone) in initZones)
+                state.Zones.TryAdd(id, zone);
 
             state.CurrentPhaseId     = dto.PhaseId;
             state.CurrentPlayerIndex = dto.PlayerIndex;

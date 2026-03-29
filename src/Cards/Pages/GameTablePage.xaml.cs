@@ -120,6 +120,12 @@ public partial class GameTablePage : ContentPage
         RefreshInteractionState();
 
         _ = _sounds.InitializeAsync();
+
+        // If the restored (or freshly initialized) state immediately wants to
+        // auto-advance (e.g. AI's turn, or player has no cards after restore),
+        // kick off the loop without waiting for user input.
+        if (_logic is not null && _logic.GetAutoAdvanceDelay(_state!) is not null)
+            _ = RunAutoAdvanceLoopAsync();
     }
 
     private async Task InitializeMultiplayerAsync(GameState state)
@@ -311,12 +317,23 @@ public partial class GameTablePage : ContentPage
 
         if (_logic!.IsGameOver(_state!)) { _sounds.PlayWin(); ShowGameOver(); return; }
 
+        await RunAutoAdvanceLoopAsync();
+    }
+
+    /// <summary>
+    /// Runs the auto-advance loop until the logic no longer requests it.
+    /// Safe to call with no pending auto-advance (returns immediately).
+    /// </summary>
+    private async Task RunAutoAdvanceLoopAsync()
+    {
+        if (_isAutoAdvancing) return;
+
         _isAutoAdvancing = true;
         try
         {
             while (true)
             {
-                var delay = _logic.GetAutoAdvanceDelay(_state!);
+                var delay = _logic!.GetAutoAdvanceDelay(_state!);
                 if (delay is null) break;
 
                 await Task.Delay(delay.Value);
