@@ -14,7 +14,7 @@ namespace Cards.Logic;
 ///   result   — round resolved; showing outcome, waiting for tap to collect
 ///   game_over
 /// </summary>
-public sealed class WarLogic : IGameLogic
+public sealed class WarLogic : GameLogicBase
 {
     private const int WarFaceDownCount = 3;
 
@@ -22,7 +22,7 @@ public sealed class WarLogic : IGameLogic
 
     // ── Initialize ────────────────────────────────────────────────────────────
 
-    public void Initialize(GameState state, int playerCount, IReadOnlyList<string> enabledHouseRules)
+    public override void Initialize(GameState state, int playerCount, IReadOnlyList<string> enabledHouseRules)
     {
         _tieSplit = enabledHouseRules.Contains("tie_split");
 
@@ -32,27 +32,31 @@ public sealed class WarLogic : IGameLogic
         // Build, shuffle, and deal via the shared engine.
         StandardDealEngine.Instance.Deal(state, playerCount, enabledHouseRules);
 
-        // Initial phase
+        RegisterPhase("ready",  new ReadyHandler(this));
+        RegisterPhase("result", new ResultHandler(this));
+
         state.CurrentPhaseId = "ready";
         state.CurrentPlayerIndex = 0;
         state.Metadata["status"] = "Tap to flip!";
     }
 
-    // ── Actions ───────────────────────────────────────────────────────────────
+    // ── Phase handlers ────────────────────────────────────────────────────────
 
-    public IReadOnlyList<GameAction> GetValidActions(GameState state) =>
-        state.CurrentPhaseId == "game_over"
-            ? (IReadOnlyList<GameAction>)[]
-            : [new GameAction("tap")];
-
-    public void Apply(GameState state, GameAction action)
+    private sealed class ReadyHandler(WarLogic logic) : IPhaseHandler
     {
-        if (action.Type != "tap") return;
-
-        switch (state.CurrentPhaseId)
+        public IReadOnlyList<GameAction> GetValidActions(GameState _) => [new GameAction("tap")];
+        public void Apply(GameState state, GameAction action)
         {
-            case "ready":  FlipBattle(state);       break;
-            case "result": CollectAndContinue(state); break;
+            if (action.Type == "tap") logic.FlipBattle(state);
+        }
+    }
+
+    private sealed class ResultHandler(WarLogic logic) : IPhaseHandler
+    {
+        public IReadOnlyList<GameAction> GetValidActions(GameState _) => [new GameAction("tap")];
+        public void Apply(GameState state, GameAction action)
+        {
+            if (action.Type == "tap") logic.CollectAndContinue(state);
         }
     }
 
@@ -168,13 +172,6 @@ public sealed class WarLogic : IGameLogic
         state.Metadata["status"]      = result.StatusMessage;
     }
 
-    // ── IGameLogic ────────────────────────────────────────────────────────────
-
-    public bool IsGameOver(GameState state) => state.CurrentPhaseId == "game_over";
-
-    public string GetStatusText(GameState state)
-        => state.Metadata.GetValueOrDefault("status", "");
-
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private void SetResult(GameState state, string winnerId, string msg)
@@ -203,6 +200,4 @@ public sealed class WarLogic : IGameLogic
             to.Add(from.Draw()!);
     }
 
-    private static int CardCount(GameState s, Player p)
-        => Hand(s, p).Count + Play(s, p).Count;
 }

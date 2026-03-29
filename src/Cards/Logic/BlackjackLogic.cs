@@ -15,13 +15,13 @@ namespace Cards.Logic;
 ///   dealer_turn   — hole card revealed; each tap deals one more dealer card
 ///   game_over     — hand resolved; triggers the game-over overlay
 /// </summary>
-public sealed class BlackjackLogic : IGameLogic
+public sealed class BlackjackLogic : GameLogicBase
 {
     private bool _dealerHitsHard17;
 
     // ── Initialize ────────────────────────────────────────────────────────────
 
-    public void Initialize(GameState state, int playerCount, IReadOnlyList<string> enabledHouseRules)
+    public override void Initialize(GameState state, int playerCount, IReadOnlyList<string> enabledHouseRules)
     {
         _dealerHitsHard17 = enabledHouseRules.Contains("dealer_hits_hard_17");
 
@@ -51,6 +51,9 @@ public sealed class BlackjackLogic : IGameLogic
 
         state.CurrentPlayerIndex = 0;
 
+        RegisterPhase("player_turn", new PlayerTurnHandler(this));
+        RegisterPhase("dealer_turn", new DealerTurnHandler(this));
+
         // Immediate blackjack: reveal hole card and go to dealer_turn for the player to see
         if (HandValue(PlayerHand(state)) == 21)
         {
@@ -63,35 +66,28 @@ public sealed class BlackjackLogic : IGameLogic
         UpdatePlayerTurnStatus(state);
     }
 
-    // ── Actions ───────────────────────────────────────────────────────────────
+    // ── Phase handlers ────────────────────────────────────────────────────────
 
-    public IReadOnlyList<GameAction> GetValidActions(GameState state) =>
-        state.CurrentPhaseId switch
-        {
-            "player_turn" when PlayerHand(state).Count == 2 =>
-            [
-                new GameAction("hit",         Label: "Hit"),
-                new GameAction("stand",       Label: "Stand"),
-                new GameAction("double_down", Label: "Double"),
-            ],
-            "player_turn" => [new GameAction("hit", Label: "Hit"), new GameAction("stand", Label: "Stand")],
-            "dealer_turn" => [new GameAction("tap")],
-            _             => (IReadOnlyList<GameAction>)[],
-        };
-
-    public void Apply(GameState state, GameAction action)
+    private sealed class PlayerTurnHandler(BlackjackLogic logic) : IPhaseHandler
     {
-        switch (state.CurrentPhaseId)
+        public IReadOnlyList<GameAction> GetValidActions(GameState state) =>
+            BlackjackLogic.PlayerHand(state).Count == 2
+            ? [new GameAction("hit", Label: "Hit"), new GameAction("stand", Label: "Stand"), new GameAction("double_down", Label: "Double")]
+            : [new GameAction("hit", Label: "Hit"), new GameAction("stand", Label: "Stand")];
+
+        public void Apply(GameState state, GameAction action)
         {
-            case "player_turn":
-                if (action.Type == "hit")         PlayerHit(state);
-                if (action.Type == "stand")       PlayerStand(state);
-                if (action.Type == "double_down") PlayerDoubleDown(state);
-                break;
-            case "dealer_turn":
-                DealerStep(state);
-                break;
+            if (action.Type == "hit")         logic.PlayerHit(state);
+            if (action.Type == "stand")       logic.PlayerStand(state);
+            if (action.Type == "double_down") logic.PlayerDoubleDown(state);
         }
+    }
+
+    private sealed class DealerTurnHandler(BlackjackLogic logic) : IPhaseHandler
+    {
+        public IReadOnlyList<GameAction> GetValidActions(GameState _) => [new GameAction("tap")];
+        public void Apply(GameState state, GameAction action)         => logic.DealerStep(state);
+        public TimeSpan? GetAutoAdvanceDelay(GameState _)             => TimeSpan.FromMilliseconds(650);
     }
 
     // ── Player actions ────────────────────────────────────────────────────────
@@ -204,17 +200,6 @@ public sealed class BlackjackLogic : IGameLogic
         state.Metadata["sub"]    = $"You: {pv} | Dealer: {dv}";
         state.CurrentPhaseId     = "game_over";
     }
-
-    // ── IGameLogic ────────────────────────────────────────────────────────────
-
-    public bool IsGameOver(GameState state) => state.CurrentPhaseId == "game_over";
-
-    public string GetStatusText(GameState state)
-        => state.Metadata.GetValueOrDefault("status", "");
-
-    /// <summary>Dealer turn auto-advances so the player watches cards appear one at a time.</summary>
-    public TimeSpan? GetAutoAdvanceDelay(GameState state) =>
-        state.CurrentPhaseId == "dealer_turn" ? TimeSpan.FromMilliseconds(650) : null;
 
     // ── Status helpers ────────────────────────────────────────────────────────
 

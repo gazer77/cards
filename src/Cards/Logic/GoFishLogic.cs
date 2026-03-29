@@ -23,13 +23,13 @@ namespace Cards.Logic;
 ///   known_p0_ranks   — comma-separated rank codes the AI knows the player holds
 ///                      (updated each time the player asks for a rank)
 /// </summary>
-public sealed class GoFishLogic : IGameLogic
+public sealed class GoFishLogic : GameLogicBase
 {
     private int _bookSize = 4;
 
     // ── Initialize ────────────────────────────────────────────────────────────
 
-    public void Initialize(GameState state, int playerCount, IReadOnlyList<string> enabledHouseRules)
+    public override void Initialize(GameState state, int playerCount, IReadOnlyList<string> enabledHouseRules)
     {
         _bookSize = enabledHouseRules.Contains("pairs") ? 2 : 4;
 
@@ -45,52 +45,58 @@ public sealed class GoFishLogic : IGameLogic
         CheckBooks(state, "player0");
         CheckBooks(state, "player1");
 
+        RegisterPhase("player_turn", new PlayerTurnHandler(this));
+        RegisterPhase("ai_turn",     new AiTurnHandler(this));
+
         state.CurrentPhaseId     = "player_turn";
         state.CurrentPlayerIndex = 0;
         SetIdleStatus(state);
     }
 
-    // ── Actions ───────────────────────────────────────────────────────────────
+    // ── Phase handlers ────────────────────────────────────────────────────────
 
-    public IReadOnlyList<GameAction> GetValidActions(GameState state)
+    private sealed class PlayerTurnHandler(GoFishLogic logic) : IPhaseHandler
     {
-        if (state.CurrentPhaseId == "game_over") return [];
-        if (state.CurrentPhaseId == "ai_turn")   return [new GameAction("ai_step")];
+        public IReadOnlyList<GameAction> GetValidActions(GameState state)
+        {
+            if (state.Zones["hand:player0"].Count == 0)
+                return [new GameAction("player_refill")];
+            string? sel = state.Metadata.GetValueOrDefault("selected_rank");
+            if (sel is null) return [];
+            string rankName = GoFishLogic.RankPlural(GoFishLogic.RankFromCode(sel));
+            return
+            [
+                new GameAction("ask",      Label: $"Ask for {rankName}"),
+                new GameAction("deselect", Label: "Cancel"),
+            ];
+        }
 
-        // Player has no cards — auto-draw or pass
-        if (state.Zones["hand:player0"].Count == 0)
-            return [new GameAction("player_refill")];
+        public void Apply(GameState state, GameAction action)
+        {
+            switch (action.Type)
+            {
+                case "select_card":   GoFishLogic.SelectCard(state, action.CardId!); break;
+                case "ask":           logic.PlayerAsk(state);                         break;
+                case "deselect":      GoFishLogic.Deselect(state);                   break;
+                case "player_refill": logic.PlayerRefill(state);                      break;
+            }
+        }
 
-        // player_turn: waiting for card tap
-        string? sel = state.Metadata.GetValueOrDefault("selected_rank");
-        if (sel is null) return [];
+        public TimeSpan? GetAutoAdvanceDelay(GameState state) =>
+            state.Zones["hand:player0"].Count == 0 ? TimeSpan.FromMilliseconds(800) : null;
 
-        string rankName = RankPlural(RankFromCode(sel));
-        return
-        [
-            new GameAction("ask",      Label: $"Ask for {rankName}"),
-            new GameAction("deselect", Label: "Cancel"),
-        ];
+        public IReadOnlyList<string> GetSelectableCardIds(GameState state) =>
+            state.Zones["hand:player0"].Cards.Select(c => c.Id).ToList();
     }
 
-    public void Apply(GameState state, GameAction action)
+    private sealed class AiTurnHandler(GoFishLogic logic) : IPhaseHandler
     {
-        switch (state.CurrentPhaseId)
+        public IReadOnlyList<GameAction> GetValidActions(GameState _) => [new GameAction("ai_step")];
+        public void Apply(GameState state, GameAction action)
         {
-            case "player_turn":
-                switch (action.Type)
-                {
-                    case "select_card":   SelectCard(state, action.CardId!); break;
-                    case "ask":           PlayerAsk(state);                   break;
-                    case "deselect":      Deselect(state);                    break;
-                    case "player_refill": PlayerRefill(state);                break;
-                }
-                break;
-
-            case "ai_turn":
-                AiStep(state);
-                break;
+            if (action.Type == "ai_step") logic.AiStep(state);
         }
+        public TimeSpan? GetAutoAdvanceDelay(GameState _) => TimeSpan.FromMilliseconds(1200);
     }
 
     // ── Player actions ────────────────────────────────────────────────────────
@@ -372,30 +378,6 @@ public sealed class GoFishLogic : IGameLogic
         state.CurrentPhaseId          = "game_over";
     }
 
-    // ── IGameLogic ────────────────────────────────────────────────────────────
-
-    public bool IsGameOver(GameState state) => state.CurrentPhaseId == "game_over";
-
-    public string GetStatusText(GameState state)
-        => state.Metadata.GetValueOrDefault("status", "");
-
-    public TimeSpan? GetAutoAdvanceDelay(GameState state)
-    {
-        if (state.CurrentPhaseId == "ai_turn") return TimeSpan.FromMilliseconds(1200);
-        // Player has no cards — auto-handle after a brief pause
-        if (state.CurrentPhaseId == "player_turn" && state.Zones["hand:player0"].Count == 0)
-            return TimeSpan.FromMilliseconds(800);
-        return null;
-    }
-
-    public IReadOnlyList<string> GetSelectableCardIds(GameState state)
-    {
-        if (state.CurrentPhaseId != "player_turn") return [];
-
-        // All hand cards are always tappable — tapping a card selects or re-selects it
-        return state.Zones["hand:player0"].Cards.Select(c => c.Id).ToList();
-    }
-
     // ── AI memory helpers ─────────────────────────────────────────────────────
 
     private static HashSet<string> GetKnownPlayerRanks(GameState state)
@@ -433,18 +415,6 @@ public sealed class GoFishLogic : IGameLogic
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static void DealCards(GameState state, string playerId, int count, bool faceUp)
-    {
-        var deck = state.Zones["deck"];
-        var hand = state.Zones[$"hand:{playerId}"];
-        for (int i = 0; i < count && deck.Count > 0; i++)
-        {
-            var card = deck.Draw()!;
-            card.IsFaceUp = faceUp;
-            hand.Add(card);
-        }
-    }
 
     /// <summary>Sets the idle prompt shown at the start of the player's turn.</summary>
     private static void SetIdleStatus(GameState state)
