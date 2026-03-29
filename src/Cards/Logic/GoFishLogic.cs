@@ -359,26 +359,17 @@ public sealed class GoFishLogic : IGameLogic
 
     // ── Win condition ─────────────────────────────────────────────────────────
 
-    private void CheckWinCondition(GameState state)
+    private static void CheckWinCondition(GameState state)
     {
         if (state.CurrentPhaseId == "game_over") return;
 
-        var p0Hand = state.Zones["hand:player0"];
-        var p1Hand = state.Zones["hand:player1"];
-        var deck   = state.Zones["deck"];
+        var result = WinConditionEngine.Instance.Check(state);
+        if (result is null) return;
 
-        if (deck.Count > 0 || p0Hand.Count > 0 || p1Hand.Count > 0) return;
-
-        int p0Books = state.GetScore("player0");
-        int p1Books = state.GetScore("player1");
-
-        string result = p0Books > p1Books ? "You win!"
-            : p1Books > p0Books           ? "AI wins."
-            :                               "It's a tie!";
-
-        state.Metadata["status"] = result;
-        state.Metadata["sub"]    = $"Your books: {p0Books} | AI books: {p1Books}";
-        state.CurrentPhaseId     = "game_over";
+        state.Metadata["status"]      = result.StatusMessage;
+        state.Metadata["sub"]         = result.SubMessage ?? "";
+        state.Metadata["last_winner"] = result.WinnerId   ?? "";
+        state.CurrentPhaseId          = "game_over";
     }
 
     // ── IGameLogic ────────────────────────────────────────────────────────────

@@ -60,7 +60,7 @@ public sealed class WarLogic : IGameLogic
 
     private void FlipBattle(GameState state)
     {
-        if (AnyHandEmpty(state)) { EndGame(state); return; }
+        if (AnyHandEmpty(state)) { ApplyResult(state, WinConditionEngine.Instance.Resolve(state)); return; }
 
         foreach (var p in state.Players)
             MoveTopCard(Hand(state, p), Play(state, p));
@@ -79,7 +79,7 @@ public sealed class WarLogic : IGameLogic
             var card0 = Play(state, p0).TopCard;
             var card1 = Play(state, p1).TopCard;
 
-            if (card0 is null || card1 is null) { EndGame(state); return; }
+            if (card0 is null || card1 is null) { ApplyResult(state, WinConditionEngine.Instance.Resolve(state)); return; }
 
             int r0 = (int)card0.Rank;
             int r1 = (int)card1.Rank;
@@ -103,7 +103,7 @@ public sealed class WarLogic : IGameLogic
             // Need WarFaceDownCount + 1 cards each to continue
             if (state.Players.Any(p => Hand(state, p).Count < WarFaceDownCount + 1))
             {
-                EndGame(state); return;
+                ApplyResult(state, WinConditionEngine.Instance.Resolve(state)); return;
             }
 
             // Move tied play cards into pot, deal 3 face-down + 1 face-up per player
@@ -150,34 +150,22 @@ public sealed class WarLogic : IGameLogic
 
     // ── Game-over checks ──────────────────────────────────────────────────────
 
-    private bool CheckGameOver(GameState state)
+    private static bool CheckGameOver(GameState state)
     {
-        var h0 = Hand(state, state.Players[0]);
-        var h1 = Hand(state, state.Players[1]);
-
-        if (h0.Count == 0) { SetGameOver(state, state.Players[1].Id, "Opponent wins the game!"); return true; }
-        if (h1.Count == 0) { SetGameOver(state, state.Players[0].Id, "You win the game!"); return true; }
-        return false;
+        var result = WinConditionEngine.Instance.Check(state);
+        if (result is null) return false;
+        ApplyResult(state, result);
+        return true;
     }
 
-    private bool AnyHandEmpty(GameState state)
+    private static bool AnyHandEmpty(GameState state)
         => state.Players.Any(p => Hand(state, p).Count == 0);
 
-    private void EndGame(GameState state)
+    private static void ApplyResult(GameState state, WinResult result)
     {
-        int c0 = CardCount(state, state.Players[0]);
-        int c1 = CardCount(state, state.Players[1]);
-
-        if (c0 > c1)       SetGameOver(state, state.Players[0].Id, "You win the game!");
-        else if (c1 > c0)  SetGameOver(state, state.Players[1].Id, "Opponent wins the game!");
-        else               SetGameOver(state, "",                   "It's a draw!");
-    }
-
-    private void SetGameOver(GameState state, string winnerId, string msg)
-    {
-        state.CurrentPhaseId = "game_over";
-        state.Metadata["last_winner"] = winnerId;
-        state.Metadata["status"] = msg;
+        state.CurrentPhaseId          = "game_over";
+        state.Metadata["last_winner"] = result.WinnerId ?? "";
+        state.Metadata["status"]      = result.StatusMessage;
     }
 
     // ── IGameLogic ────────────────────────────────────────────────────────────
