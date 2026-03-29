@@ -104,7 +104,7 @@ public class GameTableView : SKCanvasView
                 var justFlipped = oldFaceDown.Except(newFaceDown).ToHashSet();
                 foreach (var id in newHandIds.Except(oldHandIds).Intersect(oldCardIds))
                     if (!justFlipped.Contains(id) && !_dealAnims.ContainsKey(id))
-                        _receiveAnims[id] = (now, 900f);
+                        _receiveAnims[id] = (now, 1350f);
             }
 
             if (_dealAnims.Count > 0 || _flipAnims.Count > 0 || _receiveAnims.Count > 0)
@@ -150,7 +150,7 @@ public class GameTableView : SKCanvasView
     {
         long now = NowMs();
         foreach (var id in cardIds)
-            _receiveAnims[id] = (now, 900f);
+            _receiveAnims[id] = (now, 1350f);
         if (_receiveAnims.Count > 0)
             EnsureAnimTimer();
     }

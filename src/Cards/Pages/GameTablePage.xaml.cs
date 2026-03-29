@@ -443,22 +443,24 @@ public partial class GameTablePage : ContentPage
             .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Id).ToHashSet();
         var handCountBefore = _state.Zones
             .Where(kv => kv.Key.StartsWith("hand:")).Sum(kv => kv.Value.Count);
-        var handIdsBefore = _state.Zones.Values
-            .Where(z => z.Type == "hand")
+        // Only track the player's own visible hand — opponent hands are excluded so
+        // cards moving from opponent → player are correctly detected as "received".
+        var visibleHandBefore = _state.Zones.Values
+            .Where(z => z.Type == "hand" && z.Visibility is "owner" or "all")
             .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet();
 
         _logic!.Apply(_state, action);
 
         PlaySoundForStateChange(faceDownBefore, handCountBefore);
 
-        // Detect cards that moved into a hand zone and trigger the bump animation.
-        // Must be done explicitly here because the GameState setter can't detect
-        // movements when the same object reference is mutated in-place.
+        // Any card now in the player's visible hand that wasn't there before gets
+        // the bump animation — regardless of whether it came from the deck, an
+        // opponent's hand, or anywhere else.
         var received = _state.Zones.Values
-            .Where(z => z.Type == "hand")
+            .Where(z => z.Type == "hand" && z.Visibility is "owner" or "all")
             .SelectMany(z => z.Cards)
             .Select(c => c.Id)
-            .Where(id => !handIdsBefore.Contains(id));
+            .Where(id => !visibleHandBefore.Contains(id));
         TableCanvas.MarkCardsReceivedInHand(received);
     }
 
