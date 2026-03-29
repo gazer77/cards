@@ -17,6 +17,15 @@ public class GameDefinition
     [JsonPropertyName("extends")]
     public string? Extends { get; set; }
 
+    /// <summary>
+    /// Selects the C# logic module for this game.
+    /// Looked up in <see cref="Cards.Engine.LogicRegistry"/> by key.
+    /// Omit for definition-only games that run entirely on the engine defaults.
+    /// Defaults to <see cref="Id"/> when absent.
+    /// </summary>
+    [JsonPropertyName("implementation")]
+    public string? Implementation { get; set; }
+
     [JsonPropertyName("deck")]
     public JsonElement Deck { get; set; }
 

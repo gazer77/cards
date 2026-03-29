@@ -3,6 +3,7 @@
   "id": "war",
   "name": "War",
   "version": "1.0",
+  "implementation": "war",
   "deck": "standard-52",
   "players": { "min": 2, "max": 2, "names": ["You", "Opponent"] },
   "teams": false,

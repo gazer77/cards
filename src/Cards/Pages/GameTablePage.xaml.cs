@@ -98,7 +98,7 @@ public partial class GameTablePage : ContentPage
 
         var state  = new GameState { GameId = definition.Id, Definition = definition };
         var rules  = (IReadOnlyList<string>)(HouseRules ?? []);
-        _logic     = LogicRegistry.Create(definition.Id);
+        _logic     = LogicRegistry.Create(definition);
 
         bool restored = false;
         if (_logic is not null && _saves.HasSave(definition.Id))
@@ -182,7 +182,7 @@ public partial class GameTablePage : ContentPage
         GearSortButton.IsVisible = ui?.AllowSort  ?? true;
         GearLogButton.IsVisible  = ui?.ShowGameLog ?? true;
 
-        _logic = LogicRegistry.Create(state.GameId);
+        _logic = LogicRegistry.Create(state.Definition);
         _state = state;
 
         _mp.ActionApplied += OnMultiplayerActionApplied;
@@ -582,7 +582,7 @@ public partial class GameTablePage : ContentPage
         MainThread.BeginInvokeOnMainThread(() =>
         {
             _state = newState;
-            _logic = LogicRegistry.Create(newState.GameId);
+            _logic = LogicRegistry.Create(newState.Definition);
 
             MaybeSortHands();
             TableCanvas.GameState = _state;
