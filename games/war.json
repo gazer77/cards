@@ -4,7 +4,7 @@
   "name": "War",
   "version": "1.0",
   "deck": "standard-52",
-  "players": { "min": 2, "max": 2 },
+  "players": { "min": 2, "max": 2, "names": ["You", "Opponent"] },
   "teams": false,
   "deal": {
     "cards_per_player": 26,
@@ -13,8 +13,10 @@
     "anim_delay_ms": 20
   },
   "zones": [
-    { "id": "deck", "type": "deck", "visibility": "none" },
-    { "id": "hand", "type": "pile", "owner": "each_player", "visibility": "none" }
+    { "id": "deck", "type": "deck",   "visibility": "none" },
+    { "id": "hand", "type": "pile",   "owner": "each_player", "visibility": "none" },
+    { "id": "play", "type": "spread", "owner": "each_player", "visibility": "all" },
+    { "id": "pot",  "type": "pile",                           "visibility": "count_only" }
   ],
   "phases": [
     {

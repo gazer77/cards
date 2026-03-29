@@ -26,32 +26,8 @@ public sealed class WarLogic : IGameLogic
     {
         _tieSplit = enabledHouseRules.Contains("tie_split");
 
-        // Players
-        state.Players.Add(new Player("player0", "You"));
-        if (playerCount >= 2)
-            state.Players.Add(new Player("player1", "Opponent"));
-
-        // Zones from JSON definition
-        foreach (var zoneDef in state.Definition.Zones)
-        {
-            if (zoneDef.Owner == "each_player")
-            {
-                foreach (var p in state.Players)
-                    state.Zones[$"{zoneDef.Id}:{p.Id}"] =
-                        new Zone($"{zoneDef.Id}:{p.Id}", zoneDef.Type, p.Id, zoneDef.Visibility);
-            }
-            else
-            {
-                state.Zones[zoneDef.Id] =
-                    new Zone(zoneDef.Id, zoneDef.Type, zoneDef.Owner, zoneDef.Visibility);
-            }
-        }
-
-        // Logic-owned zones
-        foreach (var p in state.Players)
-            state.Zones[$"play:{p.Id}"] = new Zone($"play:{p.Id}", "spread", p.Id, "all");
-
-        state.Zones["pot"] = new Zone("pot", "pile", null, "count_only");
+        // Players and all zones (including play and pot) come from the definition.
+        SetupEngine.Instance.Setup(state, playerCount, enabledHouseRules);
 
         // Build, shuffle, and deal via the shared engine.
         StandardDealEngine.Instance.Deal(state, playerCount, enabledHouseRules);

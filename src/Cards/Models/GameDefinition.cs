@@ -78,6 +78,14 @@ public class PlayerConfig
 
     [JsonPropertyName("max")]
     public int Max { get; set; } = 4;
+
+    /// <summary>
+    /// Display names for each player seat, indexed by player position.
+    /// <c>names[0]</c> is the human player; subsequent entries are opponents or AI seats.
+    /// Defaults to "Player 1", "Player 2", … when absent.
+    /// </summary>
+    [JsonPropertyName("names")]
+    public List<string>? Names { get; set; }
 }
 
 public class ZoneDefinition

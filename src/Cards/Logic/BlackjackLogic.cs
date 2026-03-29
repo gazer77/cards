@@ -25,12 +25,7 @@ public sealed class BlackjackLogic : IGameLogic
     {
         _dealerHitsHard17 = enabledHouseRules.Contains("dealer_hits_hard_17");
 
-        state.Players.Add(new Player("player0", "You"));
-        state.Players.Add(new Player("player1", "Dealer"));
-
-        state.Zones["hand:player0"] = new Zone("hand:player0", "hand", "player0", "all");
-        state.Zones["hand:player1"] = new Zone("hand:player1", "hand", "player1", "all");
-        state.Zones["deck"]         = new Zone("deck",         "deck", null,       "none");
+        SetupEngine.Instance.Setup(state, playerCount, enabledHouseRules);
 
         var deck = DeckBuilder.Build(state.Definition.DeckType);
         DeckBuilder.Shuffle(deck);

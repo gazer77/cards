@@ -235,25 +235,9 @@ public partial class GameTablePage : ContentPage
         return preview;
     }
 
-    private static void BuildFallbackState(GameState state, GameDefinition definition)
+    private void BuildFallbackState(GameState state, GameDefinition definition)
     {
-        for (int i = 0; i < 2; i++)
-            state.Players.Add(new Player($"player{i}", $"Player {i + 1}"));
-
-        foreach (var zoneDef in definition.Zones)
-        {
-            if (zoneDef.Owner == "each_player")
-            {
-                foreach (var p in state.Players)
-                    state.Zones[$"{zoneDef.Id}:{p.Id}"] =
-                        new Zone($"{zoneDef.Id}:{p.Id}", zoneDef.Type, p.Id, zoneDef.Visibility);
-            }
-            else
-            {
-                state.Zones[zoneDef.Id] =
-                    new Zone(zoneDef.Id, zoneDef.Type, zoneDef.Owner, zoneDef.Visibility);
-            }
-        }
+        SetupEngine.Instance.Setup(state, PlayerCount, []);
 
         if (state.Zones.TryGetValue("deck", out var deck))
         {
