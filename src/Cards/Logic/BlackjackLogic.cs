@@ -36,11 +36,23 @@ public sealed class BlackjackLogic : IGameLogic
         DeckBuilder.Shuffle(deck);
         foreach (var c in deck) state.Zones["deck"].Add(c);
 
-        // Deal: player, dealer (up), player, dealer (hole = face-down)
+        // Deal: player (up), dealer (up), player (up), dealer hole (down).
+        // The sequence is game-specific and can't be expressed as a uniform clockwise
+        // deal, so we handle it here and record the result for the animation layer.
         DealFaceUp(state, "player0");
         DealFaceUp(state, "player1");
         DealFaceUp(state, "player0");
         DealFaceDown(state, "player1");
+
+        StandardDealEngine.RecordResult(
+            state,
+            byPlayer: new Dictionary<int, List<string>>
+            {
+                [0] = PlayerHand(state).Cards.Select(c => c.Id).ToList(),
+                [1] = DealerHand(state).Cards.Select(c => c.Id).ToList(),
+            },
+            steps:    [(0, 1), (1, 1), (0, 1), (1, 1)],
+            animDelayMs: 220);
 
         state.CurrentPlayerIndex = 0;
 

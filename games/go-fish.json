@@ -13,7 +13,7 @@
       { "cards": 5 }
     ],
     "remainder_to": "deck",
-    "face": "down"
+    "face": "owner"
   },
   "zones": [
     { "id": "deck",  "type": "deck",   "visibility": "none" },

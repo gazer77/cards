@@ -9,9 +9,11 @@
   "deal": {
     "cards_per_player": 26,
     "face": "down",
-    "order": "clockwise"
+    "order": "clockwise",
+    "anim_delay_ms": 20
   },
   "zones": [
+    { "id": "deck", "type": "deck", "visibility": "none" },
     { "id": "hand", "type": "pile", "owner": "each_player", "visibility": "none" }
   ],
   "phases": [

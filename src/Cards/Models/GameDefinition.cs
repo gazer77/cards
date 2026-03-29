@@ -191,6 +191,23 @@ public class DealDefinition
     [JsonPropertyName("face")]
     public string? Face { get; set; }
 
+    /// <summary>
+    /// Optional explicit animation deal sequence.
+    /// Each element is [playerIndex, cardCount] — cards are dealt to that player
+    /// in that group size, in sequence.  When absent the animation defaults to
+    /// one card clockwise per player per round.
+    /// </summary>
+    [JsonPropertyName("anim_deal_steps")]
+    public List<int[]>? AnimDealSteps { get; set; }
+
+    /// <summary>
+    /// Milliseconds between each individual card animation when dealing.
+    /// Defaults to 130 when absent.  Set lower (e.g. 20) for games that deal
+    /// many cards (War) so the animation doesn't take too long.
+    /// </summary>
+    [JsonPropertyName("anim_delay_ms")]
+    public int? AnimDelayMs { get; set; }
+
     public int GetCardsPerPlayer(int playerCount)
     {
         if (CardsPerPlayer.ValueKind == JsonValueKind.Number)

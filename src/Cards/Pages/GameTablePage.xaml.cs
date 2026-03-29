@@ -114,6 +114,48 @@ public partial class GameTablePage : ContentPage
 
         _state = state;
         MaybeSortHands();
+
+        if (!restored)
+        {
+            var preDeal = BuildPreDealState(state);
+            bool hasDeck = preDeal.Zones.Values.Any(z => z.Type == "deck" && !z.IsEmpty);
+
+            if (hasDeck)
+            {
+                // Show full-deck preview; wait for the canvas to render it so
+                // _lastLayouts has real pixel positions.
+                TableCanvas.GameState = preDeal;
+                await Task.WhenAny(TableCanvas.WaitForNextPaintAsync(), Task.Delay(500));
+
+                // Capture the deck center NOW — before the shuffle, so post-shuffle
+                // layout-cleanup timing cannot interfere with the reading.
+                var deckCenter = TableCanvas.GetZoneCenter("deck");
+
+                var shuffleTask = TableCanvas.TriggerShuffleAnimationAsync("deck");
+                await Task.WhenAny(shuffleTask, Task.Delay(1600)); // safety timeout
+
+                // Queue sequential deal animation using the authoritative DealResult
+                // recorded by the engine — no reconstruction needed.
+                var dealResult = state.LastDealResult;
+                if (dealResult is not null && deckCenter.HasValue)
+                {
+                    TableCanvas.MarkCardsForSequentialDeal(
+                        dealResult.CardsByPlayerIndex,
+                        deckCenter.Value,
+                        dealResult.Steps,
+                        dealResult.AnimDelayMs);
+                }
+                else if (dealResult is not null)
+                {
+                    // Deck center unavailable — bump all hand cards at once as fallback.
+                    var allIds = dealResult.CardsByPlayerIndex.Values
+                        .SelectMany(ids => ids).ToList();
+                    if (allIds.Count > 0)
+                        TableCanvas.MarkCardsReceivedInHand(allIds, null);
+                }
+            }
+        }
+
         TableCanvas.GameState = _state;
         RefreshStatus();
         RefreshActionButtons();
@@ -161,6 +203,36 @@ public partial class GameTablePage : ContentPage
         _mp.ActionApplied -= OnMultiplayerActionApplied;
         _mp.StateSynced   -= OnMultiplayerStateSynced;
         _mp.Disconnected  -= OnMultiplayerDisconnected;
+    }
+
+    /// <summary>
+    /// Creates a display-only state that shows every card piled in the deck zone
+    /// (hands empty) so the shuffle animation plays on a visually full deck.
+    /// </summary>
+    private static GameState BuildPreDealState(GameState real)
+    {
+        var preview = new GameState
+        {
+            GameId     = real.GameId,
+            Definition = real.Definition,
+        };
+        foreach (var p in real.Players)
+            preview.Players.Add(p);
+
+        // Clone all zones as empty shells
+        foreach (var (id, z) in real.Zones)
+            preview.Zones[id] = new Zone(id, z.Type, z.OwnerId, z.Visibility);
+
+        // Gather all cards and place them face-down in the first deck zone
+        var deckZone = preview.Zones.Values.FirstOrDefault(z => z.Type == "deck");
+        if (deckZone is not null)
+        {
+            foreach (var card in real.Zones.Values.SelectMany(z => z.Cards))
+                deckZone.Add(new Card(card.Suit, card.Rank, isFaceUp: false));
+        }
+
+        preview.CurrentPhaseId = real.CurrentPhaseId;
+        return preview;
     }
 
     private static void BuildFallbackState(GameState state, GameDefinition definition)
@@ -688,6 +760,22 @@ public partial class GameTablePage : ContentPage
             ["GameId"]   = _state.GameId,
             ["GameName"] = _state.Definition.Name,
         });
+    }
+
+    private async void OnGearNewGameClicked(object? sender, EventArgs e)
+    {
+        OnGearMenuDismissed(sender, e);
+        bool confirm = await DisplayAlertAsync(
+            "New Game",
+            "Start a new game? Your current progress will be lost.",
+            "New Game", "Cancel");
+        if (!confirm) return;
+
+        if (_state is not null)
+            _saves.DeleteSave(_state.GameId);
+
+        _state = null;
+        await InitializeGameAsync();
     }
 
     private async void OnGearLeaveClicked(object? sender, EventArgs e)

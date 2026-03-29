@@ -9,6 +9,13 @@
   "roles": [
     { "id": "dealer", "count": 1, "type": "fixed_rules", "fills": "ai" }
   ],
+  "deal": {
+    "cards_per_player": 2,
+    "face": "mixed",
+    "order": "clockwise",
+    "note": "Player gets both cards face-up; dealer gets first card face-up, second face-down (hole card). Handled by BlackjackLogic.",
+    "anim_delay_ms": 220
+  },
   "zones": [
     { "id": "deck",        "type": "deck",   "visibility": "none" },
     { "id": "hand",        "type": "hand",   "owner": "each_player", "visibility": "all" },

@@ -53,12 +53,8 @@ public sealed class WarLogic : IGameLogic
 
         state.Zones["pot"] = new Zone("pot", "pile", null, "count_only");
 
-        // Build, shuffle, and deal
-        var deck = DeckBuilder.Build(state.Definition.DeckType);
-        DeckBuilder.Shuffle(deck);
-
-        for (int i = 0; i < deck.Count; i++)
-            state.Zones[$"hand:{state.Players[i % state.Players.Count].Id}"].Add(deck[i]);
+        // Build, shuffle, and deal via the shared engine.
+        StandardDealEngine.Instance.Deal(state, playerCount, enabledHouseRules);
 
         // Initial phase
         state.CurrentPhaseId = "ready";

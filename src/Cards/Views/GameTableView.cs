@@ -38,14 +38,19 @@ public class GameTableView : SKCanvasView
     private readonly Dictionary<string, (long Start, float Duration)> _receiveAnims = [];
     // Fly-in: cardId → (source center, startTimeMs, durationMs)
     private readonly Dictionary<string, (SKPoint From, long Start, float Duration)> _flyInAnims = [];
+    // Shuffle: zoneId → (startTimeMs, durationMs)
+    private readonly Dictionary<string, (long Start, float Duration)> _shuffleAnims = [];
+    private TaskCompletionSource? _shuffleCompletion;
 
     // Scratch lists — populated during draw, cleared after
     private readonly List<string> _finishedDealAnims    = [];
     private readonly List<string> _finishedFlipAnims    = [];
     private readonly List<string> _finishedReceiveAnims = [];
     private readonly List<string> _finishedFlyInAnims   = [];
+    private readonly List<string> _finishedShuffleAnims = [];
 
     private IDispatcherTimer? _animTimer;
+    private TaskCompletionSource? _nextPaintCompletion;
 
     // ── Events ────────────────────────────────────────────────────────────────
 
@@ -94,9 +99,16 @@ public class GameTableView : SKCanvasView
                     .Where(z => z.Type == "hand")
                     .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet();
 
-                // Cards that just appeared → slide-up deal animation
+                // Cards that just appeared in a fan/spread zone → slide-up deal animation.
+                // Deliberately excludes deck/pile zones: DrawStack never processes _dealAnims,
+                // so entries for those cards would accumulate forever and block timer shutdown.
+                // Skip if a fly-in is already queued for this card (e.g. deal fly-in set before GameState).
+                var fanSpreadCardIds = value.Zones.Values
+                    .Where(z => z.Type is "hand" or "spread" or "trick")
+                    .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet();
                 foreach (var id in newIds.Except(oldCardIds))
-                    _dealAnims[id] = (now, 240f);
+                    if (!_flyInAnims.ContainsKey(id) && fanSpreadCardIds.Contains(id))
+                        _dealAnims[id] = (now, 240f);
 
                 // Cards that flipped face-up → scale-X flip animation
                 foreach (var id in oldFaceDown.Except(newFaceDown))
@@ -110,7 +122,8 @@ public class GameTableView : SKCanvasView
                         _receiveAnims[id] = (now, 1350f);
             }
 
-            if (_dealAnims.Count > 0 || _flipAnims.Count > 0 || _receiveAnims.Count > 0 || _flyInAnims.Count > 0)
+            if (_dealAnims.Count > 0 || _flipAnims.Count > 0 ||
+                _receiveAnims.Count > 0 || _flyInAnims.Count > 0 || _shuffleAnims.Count > 0)
                 EnsureAnimTimer();
             else
                 InvalidateSurface();
@@ -165,6 +178,40 @@ public class GameTableView : SKCanvasView
             EnsureAnimTimer();
     }
 
+    /// <summary>
+    /// Queues a sequential deal animation: each card flies from <paramref name="deckCenter"/>
+    /// to its hand position, one at a time, staggered by <paramref name="delayMs"/>.
+    /// <paramref name="cardsByPlayerIndex"/> maps player index → ordered card IDs in that hand.
+    /// <paramref name="dealSteps"/> is an ordered list of (playerIndex, count) pairs.
+    /// </summary>
+    public void MarkCardsForSequentialDeal(
+        Dictionary<int, List<string>> cardsByPlayerIndex,
+        SKPoint deckCenter,
+        IReadOnlyList<(int PlayerIndex, int Count)> dealSteps,
+        int delayMs = 130)
+    {
+        long now = NowMs();
+        var assignedCounts = new Dictionary<int, int>();
+        long offset = 0;
+
+        foreach (var (playerIdx, count) in dealSteps)
+        {
+            if (!cardsByPlayerIndex.TryGetValue(playerIdx, out var cards)) continue;
+            int start = assignedCounts.GetValueOrDefault(playerIdx, 0);
+            int end   = Math.Min(start + count, cards.Count);
+
+            for (int i = start; i < end; i++)
+            {
+                _flyInAnims[cards[i]] = (deckCenter, now + offset, 350f);
+                offset += delayMs;
+            }
+            assignedCounts[playerIdx] = end;
+        }
+
+        if (_flyInAnims.Count > 0)
+            EnsureAnimTimer();
+    }
+
     /// <summary>Returns the last rendered screen rect for a card, or null if not rendered.</summary>
     public SKRect? GetLastCardRect(string cardId)
     {
@@ -180,22 +227,53 @@ public class GameTableView : SKCanvasView
         return layout is null ? null : new SKPoint(layout.Bounds.MidX, layout.Bounds.MidY);
     }
 
+    /// <summary>
+    /// Plays a riffle-shuffle animation on the named zone and returns a Task that
+    /// completes when the animation finishes (driven by the render loop).
+    /// </summary>
+    public Task TriggerShuffleAnimationAsync(string zoneId)
+    {
+        _shuffleCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _shuffleAnims[zoneId] = (NowMs(), 1200f);
+        EnsureAnimTimer();
+        return _shuffleCompletion.Task;
+    }
+
+    /// <summary>
+    /// Returns a Task that completes on the next <see cref="OnPaintSurface"/> call.
+    /// Use after setting <see cref="GameState"/> to guarantee <see cref="_lastLayouts"/>
+    /// has been populated with the new state before reading zone positions.
+    /// </summary>
+    public Task WaitForNextPaintAsync()
+    {
+        _nextPaintCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Force a repaint in case the view system hasn't scheduled one yet.
+        InvalidateSurface();
+        return _nextPaintCompletion.Task;
+    }
+
     // ── Animation timer ───────────────────────────────────────────────────────
 
     private void EnsureAnimTimer()
     {
-        if (_animTimer?.IsRunning == true) return;
-
-        _animTimer ??= Application.Current!.Dispatcher.CreateTimer();
-        _animTimer.Interval = TimeSpan.FromMilliseconds(16); // ~60 fps
-        _animTimer.Tick += (_, _) =>
+        // Create the timer and register the Tick handler exactly once.
+        if (_animTimer is null)
         {
-            InvalidateSurface();
-            if (_dealAnims.Count == 0 && _flipAnims.Count == 0 &&
-                _receiveAnims.Count == 0 && _flyInAnims.Count == 0)
-                _animTimer.Stop();
-        };
-        _animTimer.Start();
+            _animTimer = Application.Current!.Dispatcher.CreateTimer();
+            _animTimer.Interval = TimeSpan.FromMilliseconds(16); // ~60 fps
+            _animTimer.Tick += OnAnimTimerTick;
+        }
+        if (!_animTimer.IsRunning)
+            _animTimer.Start();
+    }
+
+    private void OnAnimTimerTick(object? sender, EventArgs e)
+    {
+        InvalidateSurface();
+        if (_dealAnims.Count == 0 && _flipAnims.Count == 0 &&
+            _receiveAnims.Count == 0 && _flyInAnims.Count == 0 &&
+            _shuffleAnims.Count == 0)
+            _animTimer!.Stop();
     }
 
     // ── Paint ─────────────────────────────────────────────────────────────────
@@ -219,6 +297,10 @@ public class GameTableView : SKCanvasView
         var layouts = ZoneLayoutEngine.Compute(_state, info);
         _lastLayouts = layouts;
 
+        // Signal any caller waiting for the canvas to render the current state.
+        _nextPaintCompletion?.TrySetResult();
+        _nextPaintCompletion = null;
+
         foreach (var layout in layouts)
         {
             DrawZone(canvas, layout);
@@ -231,10 +313,12 @@ public class GameTableView : SKCanvasView
         foreach (var id in _finishedFlipAnims)    _flipAnims.Remove(id);
         foreach (var id in _finishedReceiveAnims) _receiveAnims.Remove(id);
         foreach (var id in _finishedFlyInAnims)   _flyInAnims.Remove(id);
+        foreach (var id in _finishedShuffleAnims) _shuffleAnims.Remove(id);
         _finishedDealAnims.Clear();
         _finishedFlipAnims.Clear();
         _finishedReceiveAnims.Clear();
         _finishedFlyInAnims.Clear();
+        _finishedShuffleAnims.Clear();
 
         if (_isDragging && _dragCardId is not null)
             DrawDragGhost(canvas);
@@ -271,7 +355,12 @@ public class GameTableView : SKCanvasView
     {
         switch (layout.Hint)
         {
-            case ZoneRenderHint.Stack:     DrawStack(canvas, layout);     break;
+            case ZoneRenderHint.Stack:
+                if (_shuffleAnims.ContainsKey(layout.Zone.Id))
+                    DrawShufflingStack(canvas, layout);
+                else
+                    DrawStack(canvas, layout);
+                break;
             case ZoneRenderHint.Fan:       DrawFan(canvas, layout);       break;
             case ZoneRenderHint.Spread:    DrawSpread(canvas, layout);    break;
             case ZoneRenderHint.CountOnly: DrawCountOnly(canvas, layout); break;
@@ -301,6 +390,63 @@ public class GameTableView : SKCanvasView
             _cardRects.Add((topCard.Id, baseRect));
     }
 
+    // ── Shuffle animation ─────────────────────────────────────────────────────
+
+    private void DrawShufflingStack(SKCanvas canvas, ZoneLayout layout)
+    {
+        var sa       = _shuffleAnims[layout.Zone.Id];
+        long now     = NowMs();
+        float t      = Math.Clamp((now - sa.Start) / sa.Duration, 0f, 1f);
+        var baseRect = CenterCardRect(layout);
+        float maxSplit = layout.CardWidth * 0.65f;
+        int half1 = layout.Zone.Count / 2;
+        int half2 = layout.Zone.Count - half1;
+
+        if (t < 0.35f)
+        {
+            // Split: two halves spread apart
+            float split = maxSplit * EaseOutCubic(t / 0.35f);
+            DrawHalfStack(canvas, baseRect, -split, half1);
+            DrawHalfStack(canvas, baseRect,  split, half2);
+        }
+        else if (t < 0.78f)
+        {
+            // Merge: halves come back together
+            float merge  = EaseInOutSine((t - 0.35f) / 0.43f);
+            float split  = maxSplit * (1f - merge);
+            DrawHalfStack(canvas, baseRect, -split, half1);
+            DrawHalfStack(canvas, baseRect,  split, half2);
+        }
+        else
+        {
+            // Settle: combined stack bounces up slightly
+            float settleT  = (t - 0.78f) / 0.22f;
+            float bounceY  = -layout.CardHeight * 0.07f * MathF.Sin(MathF.PI * settleT);
+            var   settled  = OffsetRect(baseRect, 0f, bounceY);
+            int   depth    = Math.Min(layout.Zone.Count, 3);
+            for (int i = depth - 1; i >= 1; i--)
+                CardRenderer.DrawCardBack(canvas, OffsetRect(settled, i * 2f, i * -1.5f), _skin);
+            CardRenderer.DrawCardBack(canvas, settled, _skin);
+        }
+
+        if (t >= 1f)
+        {
+            _finishedShuffleAnims.Add(layout.Zone.Id);
+            _shuffleCompletion?.TrySetResult();
+            _shuffleCompletion = null;
+        }
+    }
+
+    private void DrawHalfStack(SKCanvas canvas, SKRect baseRect, float offsetX, int count)
+    {
+        if (count <= 0) return;
+        var rect  = OffsetRect(baseRect, offsetX, 0f);
+        int depth = Math.Min(count, 3);
+        for (int i = depth - 1; i >= 1; i--)
+            CardRenderer.DrawCardBack(canvas, OffsetRect(rect, i * 2f, i * -1.5f), _skin);
+        CardRenderer.DrawCardBack(canvas, rect, _skin);
+    }
+
     // ── Fan (hand) ────────────────────────────────────────────────────────────
 
     private void DrawFan(SKCanvas canvas, ZoneLayout layout)
@@ -312,20 +458,44 @@ public class GameTableView : SKCanvasView
         float cardW  = layout.CardWidth;
         float cardH  = layout.CardHeight;
         float top    = layout.Bounds.MidY - cardH / 2f;
+        long  now    = NowMs();
 
-        float step = cards.Count == 1
-            ? 0f
-            : MathF.Min((totalW - cardW) / (cards.Count - 1), cardW * 0.75f);
-
-        float startX = cards.Count == 1
-            ? layout.Bounds.MidX - cardW / 2f
-            : layout.Bounds.Left + (totalW - (step * (cards.Count - 1) + cardW)) / 2f;
-
-        long now = NowMs();
-
-        for (int i = 0; i < cards.Count; i++)
+        // Separate cards into pending (fly-in not yet started) and active.
+        // Pending cards are drawn face-down at the deck (source) position to show
+        // they haven't been dealt yet; active cards form the fan.
+        var activeCards  = new List<Card>(cards.Count);
+        var pendingCards = new List<(Card card, SKPoint from)>();
+        foreach (var card in cards)
         {
-            var card = cards[i];
+            if (_flyInAnims.TryGetValue(card.Id, out var pending) && now < pending.Start)
+                pendingCards.Add((card, pending.From));
+            else
+                activeCards.Add(card);
+        }
+
+        // Draw pending cards stacked at the source (deck) position — face down,
+        // not interactive — so the deck appears to still hold them.
+        foreach (var (card, from) in pendingCards)
+        {
+            var deckRect = new SKRect(from.X - cardW / 2f, from.Y - cardH / 2f,
+                                      from.X + cardW / 2f, from.Y + cardH / 2f);
+            CardRenderer.DrawCardBack(canvas, deckRect, _skin);
+        }
+
+        if (activeCards.Count == 0) return;
+
+        // Fan layout uses only active cards so the hand grows naturally as cards arrive.
+        float step = activeCards.Count == 1
+            ? 0f
+            : MathF.Min((totalW - cardW) / (activeCards.Count - 1), cardW * 0.75f);
+
+        float startX = activeCards.Count == 1
+            ? layout.Bounds.MidX - cardW / 2f
+            : layout.Bounds.Left + (totalW - (step * (activeCards.Count - 1) + cardW)) / 2f;
+
+        for (int i = 0; i < activeCards.Count; i++)
+        {
+            var card = activeCards[i];
             var rect = new SKRect(startX + i * step, top, startX + i * step + cardW, top + cardH);
 
             // ── Flip animation ────────────────────────────────────────────────

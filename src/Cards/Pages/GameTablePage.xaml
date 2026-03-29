@@ -80,12 +80,12 @@
             VerticalOptions="End"
             HorizontalOptions="End"
             Margin="0,0,8,4"
-            BackgroundColor="{StaticResource SurfaceDark}"
+            BackgroundColor="#1A162B1F"
             StrokeShape="RoundRectangle 12"
             Stroke="{StaticResource Gold}"
             StrokeThickness="1"
-            Padding="0">
-            <VerticalStackLayout Spacing="0" MinimumWidthRequest="170">
+            Padding="6">
+            <VerticalStackLayout Spacing="4" MinimumWidthRequest="170">
                 <Button
                     x:Name="GearSortButton"
                     Text="Sort Hand"
@@ -105,6 +105,11 @@
                     Style="{StaticResource HudButton}"
                     HorizontalOptions="Fill"
                     Clicked="OnGearRulesClicked" />
+                <Button
+                    Text="New Game"
+                    Style="{StaticResource HudButton}"
+                    HorizontalOptions="Fill"
+                    Clicked="OnGearNewGameClicked" />
                 <Button
                     Text="Leave Game"
                     Style="{StaticResource HudButton}"

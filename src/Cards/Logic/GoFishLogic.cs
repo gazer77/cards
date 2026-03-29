@@ -42,16 +42,12 @@ public sealed class GoFishLogic : IGameLogic
         state.Zones["books:player0"]  = new Zone("books:player0",  "spread", "player0", "all");
         state.Zones["books:player1"]  = new Zone("books:player1",  "spread", "player1", "all");
 
-        var deck = DeckBuilder.Build(state.Definition.DeckType);
-        DeckBuilder.Shuffle(deck);
-        foreach (var c in deck) state.Zones["deck"].Add(c);
-
-        // Standard rule: 7 cards for 2-3 players, 5 for 4+. House rule can override.
+        // Standard rule: 7 cards for 2–3 players, 5 for 4+. House rule can override.
         int dealCount = enabledHouseRules.Contains("seven_cards_all")
             ? 7
             : (state.Definition.Deal?.GetCardsPerPlayer(playerCount) ?? (playerCount <= 3 ? 7 : 5));
-        DealCards(state, "player0", dealCount, faceUp: true);
-        DealCards(state, "player1", dealCount, faceUp: false);
+
+        StandardDealEngine.Instance.Deal(state, playerCount, enabledHouseRules, dealCount);
 
         CheckBooks(state, "player0");
         CheckBooks(state, "player1");

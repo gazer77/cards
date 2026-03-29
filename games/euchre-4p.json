@@ -19,7 +19,8 @@
     "pattern": "3-2-3-2",
     "face": "down",
     "remainder_to": "kitty",
-    "then_turn_up_kitty_top": true
+    "then_turn_up_kitty_top": true,
+    "anim_deal_steps": [[0,3],[1,2],[2,3],[3,2],[0,2],[1,3],[2,2],[3,3]]
   },
   "zones": [
     { "id": "deck",       "type": "deck",   "visibility": "none" },

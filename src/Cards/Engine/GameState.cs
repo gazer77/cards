@@ -33,6 +33,14 @@ public class GameState
 
     public int GetScore(string playerId) => Scores.GetValueOrDefault(playerId, 0);
 
+    /// <summary>
+    /// Set by <see cref="StandardDealEngine"/> (or custom deal logic via
+    /// <see cref="StandardDealEngine.RecordResult"/>) after each deal.
+    /// Consumed by the animation layer; not persisted to save files.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public DealResult? LastDealResult { get; set; }
+
     public void AddScore(string playerId, int points)
     {
         Scores[playerId] = GetScore(playerId) + points;
