@@ -48,6 +48,8 @@ public sealed class GoFishLogic : GameLogicBase
         RegisterPhase("player_turn", new PlayerTurnHandler(this));
         RegisterPhase("ai_turn",     new AiTurnHandler(this));
 
+        state.PlayerAgents["player1"] = new GoFishAiAgent("player1");
+
         state.CurrentPhaseId     = "player_turn";
         state.CurrentPlayerIndex = 0;
         SetIdleStatus(state);
@@ -201,44 +203,68 @@ public sealed class GoFishLogic : GameLogicBase
 
     private void AiStep(GameState state)
     {
-        var aiHand     = state.Zones["hand:player1"];
-        var playerHand = state.Zones["hand:player0"];
-        var deck       = state.Zones["deck"];
+        var aiHand = state.Zones["hand:player1"];
+        var deck   = state.Zones["deck"];
 
-        // If AI has no cards, draw one if possible then end turn
         if (aiHand.Count == 0)
         {
-            if (deck.Count > 0)
-            {
-                var c = deck.Draw()!;
-                c.IsFaceUp = false;
-                aiHand.Add(c);
-                CheckBooks(state, "player1");
-                state.Metadata["status"] = "AI has no cards — drew from deck. Your turn!";
-            }
-            else
-            {
-                state.Metadata["status"] = "AI has no cards and the deck is empty. Your turn!";
-            }
-            EndAiTurn(state);
-            CheckWinCondition(state);
+            AiHandleEmptyHand(state, deck);
             return;
         }
 
-        // ── Strategy: prefer ranks the AI holds AND knows the player has ──────
-        var aiRankGroups = aiHand.Cards
+        string rankCode = AiPickRankCode(state);
+        ExecuteAiAsk(state, rankCode);
+    }
+
+    private void AiHandleEmptyHand(GameState state, Zone deck)
+    {
+        var aiHand = state.Zones["hand:player1"];
+        if (deck.Count > 0)
+        {
+            var c = deck.Draw()!;
+            c.IsFaceUp = false;
+            aiHand.Add(c);
+            CheckBooks(state, "player1");
+            state.Metadata["status"] = "AI has no cards — drew from deck. Your turn!";
+        }
+        else
+        {
+            state.Metadata["status"] = "AI has no cards and the deck is empty. Your turn!";
+        }
+        EndAiTurn(state);
+        CheckWinCondition(state);
+    }
+
+    private static string AiPickRankCode(GameState state)
+    {
+        if (state.PlayerAgents.TryGetValue("player1", out var agent))
+        {
+            var masked = GameStateMask.CreateViewFor(state, "player1");
+            var action = agent.ChooseAction(masked, [new GameAction("ask_rank")]);
+            if (action.Type == "ask_rank" && action.CardId is not null)
+                return RankCode(action.CardId);
+        }
+        return PickAiRankCodeFallback(state);
+    }
+
+    private static string PickAiRankCodeFallback(GameState state)
+    {
+        var aiHand     = state.Zones["hand:player1"];
+        var rankGroups = aiHand.Cards
             .GroupBy(c => RankCode(c.Id))
             .OrderByDescending(g => g.Count())
             .ToList();
 
         var knownPlayerRanks = GetKnownPlayerRanks(state);
+        var smartChoice = rankGroups.FirstOrDefault(g => knownPlayerRanks.Contains(g.Key));
+        return smartChoice?.Key ?? rankGroups[0].Key;
+    }
 
-        // First priority: a rank we hold ≥1 of AND we know the player has
-        var smartChoice = aiRankGroups
-            .FirstOrDefault(g => knownPlayerRanks.Contains(g.Key));
-
-        // Fallback: rank we hold the most of (greedy)
-        string rankCode = smartChoice?.Key ?? aiRankGroups[0].Key;
+    private void ExecuteAiAsk(GameState state, string rankCode)
+    {
+        var aiHand     = state.Zones["hand:player1"];
+        var playerHand = state.Zones["hand:player0"];
+        var deck       = state.Zones["deck"];
         string rankName = RankPlural(RankFromCode(rankCode));
 
         var matching = playerHand.Cards.Where(c => RankCode(c.Id) == rankCode).ToList();
@@ -252,23 +278,19 @@ public sealed class GoFishLogic : GameLogicBase
                 aiHand.Add(c);
             }
 
-            // If player now has 0 of that rank, remove it from known
             if (!playerHand.Cards.Any(c => RankCode(c.Id) == rankCode))
                 RemoveKnownPlayerRank(state, rankCode);
 
             int books    = CheckBooks(state, "player1");
             string bookMsg = books > 0 ? $" {books} book{(books > 1 ? "s" : "")} complete!" : "";
-
             state.Metadata["status"] =
                 $"AI asked for {rankName} — got {matching.Count}!{bookMsg} AI goes again…";
             // Stay in ai_turn (go again)
         }
         else
         {
-            // The player didn't have them — clear this from known ranks if present
             RemoveKnownPlayerRank(state, rankCode);
 
-            // Go Fish
             if (deck.Count > 0)
             {
                 var drawn = deck.Draw()!;

@@ -41,6 +41,13 @@ public class GameState
     [System.Text.Json.Serialization.JsonIgnore]
     public DealResult? LastDealResult { get; set; }
 
+    /// <summary>
+    /// AI agents registered for this game session, keyed by player ID.
+    /// Not persisted to save files.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Dictionary<string, IPlayerAgent> PlayerAgents { get; } = new();
+
     public void AddScore(string playerId, int points)
     {
         Scores[playerId] = GetScore(playerId) + points;
