@@ -22,13 +22,17 @@ public static class LogicRegistry
 
     /// <summary>
     /// Returns a fresh logic instance driven by the definition's
-    /// <c>implementation</c> key (falling back to <c>id</c>), or <c>null</c>
-    /// when no matching module is registered.
+    /// <c>implementation</c> key (falling back to <c>id</c>).
+    /// Returns a <see cref="DefaultGameLogic"/> for definitions that have no
+    /// registered implementation — the engine will drive those games from the
+    /// JSON definition alone.
     /// </summary>
-    public static IGameLogic? Create(GameDefinition definition)
+    public static IGameLogic Create(GameDefinition definition)
     {
         string key = definition.Implementation ?? definition.Id;
-        return _factories.TryGetValue(key, out var factory) ? factory() : null;
+        return _factories.TryGetValue(key, out var factory)
+            ? factory()
+            : new DefaultGameLogic();
     }
 
     /// <summary>

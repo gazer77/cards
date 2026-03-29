@@ -1,0 +1,48 @@
+{
+  "$schema": "cards-game/v1",
+  "id": "high-card",
+  "name": "High Card",
+  "version": "1.0",
+  "deck": "standard-52",
+  "players": { "min": 2, "max": 2, "names": ["You", "Opponent"] },
+  "teams": false,
+  "deal": {
+    "cards_per_player": 26,
+    "face": "down",
+    "order": "clockwise",
+    "anim_delay_ms": 20
+  },
+  "zones": [
+    { "id": "deck", "type": "deck",   "visibility": "none" },
+    { "id": "hand", "type": "pile",   "owner": "each_player", "visibility": "none" },
+    { "id": "play", "type": "spread", "owner": "each_player", "visibility": "all" }
+  ],
+  "phases": [
+    {
+      "id": "ready",
+      "type": "flip_compare_ready",
+      "tie_resolution": "split",
+      "next": { "if": "win_condition", "then": "end", "else": "result" }
+    },
+    {
+      "id": "result",
+      "type": "flip_compare_result",
+      "next": { "if": "win_condition", "then": "end", "else": "ready" }
+    }
+  ],
+  "scoring": { "type": "none" },
+  "win_condition": { "type": "last_with_cards" },
+  "house_rules": [
+    {
+      "id": "tie_goes_to_pot",
+      "name": "Ties Split the Pot",
+      "description": "On a tie, each player takes back their card instead of re-flipping.",
+      "default": true,
+      "affects": { "ready.tie_resolution": "split" }
+    }
+  ],
+  "ui": {
+    "card_scale": 1.8
+  },
+  "help": "high-card.md"
+}
