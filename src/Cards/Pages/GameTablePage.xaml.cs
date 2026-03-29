@@ -460,8 +460,25 @@ public partial class GameTablePage : ContentPage
             .Where(z => z.Type == "hand" && z.Visibility is "owner" or "all")
             .SelectMany(z => z.Cards)
             .Select(c => c.Id)
-            .Where(id => !visibleHandBefore.Contains(id));
-        TableCanvas.MarkCardsReceivedInHand(received);
+            .Where(id => !visibleHandBefore.Contains(id))
+            .ToList();
+
+        // Look up where each received card was on screen in the last rendered frame
+        // so the fly-in animation knows its starting position.
+        var sourcePts = new Dictionary<string, SkiaSharp.SKPoint>();
+        foreach (var id in received)
+        {
+            var rect = TableCanvas.GetLastCardRect(id);
+            if (rect.HasValue)
+                sourcePts[id] = new SkiaSharp.SKPoint(rect.Value.MidX, rect.Value.MidY);
+            else
+            {
+                // Card wasn't individually rendered (e.g. deep in deck) — fly from deck center
+                var deckCenter = TableCanvas.GetZoneCenter("deck");
+                if (deckCenter.HasValue) sourcePts[id] = deckCenter.Value;
+            }
+        }
+        TableCanvas.MarkCardsReceivedInHand(received, sourcePts);
     }
 
     private void RefreshInteractionState()

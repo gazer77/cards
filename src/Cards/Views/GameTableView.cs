@@ -36,11 +36,14 @@ public class GameTableView : SKCanvasView
     private readonly Dictionary<string, (long Start, float Duration)> _dealAnims    = [];
     private readonly Dictionary<string, (long Start, float Duration)> _flipAnims    = [];
     private readonly Dictionary<string, (long Start, float Duration)> _receiveAnims = [];
+    // Fly-in: cardId → (source center, startTimeMs, durationMs)
+    private readonly Dictionary<string, (SKPoint From, long Start, float Duration)> _flyInAnims = [];
 
     // Scratch lists — populated during draw, cleared after
     private readonly List<string> _finishedDealAnims    = [];
     private readonly List<string> _finishedFlipAnims    = [];
     private readonly List<string> _finishedReceiveAnims = [];
+    private readonly List<string> _finishedFlyInAnims   = [];
 
     private IDispatcherTimer? _animTimer;
 
@@ -107,7 +110,7 @@ public class GameTableView : SKCanvasView
                         _receiveAnims[id] = (now, 1350f);
             }
 
-            if (_dealAnims.Count > 0 || _flipAnims.Count > 0 || _receiveAnims.Count > 0)
+            if (_dealAnims.Count > 0 || _flipAnims.Count > 0 || _receiveAnims.Count > 0 || _flyInAnims.Count > 0)
                 EnsureAnimTimer();
             else
                 InvalidateSurface();
@@ -143,16 +146,38 @@ public class GameTableView : SKCanvasView
 
     /// <summary>
     /// Explicitly marks cards as having just arrived in a hand zone.
-    /// Call this before assigning GameState when the same state object was mutated in-place,
-    /// since the setter can't detect movements within the same object reference.
+    /// When <paramref name="sourcePts"/> contains a card's source center, the card
+    /// flies in from that point; otherwise a bump animation is used as a fallback.
+    /// Call before assigning GameState (same-object mutation bypasses the setter).
     /// </summary>
-    public void MarkCardsReceivedInHand(IEnumerable<string> cardIds)
+    public void MarkCardsReceivedInHand(IEnumerable<string> cardIds,
+        IReadOnlyDictionary<string, SKPoint>? sourcePts = null)
     {
         long now = NowMs();
         foreach (var id in cardIds)
-            _receiveAnims[id] = (now, 1350f);
-        if (_receiveAnims.Count > 0)
+        {
+            if (sourcePts?.TryGetValue(id, out var from) == true)
+                _flyInAnims[id] = (from, now, 500f);
+            else
+                _receiveAnims[id] = (now, 1350f);   // fallback bump
+        }
+        if (_flyInAnims.Count > 0 || _receiveAnims.Count > 0)
             EnsureAnimTimer();
+    }
+
+    /// <summary>Returns the last rendered screen rect for a card, or null if not rendered.</summary>
+    public SKRect? GetLastCardRect(string cardId)
+    {
+        for (int i = _cardRects.Count - 1; i >= 0; i--)
+            if (_cardRects[i].CardId == cardId) return _cardRects[i].Rect;
+        return null;
+    }
+
+    /// <summary>Returns the center of a zone's last rendered bounds, or null.</summary>
+    public SKPoint? GetZoneCenter(string zoneId)
+    {
+        var layout = _lastLayouts.FirstOrDefault(l => l.Zone.Id == zoneId);
+        return layout is null ? null : new SKPoint(layout.Bounds.MidX, layout.Bounds.MidY);
     }
 
     // ── Animation timer ───────────────────────────────────────────────────────
@@ -166,7 +191,8 @@ public class GameTableView : SKCanvasView
         _animTimer.Tick += (_, _) =>
         {
             InvalidateSurface();
-            if (_dealAnims.Count == 0 && _flipAnims.Count == 0 && _receiveAnims.Count == 0)
+            if (_dealAnims.Count == 0 && _flipAnims.Count == 0 &&
+                _receiveAnims.Count == 0 && _flyInAnims.Count == 0)
                 _animTimer.Stop();
         };
         _animTimer.Start();
@@ -204,9 +230,11 @@ public class GameTableView : SKCanvasView
         foreach (var id in _finishedDealAnims)    _dealAnims.Remove(id);
         foreach (var id in _finishedFlipAnims)    _flipAnims.Remove(id);
         foreach (var id in _finishedReceiveAnims) _receiveAnims.Remove(id);
+        foreach (var id in _finishedFlyInAnims)   _flyInAnims.Remove(id);
         _finishedDealAnims.Clear();
         _finishedFlipAnims.Clear();
         _finishedReceiveAnims.Clear();
+        _finishedFlyInAnims.Clear();
 
         if (_isDragging && _dragCardId is not null)
             DrawDragGhost(canvas);
@@ -312,6 +340,18 @@ public class GameTableView : SKCanvasView
                 }
                 if (t >= 1f) _finishedFlipAnims.Add(card.Id);
                 continue;
+            }
+
+            // ── Fly-in animation (card slides from source position) ──────────
+            if (_flyInAnims.TryGetValue(card.Id, out var fia))
+            {
+                float t    = Math.Clamp((now - fia.Start) / fia.Duration, 0f, 1f);
+                float ease = EaseOutCubic(t);
+                float cx   = fia.From.X + (rect.MidX - fia.From.X) * ease;
+                float cy   = fia.From.Y + (rect.MidY - fia.From.Y) * ease;
+                rect = new SKRect(cx - cardW / 2f, cy - cardH / 2f,
+                                  cx + cardW / 2f, cy + cardH / 2f);
+                if (t >= 1f) _finishedFlyInAnims.Add(card.Id);
             }
 
             // ── Receive animation (bump up then settle) ───────────────────────
