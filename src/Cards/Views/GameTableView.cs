@@ -91,6 +91,21 @@ public class GameTableView : SKCanvasView
 
             if (value is not null)
             {
+                // Drop any shuffle anims that were running on a zone that is now empty
+                // (e.g. the preDeal deck after transitioning to the real game state).
+                // Without this cleanup the entry would linger forever because
+                // DrawShufflingStack is never called on an empty zone, so t never
+                // reaches 1 and the timer never stops.
+                foreach (var zoneId in _shuffleAnims.Keys.ToList())
+                {
+                    if (!value.Zones.TryGetValue(zoneId, out var sz) || sz.IsEmpty)
+                    {
+                        _shuffleAnims.Remove(zoneId);
+                        _shuffleCompletion?.TrySetResult();
+                        _shuffleCompletion = null;
+                    }
+                }
+
                 var newIds = value.Zones.Values
                     .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet();
                 var newFaceDown = value.Zones.Values
@@ -115,10 +130,13 @@ public class GameTableView : SKCanvasView
                     if (newIds.Contains(id))
                         _flipAnims[id] = (now, 360f);
 
-                // Cards that moved INTO a hand zone (received mid-game) → bump animation
+                // Cards that moved INTO a hand zone (received mid-game) → bump animation.
+                // Skip cards that already have a fly-in queued: the fly-in IS the arrival
+                // animation, so adding a receive bump on top produces erratic combined motion.
                 var justFlipped = oldFaceDown.Except(newFaceDown).ToHashSet();
                 foreach (var id in newHandIds.Except(oldHandIds).Intersect(oldCardIds))
-                    if (!justFlipped.Contains(id) && !_dealAnims.ContainsKey(id))
+                    if (!justFlipped.Contains(id) && !_dealAnims.ContainsKey(id)
+                                                  && !_flyInAnims.ContainsKey(id))
                         _receiveAnims[id] = (now, 1350f);
             }
 
@@ -273,7 +291,13 @@ public class GameTableView : SKCanvasView
         if (_dealAnims.Count == 0 && _flipAnims.Count == 0 &&
             _receiveAnims.Count == 0 && _flyInAnims.Count == 0 &&
             _shuffleAnims.Count == 0)
+        {
             _animTimer!.Stop();
+            // Queue one final repaint after stopping so the last clean frame
+            // is guaranteed to be painted even if the platform coalesces or
+            // drops the InvalidateSurface() call above.
+            InvalidateSurface();
+        }
     }
 
     // ── Paint ─────────────────────────────────────────────────────────────────

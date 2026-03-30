@@ -129,7 +129,14 @@ public partial class GameTablePage : ContentPage
 
                 // Capture the deck center NOW — before the shuffle, so post-shuffle
                 // layout-cleanup timing cannot interfere with the reading.
+                // On first launch the view may not be sized yet; retry once if the
+                // layout came back empty (canvas was zero-size during the first paint).
                 var deckCenter = TableCanvas.GetZoneCenter("deck");
+                if (!deckCenter.HasValue)
+                {
+                    await Task.WhenAny(TableCanvas.WaitForNextPaintAsync(), Task.Delay(350));
+                    deckCenter = TableCanvas.GetZoneCenter("deck");
+                }
 
                 var shuffleTask = TableCanvas.TriggerShuffleAnimationAsync("deck");
                 await Task.WhenAny(shuffleTask, Task.Delay(1600)); // safety timeout
