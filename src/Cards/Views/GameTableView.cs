@@ -125,9 +125,13 @@ public class GameTableView : SKCanvasView
                     if (!_flyInAnims.ContainsKey(id) && fanSpreadCardIds.Contains(id))
                         _dealAnims[id] = (now, 240f);
 
-                // Cards that flipped face-up → scale-X flip animation
+                // Cards that flipped face-up → scale-X flip animation.
+                // Skip cards with a pending fly-in: they are arriving for the first
+                // time (initial deal) and haven't landed yet.  Showing a flip at the
+                // destination before the card has even flown there looks wrong and can
+                // briefly expose face values in zones that should render face-down.
                 foreach (var id in oldFaceDown.Except(newFaceDown))
-                    if (newIds.Contains(id))
+                    if (newIds.Contains(id) && !_flyInAnims.ContainsKey(id))
                         _flipAnims[id] = (now, 360f);
 
                 // Cards that moved INTO a hand zone (received mid-game) → bump animation.
