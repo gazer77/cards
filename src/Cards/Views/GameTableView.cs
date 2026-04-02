@@ -292,9 +292,14 @@ public class GameTableView : SKCanvasView
     private void OnAnimTimerTick(object? sender, EventArgs e)
     {
         InvalidateSurface();
-        if (_dealAnims.Count == 0 && _flipAnims.Count == 0 &&
-            _receiveAnims.Count == 0 && _flyInAnims.Count == 0 &&
-            _shuffleAnims.Count == 0)
+        if
+        (
+            !_dealAnims.Any() &&
+            !_flipAnims.Any() &&
+            !_receiveAnims.Any() &&
+            !_flyInAnims.Any() &&
+            !_shuffleAnims.Any()
+        )
         {
             _animTimer!.Stop();
             // Queue one final repaint after stopping so the last clean frame
@@ -342,6 +347,7 @@ public class GameTableView : SKCanvasView
         foreach (var id in _finishedReceiveAnims) _receiveAnims.Remove(id);
         foreach (var id in _finishedFlyInAnims)   _flyInAnims.Remove(id);
         foreach (var id in _finishedShuffleAnims) _shuffleAnims.Remove(id);
+
         _finishedDealAnims.Clear();
         _finishedFlipAnims.Clear();
         _finishedReceiveAnims.Clear();
@@ -488,42 +494,37 @@ public class GameTableView : SKCanvasView
         float top    = layout.Bounds.MidY - cardH / 2f;
         long  now    = NowMs();
 
-        // Separate cards into pending (fly-in not yet started) and active.
-        // Pending cards are drawn face-down at the deck (source) position to show
-        // they haven't been dealt yet; active cards form the fan.
-        var activeCards  = new List<Card>(cards.Count);
-        var pendingCards = new List<(Card card, SKPoint from)>();
+        // Draw pending cards (fly-in not yet started) face-down at their source
+        // position so the deck appears to still hold them.
         foreach (var card in cards)
         {
             if (_flyInAnims.TryGetValue(card.Id, out var pending) && now < pending.Start)
-                pendingCards.Add((card, pending.From));
-            else
-                activeCards.Add(card);
+            {
+                var deckRect = new SKRect(pending.From.X - cardW / 2f, pending.From.Y - cardH / 2f,
+                                          pending.From.X + cardW / 2f, pending.From.Y + cardH / 2f);
+                CardRenderer.DrawCardBack(canvas, deckRect, _skin);
+            }
         }
 
-        // Draw pending cards stacked at the source (deck) position — face down,
-        // not interactive — so the deck appears to still hold them.
-        foreach (var (card, from) in pendingCards)
-        {
-            var deckRect = new SKRect(from.X - cardW / 2f, from.Y - cardH / 2f,
-                                      from.X + cardW / 2f, from.Y + cardH / 2f);
-            CardRenderer.DrawCardBack(canvas, deckRect, _skin);
-        }
-
-        if (activeCards.Count == 0) return;
-
-        // Fan layout uses only active cards so the hand grows naturally as cards arrive.
-        float step = activeCards.Count == 1
+        // Fan layout uses ALL cards so each card's fly-in destination is its final
+        // resting position, not an intermediate slot in a partially-filled fan.
+        float step = cards.Count == 1
             ? 0f
-            : MathF.Min((totalW - cardW) / (activeCards.Count - 1), cardW * 0.75f);
+            : MathF.Min((totalW - cardW) / (cards.Count - 1), cardW * 0.75f);
 
-        float startX = activeCards.Count == 1
+        float startX = cards.Count == 1
             ? layout.Bounds.MidX - cardW / 2f
-            : layout.Bounds.Left + (totalW - (step * (activeCards.Count - 1) + cardW)) / 2f;
+            : layout.Bounds.Left + (totalW - (step * (cards.Count - 1) + cardW)) / 2f;
 
-        for (int i = 0; i < activeCards.Count; i++)
+        for (int i = 0; i < cards.Count; i++)
         {
-            var card = activeCards[i];
+            var card     = cards[i];
+            bool hasFlyIn = _flyInAnims.TryGetValue(card.Id, out var fia);
+
+            // Pending cards were already drawn at their source — skip them here.
+            if (hasFlyIn && now < fia.Start)
+                continue;
+
             var rect = new SKRect(startX + i * step, top, startX + i * step + cardW, top + cardH);
 
             // ── Flip animation ────────────────────────────────────────────────
@@ -540,8 +541,8 @@ public class GameTableView : SKCanvasView
                 continue;
             }
 
-            // ── Fly-in animation (card slides from source position) ──────────
-            if (_flyInAnims.TryGetValue(card.Id, out var fia))
+            // ── Fly-in animation (card slides from source to final position) ──
+            if (hasFlyIn)
             {
                 float t    = Math.Clamp((now - fia.Start) / fia.Duration, 0f, 1f);
                 float ease = EaseOutCubic(t);

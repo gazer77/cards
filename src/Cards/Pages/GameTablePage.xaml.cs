@@ -506,21 +506,25 @@ public partial class GameTablePage : ContentPage
             .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Id).ToHashSet();
         var handCountBefore = _state.Zones
             .Where(kv => kv.Key.StartsWith("hand:")).Sum(kv => kv.Value.Count);
-        // Only track the player's own visible hand — opponent hands are excluded so
+        // Only track the human player's own hand — opponent hands are excluded so
         // cards moving from opponent → player are correctly detected as "received".
+        string humanId = _state.Players.Count > 0 ? _state.Players[0].Id : string.Empty;
         var visibleHandBefore = _state.Zones.Values
-            .Where(z => z.Type == "hand" && z.Visibility is "owner" or "all")
+            .Where(z => z.Type == "hand" &&
+                       (z.Visibility == "all" ||
+                       (z.Visibility is "owner" or "top" && z.OwnerId == humanId)))
             .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet();
 
         _logic!.Apply(_state, action);
 
         PlaySoundForStateChange(faceDownBefore, handCountBefore);
 
-        // Any card now in the player's visible hand that wasn't there before gets
-        // the bump animation — regardless of whether it came from the deck, an
-        // opponent's hand, or anywhere else.
+        // Any card now in the human player's hand that wasn't there before gets
+        // a fly-in animation from its source position (deck, opponent hand, etc.).
         var received = _state.Zones.Values
-            .Where(z => z.Type == "hand" && z.Visibility is "owner" or "all")
+            .Where(z => z.Type == "hand" &&
+                       (z.Visibility == "all" ||
+                       (z.Visibility is "owner" or "top" && z.OwnerId == humanId)))
             .SelectMany(z => z.Cards)
             .Select(c => c.Id)
             .Where(id => !visibleHandBefore.Contains(id))
