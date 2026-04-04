@@ -31,6 +31,7 @@ public static class GameStateMask
         masked.CurrentPhaseId     = source.CurrentPhaseId;
         masked.CurrentPlayerIndex = source.CurrentPlayerIndex;
         masked.RoundNumber        = source.RoundNumber;
+        masked.DealerId           = source.DealerId;
 
         masked.Players.AddRange(source.Players);
 
@@ -45,14 +46,15 @@ public static class GameStateMask
 
             bool seeAll = src.Visibility switch
             {
-                "all"   => true,
-                "owner" => src.OwnerId == viewerId,
-                _       => false,
+                "all"          => true,
+                "owner"        => src.OwnerId == viewerId,
+                "top_to_dealer"=> source.DealerId == viewerId,
+                _              => false,
             };
 
             if (seeAll)
                 dest.AddRange(src.Cards);
-            else if (src.Visibility == "top" && src.TopCard is { } top)
+            else if ((src.Visibility is "top" or "top_to_dealer") && src.TopCard is { } top)
                 dest.Add(top);
             // else: dest stays empty (count_only / none / non-matching owner)
 

@@ -8,7 +8,17 @@ namespace Cards.Engine;
 ///   last_with_cards  — ends when any player has zero cards across all owned zones;
 ///                      winner has the most total cards.
 ///   most_books       — ends when deck + all hands are empty; winner has the highest score.
-///   fixed_rounds     — ends after <c>win_condition.count</c> rounds; winner has highest score.
+///   fixed_rounds     — ends after <c>win_condition.count</c> rounds; winner determined by
+///                      win_condition.winner ("lowest_score" or default highest).
+///   lowest_score     — ends when any player's score reaches win_condition.threshold;
+///                      winner is the player with the lowest score.
+///   highest_score    — ends when any player's score reaches win_condition.threshold;
+///                      winner is the player with the highest score.
+///   target_score     — ends when any player's score reaches win_condition.score;
+///                      that player wins (first to reach it).
+///   last_with_chips  — ends when only one player has a score > 0;
+///                      that player wins.
+///   manual           — never triggers automatically; game logic sets game_over directly.
 /// </summary>
 public sealed class WinConditionEngine : IWinCondition
 {
@@ -22,6 +32,11 @@ public sealed class WinConditionEngine : IWinCondition
             "last_with_cards" => CheckLastWithCards(state),
             "most_books"      => CheckMostBooks(state),
             "fixed_rounds"    => CheckFixedRounds(state),
+            "lowest_score"    => CheckLowestScore(state),
+            "highest_score"   => CheckHighestScore(state),
+            "target_score"    => CheckTargetScore(state),
+            "last_with_chips" => CheckLastWithChips(state),
+            "manual"          => null,
             _                 => null,
         };
 
@@ -30,7 +45,11 @@ public sealed class WinConditionEngine : IWinCondition
         {
             "last_with_cards" => ResolveLastWithCards(state),
             "most_books"      => ResolveMostBooks(state),
-            "fixed_rounds"    or
+            "lowest_score"    => ResolveLowestScore(state),
+            "highest_score"   or
+            "target_score"    or
+            "last_with_chips" => ResolveByScore(state),
+            "fixed_rounds"    => ResolveFixed(state),
             _                 => ResolveByScore(state),
         };
 
@@ -101,8 +120,76 @@ public sealed class WinConditionEngine : IWinCondition
     private static WinResult? CheckFixedRounds(GameState state)
     {
         int rounds = state.Definition.WinCondition?.Count ?? 1;
-        return state.RoundNumber >= rounds ? ResolveByScore(state) : null;
+        return state.RoundNumber >= rounds ? ResolveFixed(state) : null;
     }
+
+    private static WinResult ResolveFixed(GameState state)
+    {
+        // winner field can be "lowest_score" to invert; default is highest.
+        bool lowestWins = string.Equals(
+            state.Definition.WinCondition?.Winner, "lowest_score",
+            StringComparison.OrdinalIgnoreCase);
+        return lowestWins ? ResolveLowestScore(state) : ResolveByScore(state);
+    }
+
+    // ── lowest_score ──────────────────────────────────────────────────────────
+
+    private static WinResult? CheckLowestScore(GameState state)
+    {
+        int threshold = state.Definition.WinCondition?.Threshold ?? int.MaxValue;
+        bool triggered = state.Players.Any(p => state.GetScore(p.Id) >= threshold);
+        return triggered ? ResolveLowestScore(state) : null;
+    }
+
+    private static WinResult ResolveLowestScore(GameState state)
+    {
+        var ranked = state.Players
+            .Select(p => (Player: p, Score: state.GetScore(p.Id)))
+            .OrderBy(x => x.Score)
+            .ToList();
+
+        if (ranked.Count > 1 && ranked[0].Score == ranked[1].Score)
+            return new WinResult(null, "It's a tie!");
+
+        var winner = ranked[0].Player;
+        string msg = winner == state.Players[0] ? "You win!" : $"{winner.Name} wins!";
+        return new WinResult(winner.Id, msg);
+    }
+
+    // ── highest_score ─────────────────────────────────────────────────────────
+
+    private static WinResult? CheckHighestScore(GameState state)
+    {
+        int threshold = state.Definition.WinCondition?.Threshold ?? int.MaxValue;
+        bool triggered = state.Players.Any(p => state.GetScore(p.Id) >= threshold);
+        return triggered ? ResolveByScore(state) : null;
+    }
+
+    // ── target_score ──────────────────────────────────────────────────────────
+
+    private static WinResult? CheckTargetScore(GameState state)
+    {
+        int target = state.Definition.WinCondition?.Score ?? int.MaxValue;
+        var winner = state.Players.FirstOrDefault(p => state.GetScore(p.Id) >= target);
+        if (winner is null) return null;
+
+        string msg = winner == state.Players[0] ? "You win!" : $"{winner.Name} wins!";
+        return new WinResult(winner.Id, msg);
+    }
+
+    // ── last_with_chips ───────────────────────────────────────────────────────
+
+    private static WinResult? CheckLastWithChips(GameState state)
+    {
+        var withChips = state.Players.Where(p => state.GetScore(p.Id) > 0).ToList();
+        if (withChips.Count != 1) return null;
+
+        var winner = withChips[0];
+        string msg = winner == state.Players[0] ? "You win!" : $"{winner.Name} wins!";
+        return new WinResult(winner.Id, msg);
+    }
+
+    // ── shared ────────────────────────────────────────────────────────────────
 
     private static WinResult ResolveByScore(GameState state)
     {

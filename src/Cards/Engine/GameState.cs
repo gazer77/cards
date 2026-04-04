@@ -12,6 +12,13 @@ public class GameState
     public string CurrentPhaseId { get; set; } = string.Empty;
     public int CurrentPlayerIndex { get; set; }
     public int RoundNumber { get; set; } = 1;
+
+    /// <summary>
+    /// Player ID of the current dealer.  Used for zone visibility rules
+    /// like <c>top_to_dealer</c> and for dealer-rotation logic between rounds.
+    /// Null until the first dealer is assigned.
+    /// </summary>
+    public string? DealerId { get; set; }
     public Dictionary<string, int> Scores { get; } = [];
     public Dictionary<string, bool> EnabledHouseRules { get; } = [];
 

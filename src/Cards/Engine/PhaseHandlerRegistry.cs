@@ -19,6 +19,7 @@ public static class PhaseHandlerRegistry
         {
             ["flip_compare_ready"]  = (def, next) => new FlipCompareReadyHandler(def, next),
             ["flip_compare_result"] = (def, next) => new FlipCompareResultHandler(def, next),
+            ["score"]               = (def, next) => new ScorePhaseHandler(next),
         };
 
     /// <summary>
@@ -158,5 +159,32 @@ public static class PhaseHandlerRegistry
         if (def.Extra?.TryGetValue(key, out var el) == true)
             return el.GetString();
         return null;
+    }
+
+    // ── score ─────────────────────────────────────────────────────────────────
+    // Applies the game's scoring config then auto-advances to the next phase.
+
+    private sealed class ScorePhaseHandler(string nextPhaseId) : IPhaseHandler
+    {
+        // Brief pause so the player can read the score before the game moves on.
+        public TimeSpan? GetAutoAdvanceDelay(GameState _) => TimeSpan.FromMilliseconds(2500);
+        public IReadOnlyList<GameAction> GetValidActions(GameState _) => [new GameAction("tap")];
+
+        public void Apply(GameState state, GameAction action)
+        {
+            ScoringEngine.Apply(state);
+
+            // Check win condition immediately after scoring.
+            var win = WinConditionEngine.Instance.Check(state);
+            if (win is not null)
+            {
+                state.Metadata["status"]      = win.StatusMessage;
+                state.Metadata["last_winner"] = win.WinnerId ?? "";
+                state.CurrentPhaseId          = "game_over";
+                return;
+            }
+
+            state.CurrentPhaseId = nextPhaseId;
+        }
     }
 }

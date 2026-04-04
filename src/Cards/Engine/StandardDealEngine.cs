@@ -12,8 +12,13 @@ namespace Cards.Engine;
 ///       "down"  — all cards face-down  (default when omitted)
 ///       "owner" — face-up in zones whose visibility is "all" or "owner";
 ///                 face-down otherwise
+///   • <c>pattern</c> — group-size deal, e.g. <c>"3-2"</c>: deal 3 cards to every
+///     player clockwise, then 2 cards to every player clockwise.  Takes precedence
+///     over <c>cards_per_player</c> when present.
 ///   • <c>remainder_to</c> — after dealing, any undealt cards are moved to this
 ///     zone.  Omit (or set to "deck") to leave the remainder in the deck zone.
+///   • <c>then_flip_top_to</c> — after dealing (and remainder move), flip the
+///     top deck card face-up into this zone (e.g. to seed a discard pile).
 ///   • <c>anim_delay_ms</c> — milliseconds between each individual card in the
 ///     animation (default 130).
 ///
@@ -55,10 +60,6 @@ public sealed class StandardDealEngine : IDealStrategy
         DeckBuilder.Shuffle(cards);
         foreach (var c in cards) deckZone.Add(c);
 
-        int cardsPerPlayer = cardsPerPlayerOverride
-            ?? def?.GetCardsPerPlayer(playerCount)
-            ?? 5;
-
         int animDelayMs = def?.AnimDelayMs ?? 130;
 
         var steps        = new List<(int PlayerIndex, int Count)>();
@@ -67,8 +68,15 @@ public sealed class StandardDealEngine : IDealStrategy
 
         if (def?.AnimDealSteps is { Count: > 0 } animSteps)
             DealByExplicitSteps(state, playerCount, animSteps, def.Face, deckZone, steps, byPlayer);
+        else if (def?.Pattern is { Length: > 0 } pattern)
+            DealByPattern(state, playerCount, pattern, def.Face, deckZone, steps, byPlayer);
         else
+        {
+            int cardsPerPlayer = cardsPerPlayerOverride
+                ?? def?.GetCardsPerPlayer(playerCount)
+                ?? 5;
             DealClockwise(state, playerCount, cardsPerPlayer, def?.Face, deckZone, steps, byPlayer);
+        }
 
         // Move undealt cards out of the deck if requested.
         if (def?.RemainderTo is { Length: > 0 } remTo && remTo != "deck")
@@ -77,6 +85,18 @@ public sealed class StandardDealEngine : IDealStrategy
             if (dest is not null)
                 while (!deckZone.IsEmpty)
                     dest.Add(deckZone.Draw()!);
+        }
+
+        // Flip top deck card to a named zone (e.g. seed a discard pile).
+        if (def?.ThenFlipTopTo is { Length: > 0 } flipTo)
+        {
+            var dest = state.FindZone(flipTo);
+            if (dest is not null && !deckZone.IsEmpty)
+            {
+                var card = deckZone.Draw()!;
+                card.IsFaceUp = true;
+                dest.Add(card);
+            }
         }
 
         return RecordResult(state, byPlayer, steps, animDelayMs);
@@ -124,6 +144,36 @@ public sealed class StandardDealEngine : IDealStrategy
                 card.IsFaceUp = FaceUp(face, zone);
                 zone.Add(card);
                 byPlayer[pIdx].Add(card.Id);
+            }
+        }
+    }
+
+    private static void DealByPattern(
+        GameState state, int playerCount, string pattern, string? face,
+        Zone deckZone, List<(int, int)> steps, Dictionary<int, List<string>> byPlayer)
+    {
+        // Parse "3-2" → [3, 2].  Each number = cards dealt to every player in one clockwise pass.
+        var batches = pattern.Split('-', StringSplitOptions.RemoveEmptyEntries)
+                             .Select(s => int.TryParse(s, out int n) ? n : 0)
+                             .Where(n => n > 0)
+                             .ToList();
+
+        foreach (int batchSize in batches)
+        {
+            for (int pIdx = 0; pIdx < playerCount; pIdx++)
+            {
+                if (deckZone.IsEmpty) return;
+                var zone = PlayerHandZone(state, pIdx);
+                if (zone is null) continue;
+
+                steps.Add((pIdx, batchSize));
+                for (int c = 0; c < batchSize && !deckZone.IsEmpty; c++)
+                {
+                    var card = deckZone.Draw()!;
+                    card.IsFaceUp = FaceUp(face, zone);
+                    zone.Add(card);
+                    byPlayer[pIdx].Add(card.Id);
+                }
             }
         }
     }

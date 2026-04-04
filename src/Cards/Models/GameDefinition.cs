@@ -38,6 +38,9 @@ public class GameDefinition
     [JsonPropertyName("teams")]
     public JsonElement Teams { get; set; }
 
+    [JsonPropertyName("rounds")]
+    public RoundsDefinition? Rounds { get; set; }
+
     [JsonPropertyName("zones")]
     public List<ZoneDefinition> Zones { get; set; } = [];
 
@@ -110,6 +113,18 @@ public class ZoneDefinition
 
     [JsonPropertyName("visibility")]
     public string Visibility { get; set; } = "all";
+
+    /// <summary>Grid zone row count (type = "grid" only).</summary>
+    [JsonPropertyName("rows")]
+    public int Rows { get; set; } = 2;
+
+    /// <summary>Grid zone column count (type = "grid" only).</summary>
+    [JsonPropertyName("cols")]
+    public int Cols { get; set; } = 3;
+
+    /// <summary>How many cards the player may peek at on initial deal (type = "grid" only).</summary>
+    [JsonPropertyName("peek_count")]
+    public int PeekCount { get; set; } = 0;
 }
 
 public class PhaseDefinition
@@ -198,15 +213,33 @@ public class DealDefinition
     /// <c>{ "max_players": N, "cards": N }</c> rules evaluated top-to-bottom —
     /// the first rule whose max_players is ≥ the actual player count wins.
     /// Omit max_players on the last entry to serve as a catch-all default.
+    /// Ignored when <c>pattern</c> is set.
     /// </summary>
     [JsonPropertyName("cards_per_player")]
     public JsonElement CardsPerPlayer { get; set; }
+
+    /// <summary>
+    /// Group-size deal pattern, e.g. <c>"3-2"</c> for Euchre.
+    /// Each number is the batch size dealt to every player in one clockwise pass.
+    /// "3-2" → pass 1: 3 cards each, pass 2: 2 cards each (5 total per player).
+    /// When present, takes precedence over <c>cards_per_player</c>.
+    /// </summary>
+    [JsonPropertyName("pattern")]
+    public string? Pattern { get; set; }
 
     [JsonPropertyName("remainder_to")]
     public string? RemainderTo { get; set; }
 
     [JsonPropertyName("face")]
     public string? Face { get; set; }
+
+    /// <summary>
+    /// After dealing, flip the top card of the deck face-up and place it in
+    /// this zone.  Typically used to seed a discard pile, e.g. Crazy Eights,
+    /// Rummy.  Ignored when absent.
+    /// </summary>
+    [JsonPropertyName("then_flip_top_to")]
+    public string? ThenFlipTopTo { get; set; }
 
     /// <summary>
     /// Optional explicit animation deal sequence.
@@ -243,6 +276,32 @@ public class DealDefinition
 
         return 5; // fallback
     }
+}
+
+public class RoundsDefinition
+{
+    /// <summary>
+    /// When the round loop ends.
+    /// <c>"win_condition"</c> (default) — stop when the win condition is satisfied.
+    /// <c>"fixed:N"</c> — stop after exactly N rounds (overrides win_condition.count).
+    /// </summary>
+    [JsonPropertyName("repeat_until")]
+    public string RepeatUntil { get; set; } = "win_condition";
+
+    /// <summary>
+    /// How the dealer seat rotates between rounds.
+    /// <c>"rotates_left"</c> | <c>"rotates_right"</c> | <c>"winner"</c> |
+    /// <c>"loser"</c> | <c>"alternates"</c>
+    /// </summary>
+    [JsonPropertyName("dealer")]
+    public string Dealer { get; set; } = "rotates_left";
+
+    /// <summary>
+    /// How the initial dealer is chosen.
+    /// <c>"random"</c> (default) | <c>"high_card"</c>
+    /// </summary>
+    [JsonPropertyName("first_dealer")]
+    public string FirstDealer { get; set; } = "random";
 }
 
 public class HouseRule

@@ -100,13 +100,32 @@ Custom deck:
 ```json
 "rounds": {
   "repeat_until": "win_condition",
-  "dealer": "rotates_left"
+  "dealer": "rotates_left",
+  "first_dealer": "random"
 }
 ```
 
-`repeat_until`: `"win_condition"` | `"fixed:4"` (fixed number of rounds)
+`repeat_until`: `"win_condition"` (default) | `"fixed:4"` (fixed number — overrides win_condition.count)
 
-`dealer`: `"rotates_left"` | `"rotates_right"` | `"winner"` | `"loser"` | `"alternates"`
+`dealer`: `"rotates_left"` (default) | `"rotates_right"` | `"winner"` | `"loser"` | `"alternates"`
+
+`first_dealer`: `"random"` (default) | `"high_card"` (not yet implemented)
+
+### How multi-round games work
+
+Route the final phase's `next` to `"new_round"`:
+```json
+{ "id": "score", "type": "score", "next": "new_round" }
+```
+
+The engine automatically:
+1. Checks the win condition; if met, transitions to `game_over`.
+2. Increments `state.RoundNumber`, rotates `state.DealerId`.
+3. Clears hand/spread/trick/pile/deck zones (score zones persist).
+4. Re-deals using the same `deal` block.
+5. Resets to the first phase.
+
+`state.DealerId` is set from `rounds.first_dealer` at game start and updated each round.
 
 ---
 
@@ -144,14 +163,16 @@ Zones are named areas where cards reside.
 
 ### Visibility Values
 
+All values are enforced by `GameStateMask` when creating agent snapshots.
+
 | Value | Description |
 |---|---|
 | `"none"` | No cards visible to anyone |
-| `"top"` | Only the top card is visible |
-| `"owner"` | Visible to the owning player only |
+| `"top"` | Only the top card is visible to everyone |
+| `"owner"` | Full card list visible only to the zone's owner |
 | `"all"` | Visible to everyone |
-| `"count_only"` | Card count visible, not faces |
-| `"top_to_dealer"` | Top card visible only to the dealer (Euchre kitty) |
+| `"count_only"` | Card count exposed via metadata; no cards visible |
+| `"top_to_dealer"` | Top card visible only to the dealer (`state.DealerId`); Euchre kitty |
 
 ---
 
@@ -163,15 +184,18 @@ Simple deal at game/round start:
   "cards_per_player": 13,
   "remainder_to": "deck",
   "face": "down",
-  "order": "clockwise",
-  "cards_at_a_time": 1,
-  "then_flip_top_to": "discard"
+  "then_flip_top_to": "discard",
+  "anim_delay_ms": 130
 }
 ```
 
-For patterned deals (e.g., Euchre 3-2-3-2), use `"pattern": "3-2-3-2"` instead of `cards_per_player`.
+All fields are optional. `face` values: `"up"` | `"down"` (default) | `"owner"` (face-up only in zones visible to all).
 
-For multi-step deals (Stud, Poker community cards), use `deal` phases instead (see Phases).
+For patterned deals (e.g., Euchre), use `"pattern": "3-2"` instead of `cards_per_player`.  Each number is the batch size dealt to all players in one clockwise pass — `"3-2"` gives 5 cards per player dealt in two passes.
+
+For multi-step deals with per-player explicit steps use `anim_deal_steps` (internal). For games requiring mixed face-up/face-down in a non-uniform sequence (e.g., Blackjack), the logic class performs the deal itself and calls `StandardDealEngine.RecordResult`.
+
+For multi-phase deals (Stud, Poker community cards), use `deal` phases instead (see Phases).
 
 ---
 
@@ -410,10 +434,13 @@ Reveal all remaining hands and determine winner by hand rank.
 ---
 
 ### `score`
-Calculate and apply scores for the round using the game's `scoring` config.
+Calculate and apply scores for the round using the game's `scoring` config, then check the win condition.  Auto-advances after 2.5 seconds (player can also tap).
+
 ```json
-{ "id": "score", "type": "score", "next": { "if": "win_condition", "then": "end", "else": "deal_new_round" } }
+{ "id": "score", "type": "score", "next": "new_round" }
 ```
+
+Implemented in `ScoringEngine` + `PhaseHandlerRegistry.ScorePhaseHandler`.
 
 ---
 
@@ -431,6 +458,19 @@ No rules enforced. Players move cards freely between zones.
 ---
 
 ## Scoring
+
+All types are dispatched by `ScoringEngine.Apply(state)`, called from the `score` phase handler.
+
+| Type | Status | Games |
+|---|---|---|
+| `none` | Implemented | War, Go Fish |
+| `card_points` | Implemented | Hearts |
+| `trick_bid` | Implemented | Spades |
+| `grid_values` | Implemented | Golf |
+| `euchre` | Stub | Euchre |
+| `hand_rank` | Stub | Poker variants |
+| `deadwood` | Stub | Gin Rummy |
+| `blackjack` | Handled by BlackjackLogic | Blackjack |
 
 ### `card_points`
 Cards in won zones are worth point values.
@@ -528,16 +568,29 @@ No scoring (War, Go Fish — win by other condition).
 
 ## Win Condition
 
+All types are implemented in `WinConditionEngine`.
+
 ```json
 { "type": "lowest_score",    "threshold": 100 }
 { "type": "highest_score",   "threshold": 500 }
-{ "type": "target_score",    "score": 10,  "winner": "first" }
+{ "type": "target_score",    "score": 10 }
 { "type": "last_with_cards" }
 { "type": "last_with_chips" }
 { "type": "most_books" }
 { "type": "fixed_rounds",    "count": 9, "winner": "lowest_score" }
 { "type": "manual" }
 ```
+
+| Type | Trigger | Winner |
+|---|---|---|
+| `lowest_score` | Any player's score ≥ `threshold` | Lowest score |
+| `highest_score` | Any player's score ≥ `threshold` | Highest score |
+| `target_score` | Any player's score ≥ `score` | First to reach it |
+| `last_with_cards` | Any player has 0 cards | Most cards |
+| `last_with_chips` | Only one player has score > 0 | That player |
+| `most_books` | Deck + all hands empty | Most books (highest score) |
+| `fixed_rounds` | `count` rounds completed | Highest score, or lowest if `winner: "lowest_score"` |
+| `manual` | Never (game logic sets `game_over` directly) | — |
 
 ---
 
