@@ -20,6 +20,14 @@ public static class PhaseHandlerRegistry
             ["flip_compare_ready"]  = (def, next) => new FlipCompareReadyHandler(def, next),
             ["flip_compare_result"] = (def, next) => new FlipCompareResultHandler(def, next),
             ["score"]               = (def, next) => new ScorePhaseHandler(next),
+            ["trick_taking"]        = (def, next) => new TrickTakingHandler(def, next),
+            ["bidding"]             = (def, next) => new BiddingHandler(def, next),
+            ["pass_cards"]          = (def, next) => new PassCardsHandler(def, next),
+            ["free_play"]           = (def, next) => new FreePlayHandler(def, next),
+            ["draw_discard"]        = (def, next) => new DrawDiscardHandler(def, next),
+            ["meld"]                = (def, next) => new MeldHandler(def, next),
+            ["poker_betting"]       = (def, next) => new PokerBettingHandler(def, next),
+            ["showdown"]            = (def, next) => new ShowdownHandler(def, next),
         };
 
     /// <summary>

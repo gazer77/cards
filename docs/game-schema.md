@@ -224,6 +224,26 @@ Conditional `next`:
 
 ## Phase Types
 
+All phase types are registered in `PhaseHandlerRegistry`.
+
+| Type | Status | Games |
+|---|---|---|
+| `trick_taking` | Implemented | Hearts, Spades, Euchre |
+| `bidding` | Implemented | Spades, Euchre |
+| `pass_cards` | Implemented | Hearts |
+| `draw_discard` | Implemented | Gin Rummy, Golf, Crazy Eights |
+| `meld` | Implemented (set/run) | Gin Rummy, Hand and Foot |
+| `poker_betting` | Implemented | Texas Hold'em, Omaha, Stud |
+| `showdown` | Implemented | All poker variants |
+| `score` | Implemented | All multi-round games |
+| `free_play` | Implemented | Free Play mode |
+| `flip_compare_ready` | Implemented | War (internal) |
+| `flip_compare_result` | Implemented | War (internal) |
+| `deal` | Not yet registered | In-phase deals (Stud, community cards) |
+| `war` | Not yet registered | War (migrate from flip_compare) |
+| `go_fish` | Not yet registered | Go Fish (migrate from GoFishLogic) |
+| `blackjack_round` | Not yet registered | Blackjack (migrate from BlackjackLogic) |
+
 ### `deal`
 Deals cards from the deck to a target zone.
 ```json

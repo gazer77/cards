@@ -71,6 +71,7 @@ public sealed class DefaultGameLogic : GameLogicBase
 
         if (hasRounds)
             RegisterPhase("new_round", new NewRoundHandler(this));
+
     }
 
     // ── New-round handler ─────────────────────────────────────────────────────
@@ -99,6 +100,12 @@ public sealed class DefaultGameLogic : GameLogicBase
             ClearRoundZones(state);
 
             StandardDealEngine.Instance.Deal(state, logic._playerCount, logic._enabledHouseRules);
+            // Clear trick state so TrickTakingHandler re-initializes for the new hand.
+            state.Metadata.Remove("trick_leader");
+            state.Metadata.Remove("trick_trump");
+            state.Metadata.Remove("trick_lead_suit");
+            state.Metadata.Remove("trick_hearts_broken");
+            state.Metadata.Remove("trick_spades_broken");
             state.CurrentPhaseId     = logic._firstPhaseId;
             state.Metadata["status"] = $"Round {state.RoundNumber}";
         }
