@@ -146,20 +146,12 @@ public partial class GameTablePage : ContentPage
                 var dealResult = state.LastDealResult;
                 if (dealResult is not null && deckCenter.HasValue)
                 {
-                    TableCanvas.MarkCardsForSequentialDeal(
-                        dealResult.CardsByPlayerIndex,
-                        deckCenter.Value,
-                        dealResult.Steps,
-                        dealResult.AnimDelayMs);
+                    var dealEntries = BuildDealEntries(dealResult, deckCenter.Value, state);
+                    if (dealEntries.Count > 0)
+                        TableCanvas.QueueFlyIns(dealEntries, delayBetweenMs: dealResult.AnimDelayMs);
                 }
-                else if (dealResult is not null)
-                {
-                    // Deck center unavailable — bump all hand cards at once as fallback.
-                    var allIds = dealResult.CardsByPlayerIndex.Values
-                        .SelectMany(ids => ids).ToList();
-                    if (allIds.Count > 0)
-                        TableCanvas.MarkCardsReceivedInHand(allIds, null);
-                }
+                // If deck center unavailable, cards land instantly; the GameState
+                // setter's deal slide-up animation handles the visual feedback.
             }
         }
 
@@ -371,9 +363,20 @@ public partial class GameTablePage : ContentPage
             return;
         }
 
-        ApplyWithSound(action);
+        var (received, sourcePts) = ApplyWithSound(action);
         MaybeSortHands();
         TableCanvas.GameState = _state;
+
+        // Queue fly-in and wait for it to finish before refreshing the UI.
+        // This prevents the message fade and button relayout from competing
+        // with the SkiaSharp animation on the main thread.
+        var flyIns = BuildReceiveEntries(received, sourcePts);
+        if (flyIns.Count > 0)
+        {
+            TableCanvas.QueueFlyIns(flyIns);
+            await Task.WhenAny(TableCanvas.WaitForFlyInsAsync(), Task.Delay(2000));
+        }
+
         RefreshStatus();
         RefreshActionButtons();
         RefreshInteractionState();
@@ -404,9 +407,17 @@ public partial class GameTablePage : ContentPage
                 var next = _logic.GetValidActions(_state!);
                 if (next.Count == 0) break;
 
-                ApplyWithSound(next[0]);
+                var (received, sourcePts) = ApplyWithSound(next[0]);
                 MaybeSortHands();
                 TableCanvas.GameState = _state;
+
+                var flyIns = BuildReceiveEntries(received, sourcePts);
+                if (flyIns.Count > 0)
+                {
+                    TableCanvas.QueueFlyIns(flyIns);
+                    await Task.WhenAny(TableCanvas.WaitForFlyInsAsync(), Task.Delay(2000));
+                }
+
                 RefreshStatus();
                 RefreshActionButtons();
                 RefreshInteractionState();
@@ -500,7 +511,15 @@ public partial class GameTablePage : ContentPage
             _sounds.PlayDeal();
     }
 
-    private void ApplyWithSound(GameAction action)
+    /// <summary>
+    /// Applies an action, plays sound, and returns the list of cards that just
+    /// arrived in the human player's hand together with each card's source position.
+    /// The caller must set <c>TableCanvas.GameState</c> before passing the return
+    /// values to <c>MarkCardsReceivedInHand</c> so that fan-slot destinations can
+    /// be computed against the updated layout.
+    /// </summary>
+    private (IReadOnlyList<string> Received, IReadOnlyDictionary<string, SkiaSharp.SKPoint> SourcePts)
+        ApplyWithSound(GameAction action)
     {
         var faceDownBefore = _state!.Zones.Values
             .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Id).ToHashSet();
@@ -515,12 +534,17 @@ public partial class GameTablePage : ContentPage
                        (z.Visibility is "owner" or "top" && z.OwnerId == humanId)))
             .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet();
 
+        // Snapshot card → zone BEFORE the action so we can resolve source positions
+        // for cards in rotated zones (whose individual rects aren't tracked).
+        var cardSourceZone = new Dictionary<string, string>();
+        foreach (var (zoneId, zone) in _state.Zones)
+            foreach (var card in zone.Cards)
+                cardSourceZone[card.Id] = zoneId;
+
         _logic!.Apply(_state, action);
 
         PlaySoundForStateChange(faceDownBefore, handCountBefore);
 
-        // Any card now in the human player's hand that wasn't there before gets
-        // a fly-in animation from its source position (deck, opponent hand, etc.).
         var received = _state.Zones.Values
             .Where(z => z.Type == "hand" &&
                        (z.Visibility == "all" ||
@@ -530,22 +554,70 @@ public partial class GameTablePage : ContentPage
             .Where(id => !visibleHandBefore.Contains(id))
             .ToList();
 
-        // Look up where each received card was on screen in the last rendered frame
-        // so the fly-in animation knows its starting position.
+        // Resolve source positions:
+        //   1. Exact card rect from last rendered frame (works for non-rotated zones).
+        //   2. Zone center (works for rotated zones like 4-player sides or play zones).
+        //   3. Deck center as last resort.
         var sourcePts = new Dictionary<string, SkiaSharp.SKPoint>();
         foreach (var id in received)
         {
             var rect = TableCanvas.GetLastCardRect(id);
-            if (rect.HasValue)
-                sourcePts[id] = new SkiaSharp.SKPoint(rect.Value.MidX, rect.Value.MidY);
-            else
-            {
-                // Card wasn't individually rendered (e.g. deep in deck) — fly from deck center
-                var deckCenter = TableCanvas.GetZoneCenter("deck");
-                if (deckCenter.HasValue) sourcePts[id] = deckCenter.Value;
-            }
+            if (rect.HasValue) { sourcePts[id] = new SkiaSharp.SKPoint(rect.Value.MidX, rect.Value.MidY); continue; }
+
+            SkiaSharp.SKPoint? center = null;
+            if (cardSourceZone.TryGetValue(id, out var srcZoneId))
+                center = TableCanvas.GetZoneCenter(srcZoneId);
+            center ??= TableCanvas.GetZoneCenter("deck");
+            if (center.HasValue) sourcePts[id] = center.Value;
         }
-        TableCanvas.MarkCardsReceivedInHand(received, sourcePts);
+
+        return (received, sourcePts);
+    }
+
+    // ── Fly-in entry builders ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds fly-in entries for cards the human player just received.
+    /// Must be called after <c>TableCanvas.GameState</c> is updated so fan-slot
+    /// positions are computed against the new layout.
+    /// </summary>
+    private List<(string CardId, SkiaSharp.SKPoint From, SkiaSharp.SKPoint To)> BuildReceiveEntries(
+        IReadOnlyList<string> received,
+        IReadOnlyDictionary<string, SkiaSharp.SKPoint> sourcePts)
+    {
+        if (received.Count == 0 || _state is null) return [];
+        var destinations = TableCanvas.ComputeHandSlotCenters(_state, received);
+        var entries = new List<(string, SkiaSharp.SKPoint, SkiaSharp.SKPoint)>(received.Count);
+        foreach (var id in received)
+            if (sourcePts.TryGetValue(id, out var from) && destinations.TryGetValue(id, out var to))
+                entries.Add((id, from, to));
+        return entries;
+    }
+
+    /// <summary>
+    /// Builds ordered fly-in entries for the initial deal, preserving deal-step order
+    /// so the stagger delay produces the correct clockwise waterfall effect.
+    /// </summary>
+    private List<(string CardId, SkiaSharp.SKPoint From, SkiaSharp.SKPoint To)> BuildDealEntries(
+        Engine.DealResult dealResult, SkiaSharp.SKPoint deckCenter, Engine.GameState finalState)
+    {
+        var allIds       = dealResult.CardsByPlayerIndex.Values.SelectMany(ids => ids);
+        var destinations = TableCanvas.ComputeHandSlotCenters(finalState, allIds);
+
+        var entries  = new List<(string, SkiaSharp.SKPoint, SkiaSharp.SKPoint)>();
+        var assigned = new Dictionary<int, int>();
+
+        foreach (var (playerIdx, count) in dealResult.Steps)
+        {
+            if (!dealResult.CardsByPlayerIndex.TryGetValue(playerIdx, out var cards)) continue;
+            int start = assigned.GetValueOrDefault(playerIdx, 0);
+            int end   = Math.Min(start + count, cards.Count);
+            for (int i = start; i < end; i++)
+                if (destinations.TryGetValue(cards[i], out var to))
+                    entries.Add((cards[i], deckCenter, to));
+            assigned[playerIdx] = end;
+        }
+        return entries;
     }
 
     private void RefreshInteractionState()

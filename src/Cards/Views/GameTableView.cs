@@ -36,11 +36,16 @@ public class GameTableView : SKCanvasView
     private readonly Dictionary<string, (long Start, float Duration)> _dealAnims    = [];
     private readonly Dictionary<string, (long Start, float Duration)> _flipAnims    = [];
     private readonly Dictionary<string, (long Start, float Duration)> _receiveAnims = [];
-    // Fly-in: cardId → (source center, startTimeMs, durationMs)
-    private readonly Dictionary<string, (SKPoint From, long Start, float Duration)> _flyInAnims = [];
+    // Fly-in: cardId → (source center, fixed destination center, startTimeMs, durationMs)
+    // Both From and To are fixed at queue time — To is never recomputed at draw time.
+    private readonly Dictionary<string, (SKPoint From, SKPoint To, long Start, float Duration)> _flyInAnims = [];
+
+    private SKImageInfo _lastInfo;
+    private const float FlyInSpeedPxMs = 1.2f; // pixels per millisecond
     // Shuffle: zoneId → (startTimeMs, durationMs)
     private readonly Dictionary<string, (long Start, float Duration)> _shuffleAnims = [];
     private TaskCompletionSource? _shuffleCompletion;
+    private TaskCompletionSource? _flyInCompletion;
 
     // Scratch lists — populated during draw, cleared after
     private readonly List<string> _finishedDealAnims    = [];
@@ -180,58 +185,99 @@ public class GameTableView : SKCanvasView
     public void SetTheme(ITableTheme theme) { _theme = theme; InvalidateSurface(); }
 
     /// <summary>
-    /// Explicitly marks cards as having just arrived in a hand zone.
-    /// When <paramref name="sourcePts"/> contains a card's source center, the card
-    /// flies in from that point; otherwise a bump animation is used as a fallback.
-    /// Call before assigning GameState (same-object mutation bypasses the setter).
+    /// Queues fly-in animations for a list of cards.  The page is responsible for
+    /// computing both <c>From</c> (source screen position) and <c>To</c> (destination
+    /// fan-slot center) using <see cref="ComputeHandSlotCenters"/> before calling this.
+    /// <para>
+    /// Each card's travel duration is computed as <c>distance / <see cref="FlyInSpeedPxMs"/></c>
+    /// so cards travelling further naturally take longer.  When <paramref name="delayBetweenMs"/>
+    /// is greater than zero, successive entries start that many ms apart (deal waterfall);
+    /// when zero all entries start simultaneously (mid-game receive).
+    /// </para>
     /// </summary>
-    public void MarkCardsReceivedInHand(IEnumerable<string> cardIds,
-        IReadOnlyDictionary<string, SKPoint>? sourcePts = null)
+    public void QueueFlyIns(
+        IReadOnlyList<(string CardId, SKPoint From, SKPoint To)> entries,
+        int delayBetweenMs = 0)
     {
-        long now = NowMs();
-        foreach (var id in cardIds)
+        if (entries.Count == 0) return;
+        long now    = NowMs();
+        long offset = 0;
+
+        foreach (var (id, from, to) in entries)
         {
-            if (sourcePts?.TryGetValue(id, out var from) == true)
-                _flyInAnims[id] = (from, now, 500f);
-            else
-                _receiveAnims[id] = (now, 1350f);   // fallback bump
+            float dist = SKPoint.Distance(from, to);
+            float dur  = MathF.Max(dist / FlyInSpeedPxMs, 80f);
+            _flyInAnims[id] = (from, to, now + offset, dur);
+            offset += delayBetweenMs;
         }
-        if (_flyInAnims.Count > 0 || _receiveAnims.Count > 0)
-            EnsureAnimTimer();
+
+        EnsureAnimTimer();
     }
 
     /// <summary>
-    /// Queues a sequential deal animation: each card flies from <paramref name="deckCenter"/>
-    /// to its hand position, one at a time, staggered by <paramref name="delayMs"/>.
-    /// <paramref name="cardsByPlayerIndex"/> maps player index → ordered card IDs in that hand.
-    /// <paramref name="dealSteps"/> is an ordered list of (playerIndex, count) pairs.
+    /// Computes the exact fan-slot center for each card ID in <paramref name="cardIds"/>
+    /// within <paramref name="state"/>, using the last known canvas dimensions.
+    /// Call after setting <see cref="GameState"/> so the canvas size is available.
+    /// Cards not currently in a hand zone are omitted from the result.
     /// </summary>
-    public void MarkCardsForSequentialDeal(
-        Dictionary<int, List<string>> cardsByPlayerIndex,
-        SKPoint deckCenter,
-        IReadOnlyList<(int PlayerIndex, int Count)> dealSteps,
-        int delayMs = 130)
+    public Dictionary<string, SKPoint> ComputeHandSlotCenters(
+        GameState state, IEnumerable<string> cardIds)
     {
-        long now = NowMs();
-        var assignedCounts = new Dictionary<int, int>();
-        long offset = 0;
+        if (_lastInfo.Width == 0) return [];
+        return ComputeFanSlotCenters(state, cardIds, _lastInfo);
+    }
 
-        foreach (var (playerIdx, count) in dealSteps)
+    /// <summary>
+    /// Returns a Task that completes once all queued fly-in animations have finished.
+    /// Returns <see cref="Task.CompletedTask"/> immediately if none are active.
+    /// Always combine with a safety timeout: <c>Task.WhenAny(WaitForFlyInsAsync(), Task.Delay(N))</c>.
+    /// </summary>
+    public Task WaitForFlyInsAsync()
+    {
+        if (!_flyInAnims.Any()) return Task.CompletedTask;
+        _flyInCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        return _flyInCompletion.Task;
+    }
+
+    /// <summary>
+    /// Computes the center pixel of every fan-slot for the given card IDs in
+    /// <paramref name="state"/>, using <paramref name="info"/> for canvas dimensions.
+    /// Only hand zones (rendered as fans) are considered; cards in other zone types
+    /// are omitted from the result.
+    /// </summary>
+    private static Dictionary<string, SKPoint> ComputeFanSlotCenters(
+        GameState state, IEnumerable<string> cardIds, SKImageInfo info)
+    {
+        var result = new Dictionary<string, SKPoint>();
+        var idSet  = cardIds.ToHashSet();
+        if (idSet.Count == 0) return result;
+
+        var layouts = ZoneLayoutEngine.Compute(state, info);
+
+        foreach (var layout in layouts)
         {
-            if (!cardsByPlayerIndex.TryGetValue(playerIdx, out var cards)) continue;
-            int start = assignedCounts.GetValueOrDefault(playerIdx, 0);
-            int end   = Math.Min(start + count, cards.Count);
+            if (layout.Hint != ZoneRenderHint.Fan) continue;
 
-            for (int i = start; i < end; i++)
+            var cards  = layout.Zone.Cards;
+            float totalW = layout.Bounds.Width;
+            float cardW  = layout.CardWidth;
+            float cardH  = layout.CardHeight;
+
+            float step = cards.Count == 1
+                ? 0f
+                : MathF.Min((totalW - cardW) / (cards.Count - 1), cardW * 0.75f);
+            float startX = cards.Count == 1
+                ? layout.Bounds.MidX - cardW / 2f
+                : layout.Bounds.Left + (totalW - (step * (cards.Count - 1) + cardW)) / 2f;
+            float midY = layout.Bounds.MidY;
+
+            for (int i = 0; i < cards.Count; i++)
             {
-                _flyInAnims[cards[i]] = (deckCenter, now + offset, 350f);
-                offset += delayMs;
+                if (idSet.Contains(cards[i].Id))
+                    result[cards[i].Id] = new SKPoint(startX + i * step + cardW / 2f, midY);
             }
-            assignedCounts[playerIdx] = end;
         }
-
-        if (_flyInAnims.Count > 0)
-            EnsureAnimTimer();
+        return result;
     }
 
     /// <summary>Returns the last rendered screen rect for a card, or null if not rendered.</summary>
@@ -316,6 +362,7 @@ public class GameTableView : SKCanvasView
         var canvas = e.Surface.Canvas;
         var info   = e.Info;
 
+        _lastInfo = info;
         canvas.Clear();
         DrawFelt(canvas, info);
 
@@ -324,6 +371,21 @@ public class GameTableView : SKCanvasView
             if (!string.IsNullOrEmpty(_placeholderText))
                 DrawPlaceholder(canvas, info, _placeholderText);
             return;
+        }
+
+        // Remove fly-in entries for cards that are no longer in any hand zone
+        // (e.g. moved to a books/spread zone mid-animation).  Without this the
+        // entry would linger forever, the timer would never stop, and the card
+        // would appear frozen at its mid-flight position.
+        if (_flyInAnims.Count > 0)
+        {
+            var handCardIds = _state.Zones.Values
+                .Where(z => z.Type == "hand")
+                .SelectMany(z => z.Cards)
+                .Select(c => c.Id)
+                .ToHashSet();
+            foreach (var orphanId in _flyInAnims.Keys.Where(id => !handCardIds.Contains(id)).ToList())
+                _flyInAnims.Remove(orphanId);
         }
 
         _cardRects.Clear();
@@ -353,6 +415,13 @@ public class GameTableView : SKCanvasView
         _finishedReceiveAnims.Clear();
         _finishedFlyInAnims.Clear();
         _finishedShuffleAnims.Clear();
+
+        // Signal any awaiter that was waiting for fly-ins to complete.
+        if (!_flyInAnims.Any() && _flyInCompletion is not null)
+        {
+            _flyInCompletion.TrySetResult();
+            _flyInCompletion = null;
+        }
 
         if (_isDragging && _dragCardId is not null)
             DrawDragGhost(canvas);
@@ -541,13 +610,16 @@ public class GameTableView : SKCanvasView
                 continue;
             }
 
-            // ── Fly-in animation (card slides from source to final position) ──
+            // ── Fly-in animation (card slides from source to fixed destination) ──
             if (hasFlyIn)
             {
                 float t    = Math.Clamp((now - fia.Start) / fia.Duration, 0f, 1f);
                 float ease = EaseOutCubic(t);
-                float cx   = fia.From.X + (rect.MidX - fia.From.X) * ease;
-                float cy   = fia.From.Y + (rect.MidY - fia.From.Y) * ease;
+                // Use fia.To (fixed at queue time) — not rect.Mid (live slot).
+                // This prevents the destination from shifting when cards are sorted
+                // or added mid-animation, which previously caused cards to get stuck.
+                float cx   = fia.From.X + (fia.To.X - fia.From.X) * ease;
+                float cy   = fia.From.Y + (fia.To.Y - fia.From.Y) * ease;
                 rect = new SKRect(cx - cardW / 2f, cy - cardH / 2f,
                                   cx + cardW / 2f, cy + cardH / 2f);
                 if (t >= 1f) _finishedFlyInAnims.Add(card.Id);
