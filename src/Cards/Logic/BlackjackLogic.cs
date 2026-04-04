@@ -3,16 +3,16 @@ using Cards.Engine;
 namespace Cards.Logic;
 
 /// <summary>
-/// Implements the rules of Blackjack (single player vs dealer, one hand per game).
+/// Implements the rules of Blackjack (N human players vs dealer, one hand per game).
 ///
 /// Zones:
-///   hand:player0  — player's cards (all face-up)
-///   hand:player1  — dealer's cards (hole card face-down until dealer turn)
-///   deck          — the shoe
+///   hand:player0 … hand:player{N-1}  — human players' cards (all face-up)
+///   hand:player{N}                   — dealer's cards (hole card face-down until dealer turn)
+///   deck                             — the shoe
 ///
 /// Phases:
-///   player_turn   — player chooses Hit or Stand
-///   dealer_turn   — hole card revealed; each tap deals one more dealer card
+///   player_turn   — current human player chooses Hit, Stand, or Double
+///   dealer_turn   — hole card revealed; dealer auto-plays one card at a time
 ///   game_over     — hand resolved; triggers the game-over overlay
 /// </summary>
 public sealed class BlackjackLogic : GameLogicBase
@@ -25,36 +25,40 @@ public sealed class BlackjackLogic : GameLogicBase
     {
         _dealerHitsHard17 = enabledHouseRules.Contains("dealer_hits_hard_17");
 
-        SetupEngine.Instance.Setup(state, playerCount, enabledHouseRules);
+        // Always create playerCount human players + 1 dealer (the extra player).
+        SetupEngine.Instance.Setup(state, playerCount + 1, enabledHouseRules);
 
         var deck = DeckBuilder.Build(state.Definition.DeckType);
         DeckBuilder.Shuffle(deck);
         foreach (var c in deck) state.Zones["deck"].Add(c);
 
-        // Deal: player (up), dealer (up), player (up), dealer hole (down).
-        // The sequence is game-specific and can't be expressed as a uniform clockwise
-        // deal, so we handle it here and record the result for the animation layer.
-        DealFaceUp(state, "player0");
-        DealFaceUp(state, "player1");
-        DealFaceUp(state, "player0");
-        DealFaceDown(state, "player1");
+        int dealerIdx  = state.Players.Count - 1;
+        string dealerId = state.Players[dealerIdx].Id;
 
-        StandardDealEngine.RecordResult(
-            state,
-            byPlayer: new Dictionary<int, List<string>>
-            {
-                [0] = PlayerHand(state).Cards.Select(c => c.Id).ToList(),
-                [1] = DealerHand(state).Cards.Select(c => c.Id).ToList(),
-            },
-            steps:    [(0, 1), (1, 1), (0, 1), (1, 1)],
-            animDelayMs: 220);
+        // Deal one card face-up to each human player, then one face-up to dealer,
+        // then a second face-up to each human, then the hole card face-down to dealer.
+        for (int i = 0; i < dealerIdx; i++) DealFaceUp(state, state.Players[i].Id);
+        DealFaceUp(state, dealerId);
+        for (int i = 0; i < dealerIdx; i++) DealFaceUp(state, state.Players[i].Id);
+        DealFaceDown(state, dealerId);
+
+        // Record deal result for the animation layer.
+        var byPlayer = new Dictionary<int, List<string>>();
+        for (int i = 0; i <= dealerIdx; i++)
+            byPlayer[i] = state.Zones[$"hand:{state.Players[i].Id}"].Cards.Select(c => c.Id).ToList();
+
+        var steps = new List<(int playerIdx, int count)>();
+        for (int i = 0; i <= dealerIdx; i++) steps.Add((i, 1));
+        for (int i = 0; i <= dealerIdx; i++) steps.Add((i, 1));
+
+        StandardDealEngine.RecordResult(state, byPlayer, steps, animDelayMs: 220);
 
         state.CurrentPlayerIndex = 0;
 
         RegisterPhase("player_turn", new PlayerTurnHandler(this));
         RegisterPhase("dealer_turn", new DealerTurnHandler(this));
 
-        // Immediate blackjack: reveal hole card and go to dealer_turn for the player to see
+        // Immediate blackjack for the first player: reveal hole card and enter dealer_turn
         if (HandValue(PlayerHand(state)) == 21)
         {
             RevealHoleCard(state);
@@ -94,16 +98,13 @@ public sealed class BlackjackLogic : GameLogicBase
 
     private void PlayerHit(GameState state)
     {
-        DealFaceUp(state, "player0");
+        DealFaceUp(state, state.Players[state.CurrentPlayerIndex].Id);
         int val = HandValue(PlayerHand(state));
 
         if (val > 21)
         {
-            // Bust — reveal hole card but go straight to game over (no need to draw dealer cards)
-            RevealHoleCard(state);
-            state.Metadata["status"] = $"Bust! You had {val}. Dealer wins.";
-            state.Metadata["sub"]    = $"You: {val} | Dealer: {HandValue(DealerHand(state))}";
-            state.CurrentPhaseId     = "game_over";
+            // Bust — advance to next player or resolve hand
+            AdvanceToNextPlayerOrDealer(state, busted: true);
             return;
         }
 
@@ -118,15 +119,12 @@ public sealed class BlackjackLogic : GameLogicBase
 
     private void PlayerDoubleDown(GameState state)
     {
-        DealFaceUp(state, "player0");
+        DealFaceUp(state, state.Players[state.CurrentPlayerIndex].Id);
         int val = HandValue(PlayerHand(state));
 
         if (val > 21)
         {
-            RevealHoleCard(state);
-            state.Metadata["status"] = $"Bust on double! You had {val}. Dealer wins.";
-            state.Metadata["sub"]    = $"You: {val} | Dealer: {HandValue(DealerHand(state))}";
-            state.CurrentPhaseId     = "game_over";
+            AdvanceToNextPlayerOrDealer(state, busted: true);
             return;
         }
 
@@ -134,9 +132,29 @@ public sealed class BlackjackLogic : GameLogicBase
     }
 
     private void PlayerStand(GameState state)
+        => AdvanceToNextPlayerOrDealer(state, busted: false);
+
+    /// <summary>
+    /// Moves to the next human player's turn, or to the dealer turn when all
+    /// human players have acted.
+    /// </summary>
+    private void AdvanceToNextPlayerOrDealer(GameState state, bool busted)
     {
-        RevealHoleCard(state);
-        EnterDealerTurn(state, playerJustStood: true);
+        int dealerIdx = state.Players.Count - 1;
+        int next      = state.CurrentPlayerIndex + 1;
+
+        if (next < dealerIdx)
+        {
+            // More human players to act
+            state.CurrentPlayerIndex = next;
+            UpdatePlayerTurnStatus(state);
+        }
+        else
+        {
+            // All human players done — reveal hole card and enter dealer turn
+            RevealHoleCard(state);
+            EnterDealerTurn(state, playerJustStood: !busted);
+        }
     }
 
     // ── Dealer turn (one card per tap) ────────────────────────────────────────
@@ -167,7 +185,7 @@ public sealed class BlackjackLogic : GameLogicBase
             return;
         }
 
-        DealFaceUp(state, "player1");
+        DealFaceUp(state, state.Players[^1].Id);
 
         var (newVal, newSoft) = HandInfo(DealerHand(state));
         if (DealerIsDone(newVal, newSoft))
@@ -243,8 +261,13 @@ public sealed class BlackjackLogic : GameLogicBase
 
     // ── Zone accessors ────────────────────────────────────────────────────────
 
-    private static Zone PlayerHand(GameState state) => state.Zones["hand:player0"];
-    private static Zone DealerHand(GameState state) => state.Zones["hand:player1"];
+    /// <summary>Returns the current human player's hand.</summary>
+    private static Zone PlayerHand(GameState state)
+        => state.Zones[$"hand:{state.Players[state.CurrentPlayerIndex].Id}"];
+
+    /// <summary>Returns the dealer's hand (always the last player).</summary>
+    private static Zone DealerHand(GameState state)
+        => state.Zones[$"hand:{state.Players[^1].Id}"];
 
     // ── Hand value ────────────────────────────────────────────────────────────
 

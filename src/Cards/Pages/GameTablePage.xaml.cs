@@ -367,9 +367,6 @@ public partial class GameTablePage : ContentPage
         MaybeSortHands();
         TableCanvas.GameState = _state;
 
-        // Queue fly-in and wait for it to finish before refreshing the UI.
-        // This prevents the message fade and button relayout from competing
-        // with the SkiaSharp animation on the main thread.
         var flyIns = BuildReceiveEntries(received, sourcePts);
         if (flyIns.Count > 0)
         {
@@ -513,9 +510,9 @@ public partial class GameTablePage : ContentPage
 
     /// <summary>
     /// Applies an action, plays sound, and returns the list of cards that just
-    /// arrived in the human player's hand together with each card's source position.
+    /// arrived in any hand zone together with each card's source position.
     /// The caller must set <c>TableCanvas.GameState</c> before passing the return
-    /// values to <c>MarkCardsReceivedInHand</c> so that fan-slot destinations can
+    /// values to <c>BuildReceiveEntries</c> so that fan-slot destinations can
     /// be computed against the updated layout.
     /// </summary>
     private (IReadOnlyList<string> Received, IReadOnlyDictionary<string, SkiaSharp.SKPoint> SourcePts)
@@ -525,17 +522,8 @@ public partial class GameTablePage : ContentPage
             .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Id).ToHashSet();
         var handCountBefore = _state.Zones
             .Where(kv => kv.Key.StartsWith("hand:")).Sum(kv => kv.Value.Count);
-        // Only track the human player's own hand — opponent hands are excluded so
-        // cards moving from opponent → player are correctly detected as "received".
-        string humanId = _state.Players.Count > 0 ? _state.Players[0].Id : string.Empty;
-        var visibleHandBefore = _state.Zones.Values
-            .Where(z => z.Type == "hand" &&
-                       (z.Visibility == "all" ||
-                       (z.Visibility is "owner" or "top" && z.OwnerId == humanId)))
-            .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet();
-
-        // Snapshot card → zone BEFORE the action so we can resolve source positions
-        // for cards in rotated zones (whose individual rects aren't tracked).
+        // Snapshot card → zone BEFORE the action so we can detect all arrivals and
+        // resolve source positions for cards in rotated zones.
         var cardSourceZone = new Dictionary<string, string>();
         foreach (var (zoneId, zone) in _state.Zones)
             foreach (var card in zone.Cards)
@@ -545,13 +533,14 @@ public partial class GameTablePage : ContentPage
 
         PlaySoundForStateChange(faceDownBefore, handCountBefore);
 
+        // Any card now in a hand zone that came from a DIFFERENT zone gets a fly-in.
+        // This covers player-receives-from-deck, player-receives-from-opponent,
+        // AND opponent-receives-from-deck or opponent-receives-from-player.
         var received = _state.Zones.Values
-            .Where(z => z.Type == "hand" &&
-                       (z.Visibility == "all" ||
-                       (z.Visibility is "owner" or "top" && z.OwnerId == humanId)))
-            .SelectMany(z => z.Cards)
-            .Select(c => c.Id)
-            .Where(id => !visibleHandBefore.Contains(id))
+            .Where(z => z.Type == "hand")
+            .SelectMany(z => z.Cards.Select(c => (CardId: c.Id, ZoneId: z.Id)))
+            .Where(x => !cardSourceZone.TryGetValue(x.CardId, out var prev) || prev != x.ZoneId)
+            .Select(x => x.CardId)
             .ToList();
 
         // Resolve source positions:
@@ -577,7 +566,7 @@ public partial class GameTablePage : ContentPage
     // ── Fly-in entry builders ─────────────────────────────────────────────────
 
     /// <summary>
-    /// Builds fly-in entries for cards the human player just received.
+    /// Builds fly-in entries for cards that just arrived in any hand zone.
     /// Must be called after <c>TableCanvas.GameState</c> is updated so fan-slot
     /// positions are computed against the new layout.
     /// </summary>
