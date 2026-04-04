@@ -147,6 +147,14 @@
                         Clicked="OnStartGameClicked"
                         Margin="0,0,0,12" />
 
+                    <!-- Host Multiplayer -->
+                    <Button
+                        Text="Host Multiplayer"
+                        Style="{StaticResource HudButton}"
+                        HorizontalOptions="Center"
+                        Clicked="OnHostMultiplayerClicked"
+                        Margin="0,0,0,4" />
+
                     <!-- View Rules (only when help file exists) -->
                     <Button
                         Text="View Rules"

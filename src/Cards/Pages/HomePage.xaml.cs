@@ -45,6 +45,20 @@ public partial class HomePage : ContentPage
         if (game is null) return;
         _viewModel.SelectedGame = null;
 
+        await Shell.Current.GoToAsync("gametable", new Dictionary<string, object>
+        {
+            ["GameId"]      = game.Id,
+            ["PlayerCount"] = game.MinPlayers,
+            ["HouseRules"]  = new List<string>(),
+        });
+    }
+
+    private async void OnHostMultiplayerClicked(object? sender, EventArgs e)
+    {
+        var game = _viewModel.SelectedGame;
+        if (game is null) return;
+        _viewModel.SelectedGame = null;
+
         await Shell.Current.GoToAsync("gamesetup", new Dictionary<string, object>
         {
             ["Game"] = game
