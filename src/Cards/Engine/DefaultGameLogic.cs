@@ -122,11 +122,19 @@ public sealed class DefaultGameLogic : GameLogicBase
             state.Metadata.Remove("trick_spades_broken");
             state.Metadata.Remove("trick_number");
             state.Metadata.Remove("euchre_maker");
+            state.Metadata.Remove("dd_knock_player");
+            state.Metadata.Remove("dd_gin");
+            state.Metadata.Remove("dd_go_out_player");
+            state.Metadata.Remove("dd_go_out_team");
+            state.Metadata.Remove("pot");
             foreach (var p in state.Players)
             {
                 state.Metadata.Remove($"tricks_taken:{p.Id}");
                 state.Metadata.Remove($"bid:{p.Id}");
                 state.Metadata.Remove($"bid_alone:{p.Id}");
+                state.Metadata.Remove($"bet_folded:{p.Id}");
+                state.Metadata.Remove($"bet_all_in:{p.Id}");
+                state.Metadata.Remove($"meld_score:{p.Id}");
             }
 
             state.CurrentPhaseId     = logic._firstPhaseId;

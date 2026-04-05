@@ -34,12 +34,14 @@ public sealed class SetupEngine : ISetupStrategy
 
     internal static void CreatePlayers(GameState state, int playerCount)
     {
-        var names = state.Definition.Players?.Names;
+        var names        = state.Definition.Players?.Names;
+        int startScore   = state.Definition.Players?.StartingScore ?? 0;
         for (int i = 0; i < playerCount; i++)
         {
             string id   = $"player{i}";
             string name = names is not null && i < names.Count ? names[i] : $"Player {i + 1}";
             state.Players.Add(new Player(id, name));
+            if (startScore > 0) state.Scores[id] = startScore;
         }
     }
 

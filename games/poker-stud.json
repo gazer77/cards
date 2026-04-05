@@ -4,7 +4,7 @@
   "name": "Stud",
   "version": "1.0",
   "deck": "standard-52",
-  "players": { "min": 2, "max": 8 },
+  "players": { "min": 2, "max": 8, "starting_score": 1000 },
   "teams": false,
   "dealer": "random",
   "rounds": {
@@ -107,12 +107,7 @@
       "type": "showdown",
       "evaluator": "high_hand",
       "hand_size": 5,
-      "use_from_hand": { "min": 5, "max": 7 },
-      "next": {
-        "if": "win_condition",
-        "then": "end",
-        "else": "deal_third_street"
-      }
+      "use_from_hand": { "min": 5, "max": 7 }
     }
   ],
   "scoring": {

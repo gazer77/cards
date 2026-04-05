@@ -72,6 +72,8 @@ Custom deck:
 
 `names`: display names indexed by seat (index 0 = human player). Defaults to "Player 1", "Player 2", … when absent.
 
+`starting_score`: initial chip/score count per player. Used by poker variants with `win_condition: last_with_chips`. Default `0`.
+
 ---
 
 ## Teams
@@ -241,6 +243,7 @@ All phase types are registered in `PhaseHandlerRegistry`.
 | `blackjack_round` | Implemented | Blackjack |
 | `flip_compare_ready` | Implemented | High Card (internal) |
 | `flip_compare_result` | Implemented | High Card (internal) |
+| `deal` | Implemented | Texas Hold'em, Stud, Euchre (initial deal phase) |
 
 ### `pass_cards`
 All players simultaneously choose cards to pass.
@@ -431,6 +434,40 @@ Reveal all remaining hands and determine winner by hand rank.
 ```
 
 `evaluator`: `"high_hand"` | `"low_hand"` | `"high_low"`
+
+---
+
+### `deal`
+In-round deal phase: burn an optional card then deal to a zone or all players.  Auto-advances.
+```json
+{
+  "id": "flop",
+  "type": "deal",
+  "burn_first": true,
+  "to": "community",
+  "count": 3,
+  "face": "up"
+}
+```
+```json
+{
+  "id": "deal_hole",
+  "type": "deal",
+  "to": "each_player",
+  "cards": [
+    { "count": 2, "face": "down" },
+    { "count": 1, "face": "up" }
+  ]
+}
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `to` | `"community"` | Zone ID, `"each_player"`, or `"each_active_player"` (skips folded) |
+| `count` | `1` | Cards to deal (ignored when `cards` array is present) |
+| `face` | `"down"` | `"up"` or `"down"` (ignored when `cards` array is present) |
+| `cards` | — | Array of `{count, face}` segments for mixed face-up/down deals |
+| `burn_first` | `false` | Discard one card to the `burn` zone before dealing |
 
 ---
 

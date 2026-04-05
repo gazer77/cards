@@ -4,7 +4,7 @@
   "name": "Texas Hold'em",
   "version": "1.0",
   "deck": "standard-52",
-  "players": { "min": 2, "max": 9 },
+  "players": { "min": 2, "max": 9, "starting_score": 1000 },
   "teams": false,
   "dealer": "random",
   "rounds": {

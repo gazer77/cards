@@ -187,20 +187,41 @@ public static class PhaseHandlerRegistry
     {
         private readonly string _nextPhaseId;
         private readonly string _to;
+        private readonly bool   _burnFirst;
+        // Simple deal: single count + face.
         private readonly int    _count;
         private readonly bool   _faceUp;
-        private readonly bool   _burnFirst;
+        // Mixed-face deal: list of (count, faceUp) segments from "cards" array.
+        private readonly List<(int Count, bool FaceUp)> _segments = [];
 
         public DealPhaseHandler(PhaseDefinition def, string nextPhaseId)
         {
             _nextPhaseId = nextPhaseId;
             _to          = GetExtra(def, "to") ?? "community";
-            _faceUp      = string.Equals(GetExtra(def, "face"), "up", StringComparison.OrdinalIgnoreCase);
             _burnFirst   = def.Extra?.TryGetValue("burn_first", out var bfe) == true
                            && bfe.ValueKind == System.Text.Json.JsonValueKind.True;
-            _count       = def.Extra?.TryGetValue("count", out var ce) == true
-                           && ce.ValueKind == System.Text.Json.JsonValueKind.Number
-                           ? ce.GetInt32() : 1;
+
+            // "cards" array overrides simple count/face.
+            if (def.Extra?.TryGetValue("cards", out var cardsEl) == true
+                && cardsEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var seg in cardsEl.EnumerateArray())
+                {
+                    int  cnt  = seg.TryGetProperty("count", out var cv) && cv.ValueKind == System.Text.Json.JsonValueKind.Number ? cv.GetInt32() : 1;
+                    bool face = seg.TryGetProperty("face",  out var fv) && fv.ValueKind == System.Text.Json.JsonValueKind.String
+                                && string.Equals(fv.GetString(), "up", StringComparison.OrdinalIgnoreCase);
+                    _segments.Add((cnt, face));
+                }
+                _count = _segments.Sum(s => s.Count);
+                _faceUp = false; // unused when _segments is set
+            }
+            else
+            {
+                _faceUp = string.Equals(GetExtra(def, "face"), "up", StringComparison.OrdinalIgnoreCase);
+                _count  = def.Extra?.TryGetValue("count", out var ce) == true
+                          && ce.ValueKind == System.Text.Json.JsonValueKind.Number
+                          ? ce.GetInt32() : 1;
+            }
         }
 
         // Auto-advance without user input.
@@ -219,17 +240,30 @@ public static class PhaseHandlerRegistry
                 if (burnCard is not null) burn?.Add(burnCard);
             }
 
-            if (string.Equals(_to, "each_player", StringComparison.OrdinalIgnoreCase))
+            bool toEachPlayer = string.Equals(_to, "each_player",        StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(_to, "each_active_player", StringComparison.OrdinalIgnoreCase);
+            bool activeOnly   = string.Equals(_to, "each_active_player", StringComparison.OrdinalIgnoreCase);
+
+            if (toEachPlayer)
             {
-                foreach (var p in state.Players)
+                var targets = state.Players
+                    .Where(p => !activeOnly || state.Metadata.GetValueOrDefault($"bet_folded:{p.Id}") != "true")
+                    .Select(p => state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand"))
+                    .ToList();
+
+                if (_segments.Count > 0)
                 {
-                    var hand = state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand");
-                    for (int i = 0; i < _count && !deck.IsEmpty; i++)
-                    {
-                        var card = deck.Draw()!;
-                        card.IsFaceUp = _faceUp;
-                        hand?.Add(card);
-                    }
+                    // Mixed-face: deal each segment to each player in turn.
+                    foreach (var (segCount, segFace) in _segments)
+                        foreach (var hand in targets)
+                            for (int i = 0; i < segCount && !deck.IsEmpty; i++)
+                            { var c = deck.Draw()!; c.IsFaceUp = segFace; hand?.Add(c); }
+                }
+                else
+                {
+                    foreach (var hand in targets)
+                        for (int i = 0; i < _count && !deck.IsEmpty; i++)
+                        { var c = deck.Draw()!; c.IsFaceUp = _faceUp; hand?.Add(c); }
                 }
             }
             else

@@ -126,6 +126,14 @@ public class PlayerConfig
     /// </summary>
     [JsonPropertyName("names")]
     public List<string>? Names { get; set; }
+
+    /// <summary>
+    /// Initial score (chip count) each player starts with.
+    /// Used by chip-based games (Texas Hold'em, Stud).
+    /// Default 0 means no starting chips.
+    /// </summary>
+    [JsonPropertyName("starting_score")]
+    public int StartingScore { get; set; } = 0;
 }
 
 public class ZoneDefinition
