@@ -59,20 +59,7 @@
     },
     {
       "id": "score",
-      "type": "score",
-      "next": {
-        "if": "win_condition",
-        "then": "end",
-        "else": "deal_new_round"
-      }
-    },
-    {
-      "id": "deal_new_round",
-      "type": "deal",
-      "to": "each_player",
-      "count": 12,
-      "face": "down",
-      "next": "bid"
+      "type": "score"
     }
   ],
   "scoring": {

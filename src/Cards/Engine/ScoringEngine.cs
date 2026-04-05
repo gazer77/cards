@@ -11,9 +11,11 @@ namespace Cards.Engine;
 ///   card_points  — sum card values from a zone by suit/card rules (Hearts).
 ///   trick_bid    — bid-vs-taken scoring with bags and nil bonuses (Spades).
 ///   grid_values  — sum grid card values with column-pair rules (Golf).
-///   euchre       — euchre team scoring (stub — implement with trick_taking).
-///   hand_rank    — poker hand-rank winner (stub — implement with showdown).
-///   deadwood     — Gin Rummy unmelded card values (stub — implement with meld).
+///   euchre       — euchre team scoring (maker/euchre/loner points).
+///   deadwood     — Gin Rummy unmelded card values with knock/gin/undercut.
+///   meld_points  — canasta-style meld scoring with canasta bonuses and go-out bonus.
+///   pinochle     — trick-point scoring with bid-set penalty.
+///   hand_rank    — poker hand-rank winner (handled by ShowdownHandler; no-op here).
 ///   blackjack    — chip tracking (handled by BlackjackLogic; no-op here).
 /// </summary>
 public static class ScoringEngine
@@ -56,6 +58,14 @@ public static class ScoringEngine
             case "hand_rank":
                 // Poker hand-rank scoring is handled by ShowdownHandler (pot distribution).
                 // The score phase is not used in poker flows; this is a no-op fallback.
+                break;
+
+            case "meld_points":
+                ApplyMeldPoints(state, scoring);
+                break;
+
+            case "pinochle":
+                ApplyPinochle(state, scoring);
                 break;
         }
     }
@@ -617,6 +627,342 @@ public static class ScoringEngine
             if (RankValues.TryGetValue(r, out int v)) return v;
             return UsePip ? r : DefaultVal;
         }
+    }
+
+    // ── meld_points ───────────────────────────────────────────────────────────
+    // Hand and Foot / Canasta: score meld zones, detect canastas, deduct hand cards,
+    // award go-out bonus to the team/player who went out.
+
+    private static void ApplyMeldPoints(GameState state, ScoringDefinition scoring)
+    {
+        bool accumulate     = GetBool(scoring, "accumulate") ?? true;
+        bool countByTeam    = string.Equals(GetString(scoring, "count_by"), "team",
+                                  StringComparison.OrdinalIgnoreCase)
+                              && state.Teams.Count > 0;
+        int natCanBonus     = GetInt(scoring, "natural_canasta_bonus") ?? 500;
+        int wildCanBonus    = GetInt(scoring, "wild_canasta_bonus")    ?? 1000;
+        int goOutBonus      = GetInt(scoring, "go_out_bonus")          ?? 100;
+        var cardValues      = ParseMeldCardValues(scoring);
+        var wildCards       = ParseMeldWildCards(scoring);
+
+        string? goOutPlayer = state.Metadata.GetValueOrDefault("dd_go_out_player");
+        string? goOutTeam   = state.Metadata.GetValueOrDefault("dd_go_out_team");
+
+        var scores = new Dictionary<string, int>();
+
+        if (countByTeam)
+        {
+            foreach (var team in state.Teams)
+            {
+                int pts = 0;
+
+                // Meld zone for this team.
+                var meldZone = state.FindZone($"meld:{team.Id}");
+                if (meldZone is not null)
+                {
+                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus);
+                }
+
+                // Deduct card values for cards remaining in each player's hand.
+                foreach (var pid in team.PlayerIds)
+                {
+                    var hand = state.FindZone($"hand:{pid}") ?? state.FindZone("hand");
+                    if (hand is not null)
+                        pts -= hand.Cards.Sum(c => cardValues.GetValue(c));
+                    // Also deduct foot zone if present.
+                    var foot = state.FindZone($"foot:{pid}");
+                    if (foot is not null)
+                        pts -= foot.Cards.Sum(c => cardValues.GetValue(c));
+                }
+
+                // Go-out bonus.
+                if (goOutTeam == team.Id)
+                    pts += goOutBonus;
+
+                scores[team.Id] = pts;
+            }
+        }
+        else
+        {
+            foreach (var p in state.Players)
+            {
+                int pts = 0;
+
+                var meldZone = state.FindZone($"meld:{p.Id}") ?? state.FindZone("meld");
+                if (meldZone is not null)
+                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus);
+
+                var hand = state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand");
+                if (hand is not null)
+                    pts -= hand.Cards.Sum(c => cardValues.GetValue(c));
+
+                if (goOutPlayer == p.Id)
+                    pts += goOutBonus;
+
+                scores[p.Id] = pts;
+            }
+        }
+
+        foreach (var (id, pts) in scores)
+        {
+            if (accumulate) state.AddScore(id, pts);
+            else            state.Scores[id] = pts;
+        }
+
+        // Build status summary.
+        string goOutLabel = goOutPlayer is not null
+            ? state.Players.FirstOrDefault(p => p.Id == goOutPlayer)?.Name ?? "Someone"
+            : "";
+        string outPart = goOutLabel.Length > 0 ? $"{goOutLabel} went out! " : "";
+        string summary = outPart + string.Join("  |  ", scores.Select(kv =>
+        {
+            string label = countByTeam
+                ? (state.Teams.FirstOrDefault(t => t.Id == kv.Key) is { } t
+                    ? (t.Contains(state.Players[0].Id) ? "Your team" : t.Name)
+                    : kv.Key)
+                : (state.Players.FirstOrDefault(p => p.Id == kv.Key) is { } pl
+                    ? (pl == state.Players[0] ? "You" : pl.Name)
+                    : kv.Key);
+            int total = state.GetScore(kv.Key);
+            return $"{label}: +{kv.Value} = {total}";
+        }));
+        state.Metadata["status"]        = summary;
+        state.Metadata["score_summary"] = summary;
+    }
+
+    /// <summary>
+    /// Scores cards in a meld zone: card point values, natural canasta bonuses,
+    /// and wild canasta bonuses.  Cards are grouped by rank; a group of 7+ is a canasta.
+    /// </summary>
+    private static int ScoreMeldZone(
+        Zone zone, MeldCardValues values, HashSet<string> wildCards,
+        int natCanBonus, int wildCanBonus)
+    {
+        int pts = zone.Cards.Sum(c => values.GetValue(c));
+
+        // Group by rank to detect canastas (7+ of same rank).
+        var byRank = zone.Cards.GroupBy(c => c.Rank);
+        foreach (var group in byRank)
+        {
+            if (group.Count() < 7) continue;
+            bool hasWild = group.Any(c => wildCards.Contains(c.Rank.ToString().ToLower())
+                                       || (c.Rank == Rank.Two && wildCards.Contains("2")));
+            pts += hasWild ? wildCanBonus : natCanBonus;
+        }
+
+        return pts;
+    }
+
+    private static MeldCardValues ParseMeldCardValues(ScoringDefinition scoring)
+    {
+        var dv = new MeldCardValues();
+        if (scoring.Extra?.TryGetValue("card_values", out var el) != true
+            || el.ValueKind != JsonValueKind.Object) return dv;
+        foreach (var prop in el.EnumerateObject())
+        {
+            if (prop.Value.ValueKind != JsonValueKind.Number) continue;
+            int v = prop.Value.GetInt32();
+            switch (prop.Name.ToLowerInvariant())
+            {
+                case "joker":   dv.Joker      = v; break;
+                case "a":       dv.Ace        = v; break;
+                case "k":       dv.King       = v; break;
+                case "q":       dv.Queen      = v; break;
+                case "j":       dv.Jack       = v; break;
+                case "default": dv.DefaultVal = v; break;
+                default:
+                    if (int.TryParse(prop.Name, out int rank) && rank >= 2 && rank <= 10)
+                        dv.RankValues[rank] = v;
+                    break;
+            }
+        }
+        return dv;
+    }
+
+    private static HashSet<string> ParseMeldWildCards(ScoringDefinition scoring)
+    {
+        var wilds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (scoring.Extra?.TryGetValue("wild_cards", out var el) != true
+            || el.ValueKind != JsonValueKind.Array) return wilds;
+        foreach (var item in el.EnumerateArray())
+            if (item.ValueKind == JsonValueKind.String && item.GetString() is { } s)
+                wilds.Add(s);
+        return wilds;
+    }
+
+    private sealed class MeldCardValues
+    {
+        public int  Joker      = 50;
+        public int  Ace        = 20;
+        public int  King       = 10;
+        public int  Queen      = 10;
+        public int  Jack       = 10;
+        public int  DefaultVal = 5;
+        public Dictionary<int, int> RankValues = [];
+
+        public int GetValue(Card c)
+        {
+            // Joker is a special rank in extended decks; fall back to DefaultVal.
+            if (c.Rank == Rank.Ace)   return Ace;
+            if (c.Rank == Rank.King)  return King;
+            if (c.Rank == Rank.Queen) return Queen;
+            if (c.Rank == Rank.Jack)  return Jack;
+            int r = (int)c.Rank;
+            if (RankValues.TryGetValue(r, out int v)) return v;
+            return DefaultVal;
+        }
+    }
+
+    // ── pinochle ───────────────────────────────────────────────────────────────
+    // Trick points from won_tricks zones (per team).
+    // Maker must meet bid or gets set (loses bid amount).
+    // Meld points are not re-counted here — they are scored during the meld phase
+    // via MeldHandler and added to state.Scores directly by that handler.
+    // (If meld_score:{playerId} metadata is present it is also summed here.)
+
+    private static void ApplyPinochle(GameState state, ScoringDefinition scoring)
+    {
+        bool accumulate    = GetBool(scoring, "accumulate") ?? true;
+        int  lastTrickBonus = GetInt(scoring, "last_trick_bonus") ?? 10;
+        bool bidSetPenalty  = string.Equals(GetString(scoring, "bid_set_penalty"), "bid_amount",
+                                  StringComparison.OrdinalIgnoreCase);
+
+        // Parse per-rank trick point values.
+        var trickPts = ParsePinochleTrickValues(scoring);
+
+        string? bidderId = GetHighBidder(state);
+        Team?   makerTeam = bidderId is not null ? state.GetPlayerTeam(bidderId) : null;
+        int     bid = bidderId is not null
+            ? int.TryParse(state.Metadata.GetValueOrDefault($"bid:{bidderId}"), out int b) ? b : 0
+            : 0;
+
+        // Find who took the last trick.
+        string? lastTrickWinnerId = state.Metadata.GetValueOrDefault("trick_last_winner");
+
+        var roundScores = new Dictionary<string, int>();
+
+        foreach (var team in state.Teams)
+        {
+            var wonZone = state.FindZone($"won_tricks:{team.Id}");
+            int pts = 0;
+            if (wonZone is not null)
+            {
+                foreach (var card in wonZone.Cards)
+                    pts += trickPts.GetValue(card);
+            }
+
+            // Last trick bonus.
+            if (lastTrickWinnerId is not null)
+            {
+                var lastTeam = state.GetPlayerTeam(lastTrickWinnerId);
+                if (lastTeam?.Id == team.Id) pts += lastTrickBonus;
+            }
+
+            // Add any meld points stored in metadata by MeldHandler.
+            foreach (var pid in team.PlayerIds)
+            {
+                if (state.Metadata.TryGetValue($"meld_score:{pid}", out var ms)
+                    && int.TryParse(ms, out int meld))
+                    pts += meld;
+            }
+
+            roundScores[team.Id] = pts;
+        }
+
+        // Bid-set check: maker must meet or exceed bid.
+        if (makerTeam is not null && bid > 0)
+        {
+            int makerPts = roundScores.GetValueOrDefault(makerTeam.Id);
+            if (makerPts < bid)
+            {
+                // Set: maker loses bid amount.
+                if (bidSetPenalty)
+                    roundScores[makerTeam.Id] = -bid;
+            }
+        }
+
+        foreach (var (id, pts) in roundScores)
+        {
+            if (accumulate) state.AddScore(id, pts);
+            else            state.Scores[id] = pts;
+        }
+
+        // Status line.
+        bool wasMade = makerTeam is null || roundScores.GetValueOrDefault(makerTeam.Id) >= 0;
+        string outcome = makerTeam is null ? ""
+            : wasMade ? $"Bid of {bid} made!  " : $"Set! Bid of {bid} lost.  ";
+
+        string teamSummary = string.Join("  |  ", state.Teams.Select(t =>
+        {
+            bool humanTeam = state.Players.Count > 0 && t.Contains(state.Players[0].Id);
+            string label = humanTeam ? "Your team" : t.Name;
+            int total = state.GetTeamScore(t.Id);
+            return $"{label}: {total}";
+        }));
+
+        string summary = outcome + teamSummary;
+        state.Metadata["status"]        = summary;
+        state.Metadata["score_summary"] = summary;
+    }
+
+    /// <summary>Returns the player who placed the highest numeric bid this round.</summary>
+    private static string? GetHighBidder(GameState state)
+    {
+        string? bestId  = null;
+        int     bestBid = -1;
+        foreach (var p in state.Players)
+        {
+            if (state.Metadata.TryGetValue($"bid:{p.Id}", out var bidStr)
+                && int.TryParse(bidStr, out int b) && b > bestBid)
+            {
+                bestBid = b;
+                bestId  = p.Id;
+            }
+        }
+        return bestId;
+    }
+
+    private static PinochleTrickValues ParsePinochleTrickValues(ScoringDefinition scoring)
+    {
+        var ptv = new PinochleTrickValues();
+        if (scoring.Extra?.TryGetValue("trick_points", out var el) != true
+            || el.ValueKind != JsonValueKind.Object) return ptv;
+        foreach (var prop in el.EnumerateObject())
+        {
+            if (prop.Value.ValueKind != JsonValueKind.Number) continue;
+            int v = prop.Value.GetInt32();
+            switch (prop.Name.ToUpperInvariant())
+            {
+                case "A":  ptv.Ace   = v; break;
+                case "10": ptv.Ten   = v; break;
+                case "K":  ptv.King  = v; break;
+                case "Q":  ptv.Queen = v; break;
+                case "J":  ptv.Jack  = v; break;
+                case "9":  ptv.Nine  = v; break;
+            }
+        }
+        return ptv;
+    }
+
+    private sealed class PinochleTrickValues
+    {
+        public int Ace   = 11;
+        public int Ten   = 10;
+        public int King  = 4;
+        public int Queen = 3;
+        public int Jack  = 2;
+        public int Nine  = 0;
+
+        public int GetValue(Card c) => c.Rank switch
+        {
+            Rank.Ace   => Ace,
+            Rank.Ten   => Ten,
+            Rank.King  => King,
+            Rank.Queen => Queen,
+            Rank.Jack  => Jack,
+            Rank.Nine  => Nine,
+            _          => 0,
+        };
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -11,9 +11,10 @@ namespace Cards.Engine;
 ///   draw_count      — cards to draw per turn (default 1)
 ///   discard_count   — cards to discard per turn (default 1)
 ///   target_zone     — "hand" (default) | "grid" — where drawn card goes
-///   special_actions — ["knock","gin"] — extra action buttons shown when conditions met
+///   special_actions — ["knock","gin","go_out"] — extra action buttons shown when conditions met
 ///   knock_condition — "deadwood_lte_10" | "deadwood_eq_0" | "deadwood_lte_first_discard"
 ///   gin_condition   — "deadwood_eq_0" (default)
+///   go_out_condition — "hand_empty" | "all_melds_complete_and_hand_empty" (default hand_empty)
 ///
 /// Turn sub-states (stored in metadata["dd_turn_state"]):
 ///   "draw"    — player must draw a card
@@ -29,6 +30,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     private readonly List<string> _specialActions;
     private readonly string       _knockCondition;
     private readonly string       _ginCondition;
+    private readonly string       _goOutCondition;
 
     public DrawDiscardHandler(PhaseDefinition def, string nextPhaseId)
     {
@@ -39,8 +41,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         _discardCount    = GetInt(def, "discard_count") ?? 1;
         _targetZone      = GetString(def, "target_zone") ?? "hand";
         _specialActions  = ParseStringArray(def, "special_actions");
-        _knockCondition  = GetString(def, "knock_condition") ?? "deadwood_lte_10";
-        _ginCondition    = GetString(def, "gin_condition")   ?? "deadwood_eq_0";
+        _knockCondition  = GetString(def, "knock_condition")   ?? "deadwood_lte_10";
+        _ginCondition    = GetString(def, "gin_condition")     ?? "deadwood_eq_0";
+        _goOutCondition  = GetString(def, "go_out_condition")  ?? "hand_empty";
     }
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
@@ -67,6 +70,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 actions.Add(new GameAction("gin", Label: "Gin!"));
             if (_specialActions.Contains("knock") && ConditionMet(state, _knockCondition))
                 actions.Add(new GameAction("knock", Label: "Knock"));
+            if (_specialActions.Contains("go_out") && GoOutConditionMet(state))
+                actions.Add(new GameAction("go_out", Label: "Go Out"));
         }
 
         return actions;
@@ -122,8 +127,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             }
         }
 
-        if (action.Type == "knock") { Knock(state, false); return; }
-        if (action.Type == "gin")   { Knock(state, true);  return; }
+        if (action.Type == "knock")   { Knock(state, false); return; }
+        if (action.Type == "gin")     { Knock(state, true);  return; }
+        if (action.Type == "go_out")  { GoOut(state);        return; }
     }
 
     // ── Core turn logic ───────────────────────────────────────────────────────
@@ -178,6 +184,24 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         state.Metadata["dd_gin"]          = isGin ? "true" : "false";
         state.Metadata.Remove("dd_turn_state");
         state.CurrentPhaseId = _nextPhaseId;
+    }
+
+    private void GoOut(GameState state)
+    {
+        state.Metadata["dd_go_out_player"] = state.CurrentPlayer.Id;
+        var team = state.GetPlayerTeam(state.CurrentPlayer.Id);
+        if (team is not null)
+            state.Metadata["dd_go_out_team"] = team.Id;
+        state.Metadata.Remove("dd_turn_state");
+        state.CurrentPhaseId = _nextPhaseId;
+    }
+
+    private bool GoOutConditionMet(GameState state)
+    {
+        var hand = PlayerHand(state, state.CurrentPlayer.Id);
+        bool handEmpty = hand is null || hand.IsEmpty;
+        // Both "hand_empty" and "all_melds_complete_and_hand_empty" use hand-empty as a stub check.
+        return handEmpty;
     }
 
     // ── Condition checks ──────────────────────────────────────────────────────

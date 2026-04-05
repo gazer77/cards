@@ -469,11 +469,11 @@ All types are dispatched by `ScoringEngine.Apply(state)`, called from the `score
 | `trick_bid` | Implemented | Spades |
 | `grid_values` | Implemented | Golf |
 | `blackjack` | Implemented | Blackjack |
-| `euchre` | Stub | Euchre |
-| `hand_rank` | Stub | Poker variants |
-| `deadwood` | Stub | Gin Rummy |
-| `meld_points` | Stub | Hand and Foot |
-| `pinochle` | Stub | Pinochle |
+| `euchre` | Implemented | Euchre |
+| `deadwood` | Implemented | Gin Rummy |
+| `meld_points` | Implemented | Hand and Foot |
+| `pinochle` | Implemented | Pinochle |
+| `hand_rank` | No-op | Poker variants (handled by ShowdownHandler) |
 
 ### `card_points`
 Cards in won zones are worth point values.

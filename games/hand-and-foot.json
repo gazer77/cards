@@ -44,22 +44,7 @@
     },
     {
       "id": "score",
-      "type": "score",
-      "next": {
-        "if": "win_condition",
-        "then": "end",
-        "else": "deal_new_round"
-      }
-    },
-    {
-      "id": "deal_new_round",
-      "type": "deal",
-      "stacks_per_player": 2,
-      "cards_per_stack": 13,
-      "face": "down",
-      "remainder_to": "deck",
-      "then_flip_top_to": "discard",
-      "next": "play"
+      "type": "score"
     }
   ],
   "scoring": {
