@@ -64,22 +64,40 @@ public static class HouseRuleEngine
         return clone;
     }
 
-    // ── Path dispatch ─────────────────────────────────────────────────────────
+    // ── Public path-patch entry point ─────────────────────────────────────────
 
-    private static void ApplyPath(GameDefinition def, string path, JsonElement value)
+    /// <summary>
+    /// Applies a single path-based override to <paramref name="def"/> in place.
+    /// Used by both house-rule affects and definition inheritance overrides.
+    /// </summary>
+    public static void ApplyPath(GameDefinition def, string path, JsonElement value)
     {
-        // "deck"
-        if (string.Equals(path, "deck", StringComparison.OrdinalIgnoreCase))
+        switch (path.ToLowerInvariant())
         {
-            def.Deck = value;
-            return;
-        }
+            // ── Top-level scalar / element replacements ──────────────────────
+            case "deck":
+                def.Deck = value;
+                return;
 
-        // "teams"
-        if (string.Equals(path, "teams", StringComparison.OrdinalIgnoreCase))
-        {
-            def.Teams = value;
-            return;
+            case "teams":
+                def.Teams = value;
+                def.InvalidateTeamsCache();
+                return;
+
+            case "players":
+                if (value.ValueKind == JsonValueKind.Object)
+                    def.Players = JsonSerializer.Deserialize<PlayerConfig>(value.GetRawText(), _serOpts);
+                return;
+
+            case "scoring":
+                if (value.ValueKind == JsonValueKind.Object)
+                    def.Scoring = JsonSerializer.Deserialize<ScoringDefinition>(value.GetRawText(), _serOpts);
+                return;
+
+            case "win_condition":
+                if (value.ValueKind == JsonValueKind.Object)
+                    def.WinCondition = JsonSerializer.Deserialize<WinCondition>(value.GetRawText(), _serOpts);
+                return;
         }
 
         int dot = path.IndexOf('.');

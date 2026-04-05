@@ -47,6 +47,16 @@ public class GameDefinition
     [JsonPropertyName("phases")]
     public List<PhaseDefinition> Phases { get; set; } = [];
 
+    /// <summary>
+    /// Path-based overrides applied after merging with the parent definition.
+    /// Only present in child definitions that use <c>"extends"</c>.
+    /// Keys follow the same format as <c>house_rules[].affects</c>:
+    ///   "players", "teams", "scoring", "win_condition" — full object replacements.
+    ///   "scoring.field", "phaseId.param" — targeted field patches.
+    /// </summary>
+    [JsonPropertyName("overrides")]
+    public Dictionary<string, JsonElement>? Overrides { get; set; }
+
     [JsonPropertyName("scoring")]
     public ScoringDefinition? Scoring { get; set; }
 
@@ -93,6 +103,9 @@ public class GameDefinition
             return _teamsCache ??= JsonSerializer.Deserialize<TeamsDefinition>(Teams.GetRawText());
         }
     }
+
+    /// <summary>Clears the cached teams config (call after patching the Teams field).</summary>
+    public void InvalidateTeamsCache() => _teamsCache = null;
 
     /// <summary>Scale factor applied to the base card size (1.0 = default).</summary>
     public float CardScale => Ui?.CardScale ?? 1.0f;
