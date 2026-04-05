@@ -121,6 +121,7 @@ public sealed class DefaultGameLogic : GameLogicBase
             state.Metadata.Remove("trick_hearts_broken");
             state.Metadata.Remove("trick_spades_broken");
             state.Metadata.Remove("trick_number");
+            state.Metadata.Remove("trick_last_winner");
             state.Metadata.Remove("euchre_maker");
             state.Metadata.Remove("bid_winner");
             state.Metadata.Remove("bid_trump");

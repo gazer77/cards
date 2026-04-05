@@ -17,6 +17,8 @@ namespace Cards.Engine;
 ///   winner             — "highest" | "highest_trump_then_lead" (default)
 ///   trick_winner_leads_next — true (default) | false
 ///   collect_tricks_to  — zone id prefix, e.g. "won_tricks" (owner expanded)
+///   must_play_higher   — true | false (default): when following trump, must beat current best if able (Pinochle)
+///   loner_skips_partner — true | false (default): skip loner's partner when bid_alone:{id}=true (Euchre)
 ///
 /// State metadata keys (written by this handler):
 ///   trick_trump        — resolved trump suit string, or "" for no trump
@@ -26,6 +28,7 @@ namespace Cards.Engine;
 ///   trick_hearts_broken — "true" once a heart has been played as a non-lead card
 ///   tricks_taken:{id}  — cumulative trick count per player
 ///   trick_played:{id}  — card ID each player played to the current trick
+///   trick_last_winner  — player ID who won the final trick (for last-trick bonus scoring)
 /// </summary>
 public sealed class TrickTakingHandler : IPhaseHandler
 {
@@ -40,6 +43,8 @@ public sealed class TrickTakingHandler : IPhaseHandler
     private readonly string  _collectTo;           // zone id prefix, default "won_tricks"
     private readonly bool    _noPointsFirstTrick;
     private readonly bool    _leftBower;
+    private readonly bool    _mustPlayHigher;
+    private readonly bool    _lonerSkipsPartner;
 
     // Lead restrictions: hearts/spades broken tracking, Qs first trick
     private readonly List<LeadRestriction> _leadRestrictions;
@@ -55,6 +60,8 @@ public sealed class TrickTakingHandler : IPhaseHandler
         _collectTo            = GetString(def, "collect_tricks_to") ?? "won_tricks";
         _noPointsFirstTrick   = GetBool(def, "no_points_first_trick") ?? false;
         _leftBower            = GetBool(def, "left_bower") ?? false;
+        _mustPlayHigher       = GetBool(def, "must_play_higher") ?? false;
+        _lonerSkipsPartner    = GetBool(def, "loner_skips_partner") ?? false;
 
         _leadRestrictions = ParseLeadRestrictions(def);
     }
@@ -90,7 +97,21 @@ public sealed class TrickTakingHandler : IPhaseHandler
         if (_followSuit)
         {
             var followers = hand.Cards.Where(c => EffectiveSuit(c, trump) == leadSuit).ToList();
-            if (followers.Count > 0) return followers.Select(c => c.Id).ToList();
+            if (followers.Count > 0)
+            {
+                // must_play_higher: when following trump, must beat current best trump if able.
+                if (_mustPlayHigher && !string.IsNullOrEmpty(trump)
+                    && string.Equals(leadSuit, trump, StringComparison.OrdinalIgnoreCase))
+                {
+                    Card? bestPlayed = BestTrumpPlayed(state, trump);
+                    if (bestPlayed is not null)
+                    {
+                        var higher = followers.Where(c => LeftBowerRank(c, trump) > LeftBowerRank(bestPlayed, trump)).ToList();
+                        if (higher.Count > 0) return higher.Select(c => c.Id).ToList();
+                    }
+                }
+                return followers.Select(c => c.Id).ToList();
+            }
         }
 
         return hand.Cards.Select(c => c.Id).ToList();
@@ -192,14 +213,17 @@ public sealed class TrickTakingHandler : IPhaseHandler
             string.Equals(trump, "spades", StringComparison.OrdinalIgnoreCase))
             state.Metadata["trick_spades_broken"] = "true";
 
-        // Check if all players have played
-        int playedCount = state.Players.Count(p =>
-            state.Metadata.ContainsKey($"trick_played:{p.Id}"));
+        // Check if all active players have played (loner's partner is excluded).
+        string? partnerToSkip = GetLonerPartnerId(state);
+        int activePlayers  = state.Players.Count - (partnerToSkip is not null ? 1 : 0);
+        int playedCount    = state.Players.Count(p =>
+            p.Id != partnerToSkip && state.Metadata.ContainsKey($"trick_played:{p.Id}"));
 
-        if (playedCount < state.Players.Count)
+        if (playedCount < activePlayers)
         {
-            // Advance to next player
-            state.AdvancePlayer();
+            // Advance to next player, skipping the loner's partner.
+            do { state.AdvancePlayer(); }
+            while (partnerToSkip is not null && state.CurrentPlayer.Id == partnerToSkip);
             UpdateStatus(state);
         }
         else
@@ -259,6 +283,9 @@ public sealed class TrickTakingHandler : IPhaseHandler
         bool handsEmpty = state.Players.All(p => PlayerHand(state, p.Id)?.IsEmpty ?? true);
         if (handsEmpty)
         {
+            // Record who won the last trick for last-trick-bonus scoring.
+            if (!string.IsNullOrEmpty(winnerId))
+                state.Metadata["trick_last_winner"] = winnerId;
             FinishHand(state);
             return;
         }
@@ -474,6 +501,42 @@ public sealed class TrickTakingHandler : IPhaseHandler
             ? "Your turn" : $"{state.CurrentPlayer.Name}'s turn";
         string trumpStr = string.IsNullOrEmpty(trump) ? "" : $"  |  Trump: {trump}";
         state.Metadata["status"] = $"{player}{trumpStr}";
+    }
+
+    // ── Loner and must-play-higher helpers ───────────────────────────────────
+
+    /// <summary>
+    /// Returns the ID of the loner's partner to skip, or null if not going alone.
+    /// </summary>
+    private string? GetLonerPartnerId(GameState state)
+    {
+        if (!_lonerSkipsPartner) return null;
+        foreach (var p in state.Players)
+        {
+            if (state.Metadata.GetValueOrDefault($"bid_alone:{p.Id}") != "true") continue;
+            var team = state.GetPlayerTeam(p.Id);
+            if (team is null) continue;
+            return team.PlayerIds.FirstOrDefault(id => id != p.Id);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the highest-ranked trump card already played to the current trick, or null.
+    /// </summary>
+    private Card? BestTrumpPlayed(GameState state, string trump)
+    {
+        var trick = state.FindZone("trick");
+        if (trick is null) return null;
+        Card? best = null;
+        foreach (var card in trick.Cards)
+        {
+            if (!string.Equals(EffectiveSuit(card, trump), trump, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (best is null || LeftBowerRank(card, trump) > LeftBowerRank(best, trump))
+                best = card;
+        }
+        return best;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
