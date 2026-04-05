@@ -29,4 +29,14 @@ public interface IPhaseHandler
     /// being dragged or has been tap-selected in this phase.
     /// </summary>
     IReadOnlyList<string> GetDropZoneIds(GameState state, string cardId) => [];
+
+    /// <summary>
+    /// Called once by DefaultGameLogic after all phases are registered, before
+    /// the first action.  Use this to perform initialization that must run during
+    /// <see cref="IGameLogic.Initialize"/> — e.g. custom deal sequences that set
+    /// <see cref="GameState.LastDealResult"/> for the animation layer.
+    /// Only invoked on the handler for the game's first phase.
+    /// Default implementation is a no-op.
+    /// </summary>
+    void OnGameStart(GameState state) { }
 }

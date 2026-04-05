@@ -1,4 +1,3 @@
-using Cards.Logic;
 using Cards.Models;
 
 namespace Cards.Engine;
@@ -9,15 +8,18 @@ namespace Cards.Engine;
 /// The key is the <c>implementation</c> field from the game definition, which
 /// defaults to the game's <c>id</c> when absent.  This decouples the game
 /// definition ID (e.g. "euchre-4p") from the logic module (e.g. "euchre").
+///
+/// War, Blackjack, and Go Fish are now fully declarative — they no longer
+/// require a custom logic class and have no entry here.
 /// </summary>
 public static class LogicRegistry
 {
     private static readonly Dictionary<string, Func<IGameLogic>> _factories =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            ["war"]       = () => new WarLogic(),
-            ["blackjack"] = () => new BlackjackLogic(),
-            ["go-fish"]   = () => new GoFishLogic(),
+            // All built-in games now run through DefaultGameLogic + PhaseHandlerRegistry.
+            // Add entries here only when a game needs custom C# beyond what the
+            // declarative engine provides.
         };
 
     /// <summary>

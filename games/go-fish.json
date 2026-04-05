@@ -3,7 +3,6 @@
   "id": "go-fish",
   "name": "Go Fish",
   "version": "1.0",
-  "implementation": "go-fish",
   "deck": "standard-52",
   "players": { "min": 2, "max": 6, "names": ["You", "AI"] },
   "teams": false,

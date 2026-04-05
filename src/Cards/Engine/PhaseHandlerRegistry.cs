@@ -28,6 +28,9 @@ public static class PhaseHandlerRegistry
             ["meld"]                = (def, next) => new MeldHandler(def, next),
             ["poker_betting"]       = (def, next) => new PokerBettingHandler(def, next),
             ["showdown"]            = (def, next) => new ShowdownHandler(def, next),
+            ["war"]                 = (def, next) => new WarHandler(def, next),
+            ["blackjack_round"]     = (def, next) => new BlackjackRoundHandler(def, next),
+            ["go_fish"]             = (def, next) => new GoFishHandler(def, next),
         };
 
     /// <summary>

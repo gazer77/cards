@@ -3,7 +3,6 @@
   "id": "blackjack",
   "name": "Blackjack",
   "version": "1.0",
-  "implementation": "blackjack",
   "deck": "standard-52",
   "players": { "min": 1, "max": 6, "names": ["You", "Dealer"] },
   "teams": false,
@@ -11,11 +10,8 @@
     { "id": "dealer", "count": 1, "type": "fixed_rules", "fills": "ai" }
   ],
   "deal": {
-    "cards_per_player": 2,
-    "face": "mixed",
-    "order": "clockwise",
-    "note": "Player gets both cards face-up; dealer gets first card face-up, second face-down (hole card). Handled by BlackjackLogic.",
-    "anim_delay_ms": 220
+    "cards_per_player": 0,
+    "note": "BlackjackRoundHandler deals internally via OnGameStart to control face orientation."
   },
   "zones": [
     { "id": "deck", "type": "deck", "visibility": "none" },

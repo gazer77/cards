@@ -23,6 +23,17 @@ public abstract class GameLogicBase : IGameLogic
     protected void RegisterPhase(string phaseId, IPhaseHandler handler)
         => _handlers[phaseId] = handler;
 
+    /// <summary>
+    /// Calls <see cref="IPhaseHandler.OnGameStart"/> on the handler registered
+    /// for <paramref name="phaseId"/>.  Used by <see cref="DefaultGameLogic"/>
+    /// to let the first-phase handler perform initialization (e.g. a custom deal).
+    /// </summary>
+    protected void CallOnGameStart(string phaseId, GameState state)
+    {
+        if (_handlers.TryGetValue(phaseId, out var h))
+            h.OnGameStart(state);
+    }
+
     // ── IGameLogic ────────────────────────────────────────────────────────────
 
     public abstract void Initialize(

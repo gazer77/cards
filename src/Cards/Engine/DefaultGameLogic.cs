@@ -39,6 +39,7 @@ public sealed class DefaultGameLogic : GameLogicBase
         StandardDealEngine.Instance.Deal(state, playerCount, enabledHouseRules);
 
         RegisterAllPhases(state);
+        CallOnGameStart(_firstPhaseId, state);
 
         state.CurrentPhaseId     = _firstPhaseId;
         state.Metadata["status"] = "Tap to flip!";
