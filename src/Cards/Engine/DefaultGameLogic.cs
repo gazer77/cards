@@ -44,12 +44,12 @@ public sealed class DefaultGameLogic : GameLogicBase
 
         RegisterAllPhases(state);
 
-        // Register DefaultAiAgent for every non-human seat that doesn't already have one.
+        // Register SmartDefaultAiAgent for every non-human seat that doesn't already have one.
         for (int i = 1; i < state.Players.Count; i++)
         {
             var pid = state.Players[i].Id;
             if (!state.PlayerAgents.ContainsKey(pid))
-                state.PlayerAgents[pid] = new DefaultAiAgent(pid);
+                state.PlayerAgents[pid] = new SmartDefaultAiAgent(pid);
         }
 
         CallOnGameStart(_firstPhaseId, state);
