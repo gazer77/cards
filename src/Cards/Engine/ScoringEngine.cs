@@ -115,80 +115,138 @@ public static class ScoringEngine
     // ── trick_bid ─────────────────────────────────────────────────────────────
     // Spades-style: score bid tricks × per_bid_trick, bag penalties, nil bonuses.
     // Bids and trick counts are read from metadata set by the bidding/trick_taking phases.
-    // Keys: "bid:{playerId}" and "tricks_taken:{playerId}" (or team variants).
+    // Keys: "bid:{playerId}" and "tricks_taken:{playerId}".
+    // When count_by == "team", non-nil bids/tricks are aggregated per team and the
+    // team score is stored under the team ID (e.g. "team0") in state.Scores.
 
     private static void ApplyTrickBid(GameState state, ScoringDefinition scoring)
     {
-        int    perBidTrick = GetInt(scoring, "per_bid_trick") ?? 10;
-        bool   countByTeam = string.Equals(GetString(scoring, "count_by"), "team",
-                                StringComparison.OrdinalIgnoreCase);
-        bool   accumulate  = GetBool(scoring, "accumulate") ?? true;
+        int  perBidTrick = GetInt(scoring, "per_bid_trick") ?? 10;
+        bool countByTeam = string.Equals(GetString(scoring, "count_by"), "team",
+                               StringComparison.OrdinalIgnoreCase)
+                           && state.Teams.Count > 0;
+        bool accumulate  = GetBool(scoring, "accumulate") ?? true;
 
-        int?   bagsPerPenalty = null;
-        int    bagPenalty     = 0;
+        int?  bagsPerPenalty = null;
+        int   bagPenalty     = 0;
         if (scoring.Extra?.TryGetValue("bag_penalty", out var bagEl) == true
-            && bagEl.ValueKind == JsonValueKind.Object)
+            && bagEl.ValueKind == JsonValueKind.Object
+            && bagEl.ValueKind != System.Text.Json.JsonValueKind.Null)
         {
             bagsPerPenalty = bagEl.TryGetProperty("bags_per_penalty", out var bpp) ? bpp.GetInt32() : 10;
             bagPenalty     = bagEl.TryGetProperty("penalty", out var pen) ? pen.GetInt32() : -100;
         }
 
-        // Nil / blind nil bonuses.
-        int nilSuccess    = GetNestedInt(scoring, "nil", "success")        ?? 100;
-        int nilFailure    = GetNestedInt(scoring, "nil", "failure")        ?? -100;
-        int blindSuccess  = GetNestedInt(scoring, "blind_nil", "success")  ?? 200;
-        int blindFailure  = GetNestedInt(scoring, "blind_nil", "failure")  ?? -200;
+        int nilSuccess   = GetNestedInt(scoring, "nil",       "success") ?? 100;
+        int nilFailure   = GetNestedInt(scoring, "nil",       "failure") ?? -100;
+        int blindSuccess = GetNestedInt(scoring, "blind_nil", "success") ?? 200;
+        int blindFailure = GetNestedInt(scoring, "blind_nil", "failure") ?? -200;
 
         var roundScores = new Dictionary<string, int>();
 
+        // ── Step 1: per-player nil / blind-nil bonuses (always individual) ────
         foreach (var p in state.Players)
         {
-            string bid     = state.Metadata.GetValueOrDefault($"bid:{p.Id}", "0");
-            string taken   = state.Metadata.GetValueOrDefault($"tricks_taken:{p.Id}", "0");
-            bool   isNil   = string.Equals(bid, "nil", StringComparison.OrdinalIgnoreCase);
-            bool   isBlind = string.Equals(bid, "blind_nil", StringComparison.OrdinalIgnoreCase);
+            string bid   = state.Metadata.GetValueOrDefault($"bid:{p.Id}", "0");
+            bool isNil   = string.Equals(bid, "nil",       StringComparison.OrdinalIgnoreCase);
+            bool isBlind = string.Equals(bid, "blind_nil", StringComparison.OrdinalIgnoreCase);
+            if (!isNil && !isBlind) continue;
 
-            int bidNum    = isNil || isBlind ? 0 : (int.TryParse(bid, out int b) ? b : 0);
-            int takenNum  = int.TryParse(taken, out int t) ? t : 0;
+            int taken     = int.TryParse(state.Metadata.GetValueOrDefault($"tricks_taken:{p.Id}", "0"), out int tt) ? tt : 0;
+            bool success  = taken == 0;
+            int  bonus    = isBlind
+                ? (success ? blindSuccess : blindFailure)
+                : (success ? nilSuccess   : nilFailure);
 
-            int pts = 0;
-
-            if (isNil || isBlind)
-            {
-                bool nilSuccess2 = takenNum == 0;
-                int bonus = isBlind
-                    ? (nilSuccess2 ? blindSuccess : blindFailure)
-                    : (nilSuccess2 ? nilSuccess   : nilFailure);
-                pts += bonus;
-            }
-            else if (takenNum >= bidNum)
-            {
-                pts += bidNum * perBidTrick;
-                int overtricks = takenNum - bidNum;
-                pts += overtricks; // bags count +1 each
-                if (bagsPerPenalty.HasValue)
-                {
-                    int existingBags = GetBags(state, p.Id);
-                    int newBags      = existingBags + overtricks;
-                    SetBags(state, p.Id, newBags);
-                    int penaltiesEarned = newBags / bagsPerPenalty.Value
-                                       - existingBags / bagsPerPenalty.Value;
-                    pts += penaltiesEarned * bagPenalty;
-                }
-            }
-            else
-            {
-                pts -= bidNum * perBidTrick; // set penalty
-            }
-
-            roundScores[p.Id] = pts;
+            string scoreKey = countByTeam
+                ? (state.GetPlayerTeam(p.Id)?.Id ?? p.Id)
+                : p.Id;
+            roundScores[scoreKey] = roundScores.GetValueOrDefault(scoreKey) + bonus;
         }
 
-        // TODO: aggregate by team when countByTeam == true (needs Teams implementation)
-        foreach (var (pid, pts) in roundScores)
+        // ── Step 2: bid scoring — by team or by player ────────────────────────
+        if (countByTeam)
         {
-            if (accumulate) state.AddScore(pid, pts);
-            else            state.Scores[pid] = pts;
+            foreach (var team in state.Teams)
+            {
+                int teamBid   = 0;
+                int teamTaken = 0;
+
+                foreach (var pid in team.PlayerIds)
+                {
+                    string bid = state.Metadata.GetValueOrDefault($"bid:{pid}", "0");
+                    if (string.Equals(bid, "nil",       StringComparison.OrdinalIgnoreCase)) continue;
+                    if (string.Equals(bid, "blind_nil", StringComparison.OrdinalIgnoreCase)) continue;
+                    teamBid   += int.TryParse(bid,                                                              out int b) ? b : 0;
+                    teamTaken += int.TryParse(state.Metadata.GetValueOrDefault($"tricks_taken:{pid}", "0"), out int t) ? t : 0;
+                }
+
+                int pts = 0;
+                if (teamTaken >= teamBid)
+                {
+                    pts += teamBid * perBidTrick;
+                    int overtricks = teamTaken - teamBid;
+                    pts += overtricks;
+                    if (bagsPerPenalty.HasValue)
+                    {
+                        int existingBags    = GetBags(state, team.Id);
+                        int newBags         = existingBags + overtricks;
+                        SetBags(state, team.Id, newBags);
+                        int penaltiesEarned = newBags / bagsPerPenalty.Value
+                                           - existingBags / bagsPerPenalty.Value;
+                        pts += penaltiesEarned * bagPenalty;
+                    }
+                }
+                else
+                {
+                    pts -= teamBid * perBidTrick;
+                }
+
+                roundScores[team.Id] = roundScores.GetValueOrDefault(team.Id) + pts;
+            }
+        }
+        else
+        {
+            foreach (var p in state.Players)
+            {
+                string bid   = state.Metadata.GetValueOrDefault($"bid:{p.Id}", "0");
+                bool isNil   = string.Equals(bid, "nil",       StringComparison.OrdinalIgnoreCase);
+                bool isBlind = string.Equals(bid, "blind_nil", StringComparison.OrdinalIgnoreCase);
+                if (isNil || isBlind) continue; // handled above
+
+                int bidNum   = int.TryParse(bid,                                                              out int b) ? b : 0;
+                int takenNum = int.TryParse(state.Metadata.GetValueOrDefault($"tricks_taken:{p.Id}", "0"), out int t) ? t : 0;
+                int pts      = 0;
+
+                if (takenNum >= bidNum)
+                {
+                    pts += bidNum * perBidTrick;
+                    int overtricks = takenNum - bidNum;
+                    pts += overtricks;
+                    if (bagsPerPenalty.HasValue)
+                    {
+                        int existingBags    = GetBags(state, p.Id);
+                        int newBags         = existingBags + overtricks;
+                        SetBags(state, p.Id, newBags);
+                        int penaltiesEarned = newBags / bagsPerPenalty.Value
+                                           - existingBags / bagsPerPenalty.Value;
+                        pts += penaltiesEarned * bagPenalty;
+                    }
+                }
+                else
+                {
+                    pts -= bidNum * perBidTrick;
+                }
+
+                roundScores[p.Id] = roundScores.GetValueOrDefault(p.Id) + pts;
+            }
+        }
+
+        // Apply scores.
+        foreach (var (id, pts) in roundScores)
+        {
+            if (accumulate) state.AddScore(id, pts);
+            else            state.Scores[id] = pts;
         }
 
         WriteSummary(state, roundScores);

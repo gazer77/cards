@@ -79,6 +79,21 @@ public class GameDefinition
 
     public bool HasTeams => Teams.ValueKind == JsonValueKind.Object;
 
+    private TeamsDefinition? _teamsCache;
+
+    /// <summary>
+    /// Parsed teams configuration, or <c>null</c> when <c>"teams": false</c>.
+    /// Cached after the first call.
+    /// </summary>
+    public TeamsDefinition? TeamsConfig
+    {
+        get
+        {
+            if (!HasTeams) return null;
+            return _teamsCache ??= JsonSerializer.Deserialize<TeamsDefinition>(Teams.GetRawText());
+        }
+    }
+
     /// <summary>Scale factor applied to the base card size (1.0 = default).</summary>
     public float CardScale => Ui?.CardScale ?? 1.0f;
 }
@@ -204,6 +219,32 @@ public class GameUiConfig
     /// </summary>
     [JsonPropertyName("show_game_log")]
     public bool ShowGameLog { get; set; } = true;
+}
+
+public class TeamsDefinition
+{
+    /// <summary>Number of teams (default 2).</summary>
+    [JsonPropertyName("count")]
+    public int Count { get; set; } = 2;
+
+    /// <summary>Players per team (default 2).</summary>
+    [JsonPropertyName("size")]
+    public int Size { get; set; } = 2;
+
+    /// <summary>
+    /// How players are assigned to teams by seat index.
+    /// "alternating" (default) — even seats = team 0, odd seats = team 1 (e.g. 0,2 vs 1,3).
+    /// "sequential"            — first N seats = team 0, next N = team 1 (e.g. 0,1 vs 2,3).
+    /// </summary>
+    [JsonPropertyName("arrangement")]
+    public string Arrangement { get; set; } = "alternating";
+
+    /// <summary>
+    /// When set, teams are only used for games with these exact player counts.
+    /// Outside these counts the game plays as individual (no team grouping).
+    /// </summary>
+    [JsonPropertyName("only_when_players")]
+    public List<int>? OnlyWhenPlayers { get; set; }
 }
 
 public class DealDefinition

@@ -27,6 +27,7 @@ public sealed class SetupEngine : ISetupStrategy
     {
         CreatePlayers(state, playerCount);
         ExpandZones(state);
+        AssignTeams(state, playerCount);
     }
 
     // ── Helpers (internal so GameTablePage.BuildFallbackState can reuse) ─────
@@ -39,6 +40,35 @@ public sealed class SetupEngine : ISetupStrategy
             string id   = $"player{i}";
             string name = names is not null && i < names.Count ? names[i] : $"Player {i + 1}";
             state.Players.Add(new Player(id, name));
+        }
+    }
+
+    internal static void AssignTeams(GameState state, int playerCount)
+    {
+        var config = state.Definition.TeamsConfig;
+        if (config is null) return;
+
+        // Respect "only_when_players" restriction.
+        if (config.OnlyWhenPlayers is { Count: > 0 } restriction
+            && !restriction.Contains(playerCount))
+            return;
+
+        // Build team objects.
+        for (int t = 0; t < config.Count; t++)
+            state.Teams.Add(new Team(t));
+
+        // Assign players to teams.
+        for (int i = 0; i < state.Players.Count; i++)
+        {
+            int teamIdx = config.Arrangement.Equals("sequential", StringComparison.OrdinalIgnoreCase)
+                ? i / config.Size          // sequential: 0,1 → team0 | 2,3 → team1
+                : i % config.Count;        // alternating: 0,2 → team0 | 1,3 → team1
+
+            if (teamIdx >= state.Teams.Count) continue;
+
+            var team = state.Teams[teamIdx];
+            team.PlayerIds.Add(state.Players[i].Id);
+            state.Players[i].TeamIndex = teamIdx;
         }
     }
 

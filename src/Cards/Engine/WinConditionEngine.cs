@@ -45,7 +45,7 @@ public sealed class WinConditionEngine : IWinCondition
         {
             "last_with_cards" => ResolveLastWithCards(state),
             "most_books"      => ResolveMostBooks(state),
-            "lowest_score"    => ResolveLowestScore(state),
+            "lowest_score"    => state.Teams.Count > 0 ? ResolveLowestTeamScore(state) : ResolveLowestScore(state),
             "highest_score"   or
             "target_score"    or
             "last_with_chips" => ResolveByScore(state),
@@ -137,8 +137,13 @@ public sealed class WinConditionEngine : IWinCondition
     private static WinResult? CheckLowestScore(GameState state)
     {
         int threshold = state.Definition.WinCondition?.Threshold ?? int.MaxValue;
-        bool triggered = state.Players.Any(p => state.GetScore(p.Id) >= threshold);
-        return triggered ? ResolveLowestScore(state) : null;
+        if (state.Teams.Count > 0)
+        {
+            bool triggered = state.Teams.Any(t => state.GetTeamScore(t.Id) >= threshold);
+            return triggered ? ResolveLowestTeamScore(state) : null;
+        }
+        bool triggeredP = state.Players.Any(p => state.GetScore(p.Id) >= threshold);
+        return triggeredP ? ResolveLowestScore(state) : null;
     }
 
     private static WinResult ResolveLowestScore(GameState state)
@@ -156,13 +161,35 @@ public sealed class WinConditionEngine : IWinCondition
         return new WinResult(winner.Id, msg);
     }
 
+    private static WinResult ResolveLowestTeamScore(GameState state)
+    {
+        var ranked = state.Teams
+            .Select(t => (Team: t, Score: state.GetTeamScore(t.Id)))
+            .OrderBy(x => x.Score)
+            .ToList();
+
+        if (ranked.Count > 1 && ranked[0].Score == ranked[1].Score)
+            return new WinResult(null, "It's a tie!");
+
+        var winner = ranked[0].Team;
+        string msg = IsHumanTeam(state, winner)
+            ? $"Your team wins! ({winner.Name})"
+            : $"{winner.Name} wins!";
+        return new WinResult(winner.Id, msg);
+    }
+
     // ── highest_score ─────────────────────────────────────────────────────────
 
     private static WinResult? CheckHighestScore(GameState state)
     {
         int threshold = state.Definition.WinCondition?.Threshold ?? int.MaxValue;
-        bool triggered = state.Players.Any(p => state.GetScore(p.Id) >= threshold);
-        return triggered ? ResolveByScore(state) : null;
+        if (state.Teams.Count > 0)
+        {
+            bool triggered = state.Teams.Any(t => state.GetTeamScore(t.Id) >= threshold);
+            return triggered ? ResolveByTeamScore(state) : null;
+        }
+        bool triggeredP = state.Players.Any(p => state.GetScore(p.Id) >= threshold);
+        return triggeredP ? ResolveByScore(state) : null;
     }
 
     // ── target_score ──────────────────────────────────────────────────────────
@@ -170,11 +197,21 @@ public sealed class WinConditionEngine : IWinCondition
     private static WinResult? CheckTargetScore(GameState state)
     {
         int target = state.Definition.WinCondition?.Score ?? int.MaxValue;
-        var winner = state.Players.FirstOrDefault(p => state.GetScore(p.Id) >= target);
-        if (winner is null) return null;
 
-        string msg = winner == state.Players[0] ? "You win!" : $"{winner.Name} wins!";
-        return new WinResult(winner.Id, msg);
+        if (state.Teams.Count > 0)
+        {
+            var winner = state.Teams.FirstOrDefault(t => state.GetTeamScore(t.Id) >= target);
+            if (winner is null) return null;
+            string msg = IsHumanTeam(state, winner)
+                ? $"Your team wins! ({winner.Name})"
+                : $"{winner.Name} wins!";
+            return new WinResult(winner.Id, msg);
+        }
+
+        var winnerP = state.Players.FirstOrDefault(p => state.GetScore(p.Id) >= target);
+        if (winnerP is null) return null;
+        string msgP = winnerP == state.Players[0] ? "You win!" : $"{winnerP.Name} wins!";
+        return new WinResult(winnerP.Id, msgP);
     }
 
     // ── last_with_chips ───────────────────────────────────────────────────────
@@ -193,6 +230,9 @@ public sealed class WinConditionEngine : IWinCondition
 
     private static WinResult ResolveByScore(GameState state)
     {
+        if (state.Teams.Count > 0)
+            return ResolveByTeamScore(state);
+
         var ranked = state.Players
             .Select(p => (Player: p, Score: state.GetScore(p.Id)))
             .OrderByDescending(x => x.Score)
@@ -205,4 +245,25 @@ public sealed class WinConditionEngine : IWinCondition
         string msg = winner == state.Players[0] ? "You win!" : $"{winner.Name} wins!";
         return new WinResult(winner.Id, msg);
     }
+
+    private static WinResult ResolveByTeamScore(GameState state)
+    {
+        var ranked = state.Teams
+            .Select(t => (Team: t, Score: state.GetTeamScore(t.Id)))
+            .OrderByDescending(x => x.Score)
+            .ToList();
+
+        if (ranked.Count > 1 && ranked[0].Score == ranked[1].Score)
+            return new WinResult(null, "It's a tie!");
+
+        var winner = ranked[0].Team;
+        string msg = IsHumanTeam(state, winner)
+            ? $"Your team wins! ({winner.Name})"
+            : $"{winner.Name} wins!";
+        return new WinResult(winner.Id, msg);
+    }
+
+    /// <summary>True when the human player (Players[0]) is on this team.</summary>
+    private static bool IsHumanTeam(GameState state, Team team)
+        => state.Players.Count > 0 && team.Contains(state.Players[0].Id);
 }

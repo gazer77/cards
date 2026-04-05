@@ -8,6 +8,7 @@ public class GameState
     public required GameDefinition Definition { get; set; }
 
     public List<Player> Players { get; } = [];
+    public List<Team> Teams { get; } = [];
     public Dictionary<string, Zone> Zones { get; } = [];
     public string CurrentPhaseId { get; set; } = string.Empty;
     public int CurrentPlayerIndex { get; set; }
@@ -39,6 +40,16 @@ public class GameState
         => Zones.GetValueOrDefault($"{zoneId}:{playerId}");
 
     public int GetScore(string playerId) => Scores.GetValueOrDefault(playerId, 0);
+
+    /// <summary>Returns the team this player belongs to, or null for individual games.</summary>
+    public Team? GetPlayerTeam(string playerId)
+        => Teams.FirstOrDefault(t => t.PlayerIds.Contains(playerId));
+
+    /// <summary>
+    /// Returns the score for a team ID (e.g. "team0").
+    /// In team games scores are stored under team IDs, not player IDs.
+    /// </summary>
+    public int GetTeamScore(string teamId) => Scores.GetValueOrDefault(teamId, 0);
 
     /// <summary>
     /// Set by <see cref="StandardDealEngine"/> (or custom deal logic via
