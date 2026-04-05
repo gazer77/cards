@@ -96,20 +96,7 @@
       "evaluator": "high_hand",
       "community_zone": "community",
       "hand_size": 5,
-      "use_from_hand": { "min": 0, "max": 2 },
-      "next": {
-        "if": "win_condition",
-        "then": "end",
-        "else": "deal_new_round"
-      }
-    },
-    {
-      "id": "deal_new_round",
-      "type": "deal",
-      "to": "each_player",
-      "count": 2,
-      "face": "down",
-      "next": "bet_preflop"
+      "use_from_hand": { "min": 0, "max": 2 }
     }
   ],
   "scoring": {

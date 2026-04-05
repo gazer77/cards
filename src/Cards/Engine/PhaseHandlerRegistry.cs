@@ -31,6 +31,7 @@ public static class PhaseHandlerRegistry
             ["war"]                 = (def, next) => new WarHandler(def, next),
             ["blackjack_round"]     = (def, next) => new BlackjackRoundHandler(def, next),
             ["go_fish"]             = (def, next) => new GoFishHandler(def, next),
+            ["deal"]                = (def, next) => new DealPhaseHandler(def, next),
         };
 
     /// <summary>
@@ -115,7 +116,7 @@ public static class PhaseHandlerRegistry
     // ── flip_compare_result ───────────────────────────────────────────────────
     // The round's winner collects all played cards, then the game advances.
 
-    private sealed class FlipCompareResultHandler(PhaseDefinition def, string readyPhaseId) : IPhaseHandler
+    private sealed class FlipCompareResultHandler(PhaseDefinition _, string readyPhaseId) : IPhaseHandler
     {
         public IReadOnlyList<GameAction> GetValidActions(GameState _) => [new GameAction("tap")];
 
@@ -170,6 +171,80 @@ public static class PhaseHandlerRegistry
         if (def.Extra?.TryGetValue(key, out var el) == true)
             return el.GetString();
         return null;
+    }
+
+    // ── deal ──────────────────────────────────────────────────────────────────
+    // In-round deal phase: burns an optional card then deals N cards to a named
+    // zone or to each player's hand.  Auto-advances to the next phase.
+    //
+    // Phase definition parameters:
+    //   to          — zone id | "each_player" (default "community")
+    //   count       — cards to deal (default 1)
+    //   face        — "up" | "down" (default "down")
+    //   burn_first  — true | false (default false)
+
+    private sealed class DealPhaseHandler : IPhaseHandler
+    {
+        private readonly string _nextPhaseId;
+        private readonly string _to;
+        private readonly int    _count;
+        private readonly bool   _faceUp;
+        private readonly bool   _burnFirst;
+
+        public DealPhaseHandler(PhaseDefinition def, string nextPhaseId)
+        {
+            _nextPhaseId = nextPhaseId;
+            _to          = GetExtra(def, "to") ?? "community";
+            _faceUp      = string.Equals(GetExtra(def, "face"), "up", StringComparison.OrdinalIgnoreCase);
+            _burnFirst   = def.Extra?.TryGetValue("burn_first", out var bfe) == true
+                           && bfe.ValueKind == System.Text.Json.JsonValueKind.True;
+            _count       = def.Extra?.TryGetValue("count", out var ce) == true
+                           && ce.ValueKind == System.Text.Json.JsonValueKind.Number
+                           ? ce.GetInt32() : 1;
+        }
+
+        // Auto-advance without user input.
+        public TimeSpan? GetAutoAdvanceDelay(GameState _) => TimeSpan.FromMilliseconds(300);
+        public IReadOnlyList<GameAction> GetValidActions(GameState _) => [new GameAction("tap")];
+
+        public void Apply(GameState state, GameAction action)
+        {
+            var deck = state.FindZone("deck");
+            if (deck is null || deck.IsEmpty) { state.CurrentPhaseId = _nextPhaseId; return; }
+
+            if (_burnFirst)
+            {
+                var burn = state.FindZone("burn");
+                var burnCard = deck.Draw();
+                if (burnCard is not null) burn?.Add(burnCard);
+            }
+
+            if (string.Equals(_to, "each_player", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var p in state.Players)
+                {
+                    var hand = state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand");
+                    for (int i = 0; i < _count && !deck.IsEmpty; i++)
+                    {
+                        var card = deck.Draw()!;
+                        card.IsFaceUp = _faceUp;
+                        hand?.Add(card);
+                    }
+                }
+            }
+            else
+            {
+                var target = state.FindZone(_to);
+                for (int i = 0; i < _count && !deck.IsEmpty; i++)
+                {
+                    var card = deck.Draw()!;
+                    card.IsFaceUp = _faceUp;
+                    target?.Add(card);
+                }
+            }
+
+            state.CurrentPhaseId = _nextPhaseId;
+        }
     }
 
     // ── score ─────────────────────────────────────────────────────────────────

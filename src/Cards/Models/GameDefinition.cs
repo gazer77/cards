@@ -296,6 +296,13 @@ public class DealDefinition
     public string? ThenFlipTopTo { get; set; }
 
     /// <summary>
+    /// After dealing (and moving the remainder), flip the top card of this
+    /// named zone face-up in place.  Used for Euchre's kitty turn-up.
+    /// </summary>
+    [JsonPropertyName("then_flip_top_of")]
+    public string? ThenFlipTopOf { get; set; }
+
+    /// <summary>
     /// Optional explicit animation deal sequence.
     /// Each element is [playerIndex, cardCount] — cards are dealt to that player
     /// in that group size, in sequence.  When absent the animation defaults to

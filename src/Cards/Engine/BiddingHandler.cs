@@ -25,15 +25,19 @@ namespace Cards.Engine;
 /// </summary>
 public sealed class BiddingHandler : IPhaseHandler
 {
-    private readonly string _nextPhaseId;
-    private readonly string _style;
-    private readonly int    _minBid;
-    private readonly int    _maxBid;
-    private readonly bool   _passAllowed;
-    private readonly bool   _stickTheDealer;
-    private readonly bool   _onceAround;
-    private readonly bool   _goingAlone;
+    private readonly string  _nextPhaseId;
+    private readonly string  _style;
+    private readonly int     _minBid;
+    private readonly int     _maxBid;
+    private readonly bool    _passAllowed;
+    private readonly bool    _stickTheDealer;
+    private readonly bool    _onceAround;
+    private readonly bool    _goingAlone;
     private readonly List<string> _specialBids;
+    private readonly string? _excludeSuit;          // "turned_card_suit" or literal suit name
+    private readonly string? _ifAcceptedNext;       // phase to go to when someone accepts
+    private readonly string? _ifCalledNext;         // phase to go to when someone calls trump
+    private readonly string? _ifAllPassNext;        // phase to go to when all pass
 
     private static readonly string[] AllSuits = ["clubs", "diamonds", "hearts", "spades"];
 
@@ -48,6 +52,10 @@ public sealed class BiddingHandler : IPhaseHandler
         _onceAround     = GetBool(def, "once_around") ?? false;
         _goingAlone     = GetBool(def, "going_alone") ?? false;
         _specialBids    = ParseStringArray(def, "special_bids");
+        _excludeSuit    = GetString(def, "exclude_suit");
+        _ifAcceptedNext = GetNestedString(def, "if_accepted", "next");
+        _ifCalledNext   = GetNestedString(def, "if_called",   "next");
+        _ifAllPassNext  = GetString(def, "if_all_pass");
     }
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
@@ -129,11 +137,18 @@ public sealed class BiddingHandler : IPhaseHandler
         else if (action.Type == "bid_accept")
             RecordAcceptedTrump(state);
 
-        // Bidding ends when all players have bid (or once_around with passes)
-        if (BiddingComplete(state))
+        // In once_around mode a non-pass bid ends bidding immediately (Euchre-style).
+        if (_onceAround)
         {
-            FinishBidding(state);
+            state.Metadata["euchre_maker"] = player.Id;
+            string next = _ifAcceptedNext ?? _ifCalledNext ?? _nextPhaseId;
+            FinishBiddingWith(state, next);
+            return;
         }
+
+        // Bidding ends when all players have bid
+        if (BiddingComplete(state))
+            FinishBidding(state);
         else
         {
             state.AdvancePlayer();
@@ -147,7 +162,21 @@ public sealed class BiddingHandler : IPhaseHandler
     {
         if (state.Metadata.ContainsKey("bidding_leader")) return;
 
-        // Set starting player: left of dealer
+        // Clear any stale bid keys from a previous bidding phase.
+        foreach (var p in state.Players)
+            state.Metadata.Remove($"bid:{p.Id}");
+
+        // Set excluded suit for suit_or_pass style (e.g. Euchre's "no upcard suit").
+        if (_excludeSuit is not null)
+        {
+            string excluded = _excludeSuit == "turned_card_suit"
+                ? (state.FindZone("kitty")?.TopCard?.Suit.ToString().ToLower() ?? "")
+                : _excludeSuit;
+            if (excluded.Length > 0)
+                state.Metadata["bid_excluded_suit"] = excluded;
+        }
+
+        // Set starting player: left of dealer.
         string leaderId = LeftOfDealer(state);
         state.Metadata["bidding_leader"]     = leaderId;
         state.Metadata["bidding_pass_count"] = "0";
@@ -168,8 +197,8 @@ public sealed class BiddingHandler : IPhaseHandler
 
         if (_onceAround && passes >= state.Players.Count)
         {
-            // All passed — no trump named this round; skip to next phase
-            FinishBidding(state);
+            // All passed in once_around — use the conditional all-pass next if provided.
+            FinishBiddingWith(state, _ifAllPassNext ?? _nextPhaseId);
             return;
         }
 
@@ -192,14 +221,16 @@ public sealed class BiddingHandler : IPhaseHandler
     }
 
     private void FinishBidding(GameState state)
+        => FinishBiddingWith(state, _nextPhaseId);
+
+    private static void FinishBiddingWith(GameState state, string nextPhaseId)
     {
         // Clear bidding bookkeeping (keep bid:{playerId} values for scoring)
         state.Metadata.Remove("bidding_leader");
         state.Metadata.Remove("bidding_pass_count");
         state.Metadata.Remove("bid_excluded_suit");
 
-        state.CurrentPhaseId = _nextPhaseId;
-        UpdateStatus(state);
+        state.CurrentPhaseId = nextPhaseId;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -261,6 +292,16 @@ public sealed class BiddingHandler : IPhaseHandler
         if (def.Extra?.TryGetValue(key, out var el) == true &&
             el.ValueKind is JsonValueKind.True or JsonValueKind.False)
             return el.GetBoolean();
+        return null;
+    }
+
+    private static string? GetNestedString(PhaseDefinition def, string outerKey, string innerKey)
+    {
+        if (def.Extra?.TryGetValue(outerKey, out var outer) == true
+            && outer.ValueKind == JsonValueKind.Object
+            && outer.TryGetProperty(innerKey, out var inner)
+            && inner.ValueKind == JsonValueKind.String)
+            return inner.GetString();
         return null;
     }
 

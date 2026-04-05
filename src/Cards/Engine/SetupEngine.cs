@@ -26,8 +26,8 @@ public sealed class SetupEngine : ISetupStrategy
     public void Setup(GameState state, int playerCount, IReadOnlyList<string> enabledRules)
     {
         CreatePlayers(state, playerCount);
+        AssignTeams(state, playerCount);  // teams must exist before zones are expanded
         ExpandZones(state);
-        AssignTeams(state, playerCount);
     }
 
     // ── Helpers (internal so GameTablePage.BuildFallbackState can reuse) ─────
@@ -82,6 +82,14 @@ public sealed class SetupEngine : ISetupStrategy
                 {
                     string id = $"{zoneDef.Id}:{p.Id}";
                     state.Zones[id] = new Zone(id, zoneDef.Type, p.Id, zoneDef.Visibility);
+                }
+            }
+            else if (zoneDef.Owner == "each_team")
+            {
+                foreach (var team in state.Teams)
+                {
+                    string id = $"{zoneDef.Id}:{team.Id}";
+                    state.Zones[id] = new Zone(id, zoneDef.Type, team.Id, zoneDef.Visibility);
                 }
             }
             else

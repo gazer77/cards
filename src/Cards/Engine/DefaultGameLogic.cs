@@ -113,12 +113,22 @@ public sealed class DefaultGameLogic : GameLogicBase
             ClearRoundZones(state);
 
             StandardDealEngine.Instance.Deal(state, logic._playerCount, logic._enabledHouseRules);
-            // Clear trick state so TrickTakingHandler re-initializes for the new hand.
+
+            // Clear per-round tracking metadata.
             state.Metadata.Remove("trick_leader");
             state.Metadata.Remove("trick_trump");
             state.Metadata.Remove("trick_lead_suit");
             state.Metadata.Remove("trick_hearts_broken");
             state.Metadata.Remove("trick_spades_broken");
+            state.Metadata.Remove("trick_number");
+            state.Metadata.Remove("euchre_maker");
+            foreach (var p in state.Players)
+            {
+                state.Metadata.Remove($"tricks_taken:{p.Id}");
+                state.Metadata.Remove($"bid:{p.Id}");
+                state.Metadata.Remove($"bid_alone:{p.Id}");
+            }
+
             state.CurrentPhaseId     = logic._firstPhaseId;
             state.Metadata["status"] = $"Round {state.RoundNumber}";
         }

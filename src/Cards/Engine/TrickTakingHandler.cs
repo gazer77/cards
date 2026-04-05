@@ -220,10 +220,17 @@ public sealed class TrickTakingHandler : IPhaseHandler
         var trick       = state.FindZone("trick");
         if (trick is null) return;
 
-        // Move all trick cards to winner's collection zone
+        // Move all trick cards to winner's collection zone.
+        // Try player zone first, then team zone, then fall back to unowned zone.
         if (!string.IsNullOrEmpty(winnerId))
         {
-            var dest = state.FindZone($"{_collectTo}:{winnerId}") ?? state.FindZone(_collectTo);
+            var dest = state.FindZone($"{_collectTo}:{winnerId}");
+            if (dest is null)
+            {
+                var team = state.GetPlayerTeam(winnerId);
+                if (team is not null) dest = state.FindZone($"{_collectTo}:{team.Id}");
+            }
+            dest ??= state.FindZone(_collectTo);
             while (dest is not null && !trick.IsEmpty)
                 dest.Add(trick.Draw()!);
 
@@ -275,9 +282,8 @@ public sealed class TrickTakingHandler : IPhaseHandler
 
     private void FinishHand(GameState state)
     {
-        // Clear trick tracking metadata
-        foreach (var p in state.Players)
-            state.Metadata.Remove($"tricks_taken:{p.Id}");
+        // Leave tricks_taken:{playerId} intact for the scoring phase.
+        // NewRoundHandler clears them at the start of the next round.
         state.Metadata.Remove("trick_number");
         state.Metadata.Remove("trick_trump");
         state.Metadata.Remove("trick_hearts_broken");

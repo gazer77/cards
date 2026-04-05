@@ -46,10 +46,16 @@ public static class ScoringEngine
                 break;
 
             case "euchre":
-            case "hand_rank":
+                ApplyEuchre(state, scoring);
+                break;
+
             case "deadwood":
-                // Not yet implemented — no score applied this round.
-                state.Metadata["status"] = $"Scoring ({scoring.Type}) not yet implemented.";
+                ApplyDeadwood(state, scoring);
+                break;
+
+            case "hand_rank":
+                // Poker hand-rank scoring is handled by ShowdownHandler (pot distribution).
+                // The score phase is not used in poker flows; this is a no-op fallback.
                 break;
         }
     }
@@ -320,6 +326,297 @@ public static class ScoringEngine
         }
 
         WriteSummary(state, roundScores);
+    }
+
+    // ── euchre ────────────────────────────────────────────────────────────────
+    // Maker's team wins 1 pt (3-4 tricks), 2 pts (5 tricks), or 4 pts (loner 5).
+    // Euchre (< 3 tricks) awards 2 pts to the opposing team.
+
+    private static void ApplyEuchre(GameState state, ScoringDefinition scoring)
+    {
+        bool accumulate  = GetBool(scoring, "accumulate") ?? true;
+        bool countByTeam = string.Equals(GetString(scoring, "count_by"), "team",
+                               StringComparison.OrdinalIgnoreCase)
+                           && state.Teams.Count > 0;
+
+        int makers3or4 = GetNestedInt(scoring, "makers_win", "tricks_3_or_4") ?? 1;
+        int makers5    = GetNestedInt(scoring, "makers_win", "tricks_5")       ?? 2;
+        int euchredPts = GetNestedInt(scoring, "euchred",    "opponents_score") ?? 2;
+        int loner5     = GetNestedInt(scoring, "loner_win",  "tricks_5")       ?? 4;
+
+        string makerId   = state.Metadata.GetValueOrDefault("euchre_maker", "");
+        var    maker     = state.Players.FirstOrDefault(p => p.Id == makerId);
+        if (maker is null) return;
+
+        bool goingAlone = state.Metadata.GetValueOrDefault($"bid_alone:{makerId}") == "true";
+
+        Team? makerTeam   = countByTeam ? state.GetPlayerTeam(makerId) : null;
+        string makerKey   = makerTeam?.Id ?? makerId;
+        string? oppoKey   = makerTeam is not null
+            ? state.Teams.FirstOrDefault(t => t.Id != makerTeam.Id)?.Id
+            : state.Players.FirstOrDefault(p => p.Id != makerId)?.Id;
+
+        // Count maker-side tricks.
+        int makerTricks = 0;
+        if (makerTeam is not null)
+        {
+            foreach (var pid in makerTeam.PlayerIds)
+            {
+                if (goingAlone && pid != makerId) continue;
+                makerTricks += GetTricksTaken(state, pid);
+            }
+        }
+        else
+        {
+            makerTricks = GetTricksTaken(state, makerId);
+        }
+
+        var roundScores = new Dictionary<string, int>();
+        if (makerTricks >= 5)
+            roundScores[makerKey] = goingAlone ? loner5 : makers5;
+        else if (makerTricks >= 3)
+            roundScores[makerKey] = makers3or4;
+        else if (oppoKey is not null)
+            roundScores[oppoKey] = euchredPts;    // euchred
+
+        foreach (var (id, pts) in roundScores)
+        {
+            if (accumulate) state.AddScore(id, pts);
+            else            state.Scores[id] = pts;
+        }
+
+        // Status line: "Euchred! Opponents +2" or "Makers win +2" etc.
+        string outcome = makerTricks >= 5
+            ? (goingAlone ? $"Loner! +{(goingAlone ? loner5 : makers5)}" : $"Makers sweep! +{makers5}")
+            : makerTricks >= 3
+            ? $"Makers win ({makerTricks} tricks) +{makers3or4}"
+            : $"Euchred! (+{euchredPts} to opponents)";
+
+        // Build score summary per team.
+        if (state.Teams.Count > 0)
+        {
+            var teamParts = state.Teams.Select(t =>
+            {
+                int total = state.GetTeamScore(t.Id);
+                bool humanTeam = state.Players.Count > 0 && t.Contains(state.Players[0].Id);
+                string label = humanTeam ? "Your team" : t.Name;
+                return $"{label}: {total}";
+            });
+            string summary = outcome + "  |  " + string.Join("  |  ", teamParts);
+            state.Metadata["status"]        = summary;
+            state.Metadata["score_summary"] = summary;
+        }
+        else
+        {
+            WriteSummary(state, roundScores);
+        }
+    }
+
+    private static int GetTricksTaken(GameState state, string playerId)
+        => int.TryParse(state.Metadata.GetValueOrDefault($"tricks_taken:{playerId}", "0"),
+                        out int t) ? t : 0;
+
+    // ── deadwood ──────────────────────────────────────────────────────────────
+    // Gin Rummy: score based on unmelded card values after knock/gin.
+
+    private static void ApplyDeadwood(GameState state, ScoringDefinition scoring)
+    {
+        string knockerId = state.Metadata.GetValueOrDefault("dd_knock_player", "");
+        bool   isGin     = state.Metadata.GetValueOrDefault("dd_gin", "false") == "true";
+        bool   accumulate = GetBool(scoring, "accumulate") ?? true;
+
+        int knockBonus    = GetInt(scoring, "knock_bonus")    ?? 25;
+        int ginBonus      = GetInt(scoring, "gin_bonus")      ?? 25;
+        int undercutBonus = GetInt(scoring, "undercut_bonus") ?? 25;
+
+        var values = ParseDeadwoodValues(scoring);
+
+        // Find knocker and opponent.
+        var knocker  = state.Players.FirstOrDefault(p => p.Id == knockerId);
+        var opponent = state.Players.FirstOrDefault(p => p.Id != knockerId);
+        if (knocker is null || opponent is null) return;
+
+        int knockerDW  = CalcMinDeadwood(GetHandCards(state, knocker.Id),  values);
+        int opponentDW = CalcMinDeadwood(GetHandCards(state, opponent.Id), values);
+
+        var roundScores = new Dictionary<string, int>();
+
+        if (isGin)
+        {
+            // Gin: knocker wins opponent's deadwood + gin bonus
+            roundScores[knocker.Id] = opponentDW + ginBonus;
+        }
+        else if (knockerDW < opponentDW)
+        {
+            // Knock: knocker wins difference + knock bonus
+            roundScores[knocker.Id] = (opponentDW - knockerDW) + knockBonus;
+        }
+        else
+        {
+            // Undercut: opponent wins difference + undercut bonus
+            roundScores[opponent.Id] = (knockerDW - opponentDW) + undercutBonus;
+        }
+
+        foreach (var (pid, pts) in roundScores)
+        {
+            if (accumulate) state.AddScore(pid, pts);
+            else            state.Scores[pid] = pts;
+        }
+
+        // Status summary
+        string kLabel = knocker  == state.Players[0] ? "You" : knocker.Name;
+        string oLabel = opponent == state.Players[0] ? "You" : opponent.Name;
+        string summary;
+        if (isGin)
+            summary = $"Gin! {kLabel}: 0 dw | {oLabel}: {opponentDW} dw  → +{ginBonus + opponentDW}";
+        else if (roundScores.ContainsKey(knocker.Id))
+            summary = $"Knock! {kLabel}: {knockerDW} dw | {oLabel}: {opponentDW} dw  → +{roundScores[knocker.Id]}";
+        else
+            summary = $"Undercut! {oLabel}: {opponentDW} dw | {kLabel}: {knockerDW} dw  → +{roundScores[opponent.Id]}";
+
+        state.Metadata["status"]        = summary;
+        state.Metadata["score_summary"] = summary;
+
+        // Overall totals
+        string totals = string.Join("  |  ", state.Players.Select(p =>
+        {
+            string label = p == state.Players[0] ? "You" : p.Name;
+            return $"{label}: {state.GetScore(p.Id)}";
+        }));
+        state.Metadata["score_summary"] = summary + "  ||  " + totals;
+    }
+
+    private static IReadOnlyList<Card> GetHandCards(GameState state, string playerId)
+    {
+        var hand = state.FindZone($"hand:{playerId}") ?? state.FindZone("hand");
+        return hand?.Cards ?? [];
+    }
+
+    /// <summary>
+    /// Returns the minimum deadwood total for a hand by finding the optimal
+    /// non-overlapping set of melds (sets of same rank, runs of same suit).
+    /// </summary>
+    private static int CalcMinDeadwood(IReadOnlyList<Card> hand, DeadwoodValues values)
+    {
+        if (hand.Count == 0) return 0;
+
+        var melds = FindAllMelds(hand);
+        int totalValue = hand.Sum(c => values.GetValue(c));
+        int bestMelded = FindBestMelds(melds, new bool[hand.Count], hand, values, 0);
+        return Math.Max(0, totalValue - bestMelded);
+    }
+
+    private static List<List<int>> FindAllMelds(IReadOnlyList<Card> hand)
+    {
+        var result = new List<List<int>>();
+        int n = hand.Count;
+
+        // Sets: 3+ cards of the same rank.
+        var byRank = Enumerable.Range(0, n).GroupBy(i => hand[i].Rank);
+        foreach (var group in byRank)
+        {
+            var idx = group.ToList();
+            if (idx.Count >= 3) result.Add(idx);
+            if (idx.Count == 4)
+            {
+                // Also add each 3-card subset.
+                for (int skip = 0; skip < 4; skip++)
+                    result.Add(idx.Where((_, j) => j != skip).ToList());
+            }
+        }
+
+        // Runs: 3+ consecutive ranks of the same suit.
+        var bySuit = Enumerable.Range(0, n).GroupBy(i => hand[i].Suit);
+        foreach (var group in bySuit)
+        {
+            var sorted = group.OrderBy(i => (int)hand[i].Rank).ToList();
+            for (int start = 0; start < sorted.Count; start++)
+            {
+                var run = new List<int> { sorted[start] };
+                for (int k = start + 1; k < sorted.Count; k++)
+                {
+                    if ((int)hand[sorted[k]].Rank == (int)hand[run[^1]].Rank + 1)
+                        run.Add(sorted[k]);
+                    else
+                        break;
+                }
+                for (int len = 3; len <= run.Count; len++)
+                    result.Add(run.Take(len).ToList());
+            }
+        }
+
+        return result;
+    }
+
+    private static int FindBestMelds(
+        List<List<int>> melds, bool[] used, IReadOnlyList<Card> hand,
+        DeadwoodValues values, int idx)
+    {
+        if (idx >= melds.Count) return 0;
+
+        // Skip this meld.
+        int best = FindBestMelds(melds, used, hand, values, idx + 1);
+
+        // Try using this meld if no card overlaps.
+        var meld = melds[idx];
+        if (!meld.Any(i => used[i]))
+        {
+            foreach (int i in meld) used[i] = true;
+            int meldValue = meld.Sum(i => values.GetValue(hand[i]));
+            int withMeld  = meldValue + FindBestMelds(melds, used, hand, values, idx + 1);
+            best = Math.Max(best, withMeld);
+            foreach (int i in meld) used[i] = false;
+        }
+
+        return best;
+    }
+
+    private static DeadwoodValues ParseDeadwoodValues(ScoringDefinition scoring)
+    {
+        var dv = new DeadwoodValues();
+        if (scoring.Extra?.TryGetValue("card_values", out var el) != true
+            || el.ValueKind != JsonValueKind.Object) return dv;
+
+        foreach (var prop in el.EnumerateObject())
+        {
+            if (prop.Value.ValueKind != JsonValueKind.Number) continue;
+            int v = prop.Value.GetInt32();
+            switch (prop.Name.ToUpperInvariant())
+            {
+                case "A":       dv.Ace    = v; break;
+                case "J":       dv.Jack   = v; break;
+                case "Q":       dv.Queen  = v; break;
+                case "K":       dv.King   = v; break;
+                case "DEFAULT": dv.UsePip = false; dv.DefaultVal = v; break;
+                default:
+                    if (int.TryParse(prop.Name, out int rank) && rank >= 2 && rank <= 10)
+                        dv.RankValues[rank] = v;
+                    break;
+            }
+        }
+        return dv;
+    }
+
+    private sealed class DeadwoodValues
+    {
+        public int  Ace        = 1;
+        public int  Jack       = 10;
+        public int  Queen      = 10;
+        public int  King       = 10;
+        public bool UsePip     = true;
+        public int  DefaultVal = 0;
+        public Dictionary<int, int> RankValues = [];
+
+        public int GetValue(Card c)
+        {
+            if (c.Rank == Rank.Ace)   return Ace;
+            if (c.Rank == Rank.Jack)  return Jack;
+            if (c.Rank == Rank.Queen) return Queen;
+            if (c.Rank == Rank.King)  return King;
+            int r = (int)c.Rank;
+            if (RankValues.TryGetValue(r, out int v)) return v;
+            return UsePip ? r : DefaultVal;
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

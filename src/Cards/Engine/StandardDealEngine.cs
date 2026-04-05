@@ -99,6 +99,14 @@ public sealed class StandardDealEngine : IDealStrategy
             }
         }
 
+        // Flip the top card of a specific zone face-up in place (e.g. Euchre kitty turn-up).
+        if (def?.ThenFlipTopOf is { Length: > 0 } flipOfZone)
+        {
+            var zone = state.FindZone(flipOfZone);
+            if (zone?.TopCard is { } top)
+                top.IsFaceUp = true;
+        }
+
         return RecordResult(state, byPlayer, steps, animDelayMs);
     }
 
