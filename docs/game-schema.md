@@ -159,7 +159,7 @@ Zones are named areas where cards reside.
 | `hand` | Player's held cards |
 | `spread` | Face-up fan of cards (melds, community, table) |
 | `trick` | Cards played to the current trick; cleared after each trick |
-| `grid` | Fixed N×M grid of cards (Golf) |
+| `grid` | Fixed N×M grid of cards (Golf). `rows`/`cols` define layout. `peek_count`: after dealing, flip this many cards face-up per player (Golf's "peek at 2"). |
 | `pot` | Virtual zone for chips/point tracking |
 
 ### Visibility Values
@@ -370,15 +370,26 @@ One draw + one discard per player turn. Repeats until a special action ends the 
   "draw_from": ["deck", "discard"],
   "draw_count": 1,
   "discard_count": 1,
-  "target_zone": "hand",
-  "special_actions": ["knock", "gin"],
+  "target_zone": "grid",
+  "special_actions": ["knock", "gin", "go_out"],
   "knock_condition": "deadwood_lte_10",
   "gin_condition": "deadwood_eq_0",
+  "go_out_condition": "hand_empty",
+  "round_ends_when": "any_player_grid_all_face_up",
+  "remaining_players_get_one_more_turn": true,
   "next": "score"
 }
 ```
 
-`target_zone`: `"hand"` | `"grid"` (Golf swaps into a grid slot)
+`target_zone`: `"hand"` | `"grid"` — Grid mode (Golf): drawn card is held in a temporary hand slot; player then taps a grid card to swap it in (drawn card replaces grid card face-up; grid card goes to discard). Player may also `discard_drawn` to skip the swap.
+
+`round_ends_when`: `"any_player_grid_all_face_up"` — round ends when any player has all grid cards face-up.
+
+`remaining_players_get_one_more_turn`: `true` — after round-end trigger, each other player gets one final turn before scoring.
+
+`special_actions`: `["knock","gin","go_out"]` — extra actions shown in discard phase when conditions are met.
+
+`go_out_condition`: `"hand_empty"` | `"all_melds_complete_and_hand_empty"`
 
 ---
 
@@ -455,12 +466,21 @@ Reveal all remaining hands and determine winner by hand rank.
   "evaluator": "high_hand",
   "community_zone": "community",
   "hand_size": 5,
-  "use_from_hand": { "min": 0, "max": 2 },
-  "next": { "if": "win_condition", "then": "end", "else": "deal_new_round" }
+  "use_from_hand": { "min": 0, "max": 2 }
 }
 ```
 
-`evaluator`: `"high_hand"` | `"low_hand"` | `"high_low"`
+`evaluator`: `"high_hand"` (default) | `"low_hand"` | `"ace_to_five_low"` (Razz — Ace counts as 1, no flush/straight) | `"high_low"` (reserved)
+
+`use_from_hand`: restrict how many hole cards must be used. Omaha: `{min:0, max:2}`. 7-card stud: `{min:5, max:7}`.
+
+**Wild cards** (read from `scoring.wilds`):
+```json
+"wilds": [{ "rank": "2" }, { "card": "Jh" }]
+```
+Wild cards are substituted with every possible rank × suit to find the best hand.
+
+`scoring.evaluator` (set by house rules like Razz) overrides the phase-level `evaluator` at runtime.
 
 ---
 
@@ -771,7 +791,7 @@ public interface IPlayerAgent
 }
 ```
 
-`DefaultAiAgent` is the built-in random agent — registered automatically by `DefaultGameLogic` for every non-human seat (players at index 1+) that doesn't already have an agent registered.
+`SmartDefaultAiAgent` is the built-in heuristic agent — registered automatically by `DefaultGameLogic` for every non-human seat (players at index 1+) that doesn't already have an agent registered. It plays trick-taking games with basic strategy (lowest-beater-or-dump, Hearts avoidance), prefers low-rank draw-discard cards, and folds conservatively in poker. `DefaultAiAgent` (pure random) remains available for explicit use.
 
 The engine calls `IGameLogic.GetAutoAction(state)` during auto-advance ticks. When the current player has a registered agent, `GetAutoAction`:
 1. If selectable card IDs exist → builds `play_card` actions for each, lets the agent choose.

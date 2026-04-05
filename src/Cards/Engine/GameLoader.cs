@@ -10,6 +10,7 @@ public class GameLoader
     private static readonly string[] GameIds =
     [
         "free-play",
+        "high-card",
         "war",
         "go-fish",
         "blackjack",
