@@ -8,7 +8,7 @@ namespace Cards.Engine;
 ///
 /// Phase definition parameters:
 ///   meld_types      — ["set","run"] | ["canasta"] | ["pinochle"]
-///   min_meld_size   — minimum cards in a meld (default 3)
+///   min_meld_size   — minimum cards in a meld (default 3; ignored for "pinochle" — 1-card melds allowed)
 ///   wilds_allowed   — true | false (default false)
 ///   max_wilds_per_meld — max wilds in a single meld (default 1)
 ///   layoff_allowed  — true | false: add to existing melds (default true)
@@ -16,9 +16,16 @@ namespace Cards.Engine;
 /// Players tap cards to select a group, then tap "Lay Meld" to place it.
 /// "Done" ends the meld phase for the current player.
 ///
+/// Pinochle meld type ("pinochle"):
+///   Any 1+ card selection is accepted. When the player finishes, all cards in their meld zone
+///   are evaluated against standard pinochle meld rules (flush, around, pinochle, marriages,
+///   nines) using trump from state.Metadata["bid_trump"]. The total is written to
+///   state.Metadata["meld_score:{playerId}"] for ScoringEngine.ApplyPinochle to pick up.
+///
 /// State metadata keys:
-///   meld_turn_player — player ID currently laying melds
-///   meld_selected    — comma-separated selected card IDs
+///   meld_turn_player      — player ID currently laying melds
+///   meld_selected         — comma-separated selected card IDs
+///   meld_score:{playerId} — pinochle meld points for that player (set by "pinochle" type)
 /// </summary>
 public sealed class MeldHandler : IPhaseHandler
 {
@@ -48,7 +55,9 @@ public sealed class MeldHandler : IPhaseHandler
         var actions = new List<GameAction>();
         var selected = GetSelected(state);
 
-        if (selected.Count >= _minMeldSize && IsValidMeld(state, selected))
+        // Pinochle: any 1+ card selection is allowed (nines, marriages, flushes, etc.)
+        int effectiveMin = _meldTypes.Contains("pinochle") ? 1 : _minMeldSize;
+        if (selected.Count >= effectiveMin && IsValidMeld(state, selected))
             actions.Add(new GameAction("lay_meld", Label: "Lay Meld"));
 
         if (_layoffAllowed && selected.Count == 1)
@@ -151,6 +160,14 @@ public sealed class MeldHandler : IPhaseHandler
 
     private void AdvanceOrFinish(GameState state)
     {
+        // Score pinochle melds for this player before advancing.
+        if (_meldTypes.Contains("pinochle"))
+        {
+            string trump = state.Metadata.GetValueOrDefault("bid_trump", "spades");
+            int pts = ScorePinochleMelds(state, state.CurrentPlayer.Id, trump);
+            state.Metadata[$"meld_score:{state.CurrentPlayer.Id}"] = pts.ToString();
+        }
+
         state.Metadata.Remove("meld_turn_player");
         state.Metadata.Remove("meld_selected");
 
@@ -183,6 +200,9 @@ public sealed class MeldHandler : IPhaseHandler
 
     private bool IsValidMeld(GameState state, List<string> cardIds)
     {
+        // Pinochle: any non-empty selection is valid; actual scoring is at end of meld phase.
+        if (_meldTypes.Contains("pinochle")) return cardIds.Count > 0;
+
         var hand  = PlayerHand(state, state.CurrentPlayer.Id);
         if (hand is null) return false;
 
@@ -240,6 +260,85 @@ public sealed class MeldHandler : IPhaseHandler
             ? "Your turn" : $"{state.CurrentPlayer.Name}'s turn";
         state.Metadata["status"] = $"{player} — Select cards to meld or tap Done.";
     }
+
+    // ── Pinochle meld scoring ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Evaluates all cards in a player's meld zone against standard pinochle meld rules.
+    /// Called when the player finishes their meld turn.
+    ///
+    /// Counted melds (in priority order):
+    ///   Flush (A K Q J 10 trump)      : 1=150, 2=1500
+    ///   Around (one of each suit)     : A=100/1000, K=80/800, Q=60/600, J=40/400
+    ///   Pinochle (Jd + Qs)            : 1 pair=40, 2 pairs=300
+    ///   Royal marriage (KQ trump)     : 40 each (pairs not consumed by flush)
+    ///   Marriage (KQ non-trump)       : 20 each pair per suit
+    ///   Nine of trump (dix)           : 10 each
+    /// </summary>
+    private static int ScorePinochleMelds(GameState state, string playerId, string trumpName)
+    {
+        var meld = state.FindZone($"meld:{playerId}") ?? state.FindZone("meld");
+        if (meld is null || meld.IsEmpty) return 0;
+
+        var cards = meld.Cards.ToList();
+        Suit trump = ParseSuit(trumpName);
+
+        // Helper: count cards of a specific rank+suit in the meld zone.
+        int C(Rank r, Suit s) => cards.Count(c => c.Rank == r && c.Suit == s);
+        int MinAll(params int[] vals) => vals.Min();
+
+        int score = 0;
+
+        // ── Flush: A K Q J 10 of trump (each complete set) ───────────────────
+        int aTrump = C(Rank.Ace, trump), kTrump = C(Rank.King, trump);
+        int qTrump = C(Rank.Queen, trump), jTrump = C(Rank.Jack, trump), tTrump = C(Rank.Ten, trump);
+        int flushes = MinAll(aTrump, kTrump, qTrump, jTrump, tTrump);
+        score += flushes switch { >= 2 => 1500, 1 => 150, _ => 0 };
+
+        // ── Around: one of each suit per rank ─────────────────────────────────
+        (Rank rank, int pts1, int pts2)[] arounds =
+        [
+            (Rank.Ace,   100, 1000),
+            (Rank.King,   80,  800),
+            (Rank.Queen,  60,  600),
+            (Rank.Jack,   40,  400),
+        ];
+        foreach (var (rank, pts1, pts2) in arounds)
+        {
+            int sets = MinAll(C(rank, Suit.Clubs), C(rank, Suit.Diamonds),
+                              C(rank, Suit.Hearts), C(rank, Suit.Spades));
+            score += sets switch { >= 2 => pts2, 1 => pts1, _ => 0 };
+        }
+
+        // ── Pinochle: Jd + Qs pairs ───────────────────────────────────────────
+        int pairs = Math.Min(C(Rank.Jack, Suit.Diamonds), C(Rank.Queen, Suit.Spades));
+        score += pairs switch { >= 2 => 300, 1 => 40, _ => 0 };
+
+        // ── Royal marriage: KQ trump (K+Q pairs not already consumed by flush) ─
+        int royalPairs = Math.Min(kTrump - flushes, qTrump - flushes);
+        if (royalPairs > 0) score += royalPairs * 40;
+
+        // ── Marriage: KQ non-trump (each suit) ───────────────────────────────
+        foreach (Suit s in Enum.GetValues<Suit>())
+        {
+            if (s == trump) continue;
+            int marriages = Math.Min(C(Rank.King, s), C(Rank.Queen, s));
+            score += marriages * 20;
+        }
+
+        // ── Nine of trump (dix) ───────────────────────────────────────────────
+        score += C(Rank.Nine, trump) * 10;
+
+        return score;
+    }
+
+    private static Suit ParseSuit(string name) => name.ToLowerInvariant() switch
+    {
+        "spades"   => Suit.Spades,
+        "hearts"   => Suit.Hearts,
+        "diamonds" => Suit.Diamonds,
+        _          => Suit.Clubs,
+    };
 
     // ── JSON parsing ──────────────────────────────────────────────────────────
 
