@@ -42,6 +42,15 @@ public sealed class DefaultGameLogic : GameLogicBase
         StandardDealEngine.Instance.Deal(state, playerCount, enabledHouseRules);
 
         RegisterAllPhases(state);
+
+        // Register DefaultAiAgent for every non-human seat that doesn't already have one.
+        for (int i = 1; i < state.Players.Count; i++)
+        {
+            var pid = state.Players[i].Id;
+            if (!state.PlayerAgents.ContainsKey(pid))
+                state.PlayerAgents[pid] = new DefaultAiAgent(pid);
+        }
+
         CallOnGameStart(_firstPhaseId, state);
 
         state.CurrentPhaseId     = _firstPhaseId;

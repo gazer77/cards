@@ -404,7 +404,7 @@ public partial class GameTablePage : ContentPage
                 var next = _logic.GetValidActions(_state!);
                 if (next.Count == 0) break;
 
-                var (received, sourcePts) = ApplyWithSound(next[0]);
+                var (received, sourcePts) = ApplyWithSound(_logic.GetAutoAction(_state!));
                 MaybeSortHands();
                 TableCanvas.GameState = _state;
 
@@ -468,7 +468,7 @@ public partial class GameTablePage : ContentPage
                     handCountBefore = _state.Zones
                         .Where(kv => kv.Key.StartsWith("hand:")).Sum(kv => kv.Value.Count);
 
-                    await _mp.SendActionAsync(next[0]);
+                    await _mp.SendActionAsync(_logic.GetAutoAction(_state!));
 
                     PlaySoundForStateChange(faceDownBefore, handCountBefore);
                     MaybeSortHands();

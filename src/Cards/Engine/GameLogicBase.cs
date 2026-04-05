@@ -58,11 +58,6 @@ public abstract class GameLogicBase : IGameLogic
     public virtual string GetStatusText(GameState state)
         => state.Metadata.GetValueOrDefault("status", "");
 
-    public TimeSpan? GetAutoAdvanceDelay(GameState state)
-        => _handlers.TryGetValue(state.CurrentPhaseId, out var h)
-            ? h.GetAutoAdvanceDelay(state)
-            : null;
-
     public IReadOnlyList<string> GetSelectableCardIds(GameState state)
         => _handlers.TryGetValue(state.CurrentPhaseId, out var h)
             ? h.GetSelectableCardIds(state)
@@ -72,6 +67,64 @@ public abstract class GameLogicBase : IGameLogic
         => _handlers.TryGetValue(state.CurrentPhaseId, out var h)
             ? h.GetDropZoneIds(state, cardId)
             : [];
+
+    /// <summary>
+    /// Returns the auto-advance delay from the current phase handler, or 800 ms
+    /// when the current player has a registered AI agent (giving the agent time to
+    /// "think" before its action fires).
+    /// </summary>
+    public TimeSpan? GetAutoAdvanceDelay(GameState state)
+    {
+        if (_handlers.TryGetValue(state.CurrentPhaseId, out var h))
+        {
+            var d = h.GetAutoAdvanceDelay(state);
+            if (d is not null) return d;
+        }
+
+        // Phase handler returned null — auto-advance only if an AI agent owns this turn.
+        if (state.Players.Count > 0 &&
+            state.PlayerAgents.ContainsKey(state.CurrentPlayer.Id))
+            return TimeSpan.FromMilliseconds(800);
+
+        return null;
+    }
+
+    /// <summary>
+    /// Chooses the action to fire during an auto-advance tick.
+    /// When the current player has a registered agent:
+    ///   • if selectable cards exist → agent picks a play_card action
+    ///   • otherwise → agent picks from meaningful valid actions
+    /// Falls back to the first valid action for scripted/automated phases.
+    /// </summary>
+    public GameAction GetAutoAction(GameState state)
+    {
+        var valid    = GetValidActions(state);
+        var selCards = GetSelectableCardIds(state);
+
+        if (!state.PlayerAgents.TryGetValue(state.CurrentPlayer.Id, out var agent))
+            return valid.Count > 0 ? valid[0] : new GameAction("tap");
+
+        if (selCards.Count > 0)
+        {
+            var cardActs = selCards
+                .Select(id => new GameAction("play_card", CardId: id))
+                .ToList<GameAction>();
+            var masked = GameStateMask.CreateViewFor(state, state.CurrentPlayer.Id);
+            return agent.ChooseAction(masked, cardActs);
+        }
+
+        // Filter out purely internal/scripted action types.
+        var meaningful = valid
+            .Where(a => a.Type is not ("tap" or "ai_step"))
+            .ToList();
+        if (meaningful.Count > 0)
+        {
+            var masked = GameStateMask.CreateViewFor(state, state.CurrentPlayer.Id);
+            return agent.ChooseAction(masked, meaningful);
+        }
+
+        return valid.Count > 0 ? valid[0] : new GameAction("tap");
+    }
 
     // ── Dealer helpers ────────────────────────────────────────────────────────
 

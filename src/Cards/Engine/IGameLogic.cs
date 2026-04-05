@@ -43,4 +43,16 @@ public interface IGameLogic
     /// or has been tap-selected.  Shown with a drop-zone highlight.
     /// </summary>
     IReadOnlyList<string> GetDropZoneIds(GameState state, string cardId) => [];
+
+    /// <summary>
+    /// Returns the action that should be applied during an auto-advance tick.
+    /// When the current player has a registered <see cref="IPlayerAgent"/> the agent
+    /// picks from legal card-play or action choices; otherwise the first valid action
+    /// is returned (preserving existing behaviour for purely scripted phases).
+    /// </summary>
+    GameAction GetAutoAction(GameState state)
+    {
+        var valid = GetValidActions(state);
+        return valid.Count > 0 ? valid[0] : new GameAction("tap");
+    }
 }
