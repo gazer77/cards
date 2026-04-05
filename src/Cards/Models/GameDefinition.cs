@@ -318,6 +318,19 @@ public class HouseRule
     [JsonPropertyName("default")]
     public bool Default { get; set; }
 
+    /// <summary>
+    /// Map of JSON-path-style keys to override values.
+    /// Applied to the <see cref="GameDefinition"/> when this rule is enabled.
+    /// Examples:
+    ///   "battle.tie_resolution": "split"     — sets a phase parameter
+    ///   "deal.cards_per_player": 7            — changes the deal count
+    ///   "win_condition.count": 9              — adjusts win-condition field
+    ///   "deck": "standard-52-jokers"          — swaps the deck
+    ///   "scoring.bag_penalty": null           — clears a scoring parameter
+    /// </summary>
+    [JsonPropertyName("affects")]
+    public Dictionary<string, JsonElement>? Affects { get; set; }
+
     // Runtime state — not from JSON
     [JsonIgnore]
     public bool IsEnabled { get; set; }

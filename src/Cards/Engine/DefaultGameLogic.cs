@@ -31,6 +31,9 @@ public sealed class DefaultGameLogic : GameLogicBase
         _playerCount       = playerCount;
         _enabledHouseRules = enabledHouseRules;
 
+        // Apply house rule overrides to a definition clone before any setup runs.
+        state.Definition = HouseRuleEngine.Apply(state.Definition, enabledHouseRules);
+
         SetupEngine.Instance.Setup(state, playerCount, enabledHouseRules);
 
         if (state.Definition.Rounds is not null)

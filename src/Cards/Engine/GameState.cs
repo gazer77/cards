@@ -5,7 +5,7 @@ namespace Cards.Engine;
 public class GameState
 {
     public required string GameId { get; init; }
-    public required GameDefinition Definition { get; init; }
+    public required GameDefinition Definition { get; set; }
 
     public List<Player> Players { get; } = [];
     public Dictionary<string, Zone> Zones { get; } = [];
