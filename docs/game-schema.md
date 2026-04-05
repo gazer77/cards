@@ -244,6 +244,7 @@ All phase types are registered in `PhaseHandlerRegistry`.
 | `flip_compare_ready` | Implemented | High Card (internal) |
 | `flip_compare_result` | Implemented | High Card (internal) |
 | `deal` | Implemented | Texas Hold'em, Stud, Euchre (initial deal phase) |
+| `name_trump` | Implemented | Pinochle |
 
 ### `pass_cards`
 All players simultaneously choose cards to pass.
@@ -311,6 +312,10 @@ Auction-style bidding round.
 
 `style`: `"number"` | `"suit_or_pass"` | `"accept_or_pass"` | `"number_and_suit"`
 
+`bid_increment`: step between numeric bids (default `1`; use `10` for Pinochle).
+
+After number-style bidding completes, `BiddingHandler` writes `bid_winner` (highest bidder's ID) and sets `CurrentPlayerIndex` to that player. Pair with a `name_trump` phase to let the winner choose trump.
+
 Euchre two-round bidding uses two separate `bidding` phases with different styles and conditional `next` links.
 
 ---
@@ -331,6 +336,21 @@ Standard poker betting round.
 `structure`: `"no_limit"` | `"limit"` | `"pot_limit"`
 
 `starting_player`: `"left_of_dealer"` | `"two_left_of_dealer"` | `"three_left_of_dealer"`
+
+`post_blinds`: `true` — auto-post small and big blinds from the top-level `blinds` definition before the round opens.
+
+**Blinds** (top-level field, consumed by `post_blinds: true`):
+```json
+"blinds": {
+  "small": { "position": "left_of_dealer",     "amount": 1 },
+  "big":   { "position": "two_left_of_dealer",  "amount": 2 }
+}
+```
+
+**Ante** (top-level field — not yet auto-posted; reserved for Stud):
+```json
+"ante": { "amount": 1 }
+```
 
 ---
 
@@ -468,6 +488,17 @@ In-round deal phase: burn an optional card then deal to a zone or all players.  
 | `face` | `"down"` | `"up"` or `"down"` (ignored when `cards` array is present) |
 | `cards` | — | Array of `{count, face}` segments for mixed face-up/down deals |
 | `burn_first` | `false` | Discard one card to the `burn` zone before dealing |
+
+---
+
+### `name_trump`
+The bid winner (recorded in `bid_winner` metadata by `BiddingHandler`) selects a trump suit. Writes `bid_trump` for `trick_taking` phases that use `"trump": "bid_result"`.
+
+```json
+{ "id": "name_trump", "type": "name_trump" }
+```
+
+Optional `exclude_suit` parameter excludes one suit from the selection (same format as `bidding.exclude_suit`).
 
 ---
 

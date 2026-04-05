@@ -16,10 +16,12 @@ namespace Cards.Engine;
 ///   stick_the_dealer — true | false: dealer cannot pass last (default false)
 ///   once_around   — true | false: only one round of bidding (default false)
 ///   going_alone   — true | false: Euchre loner option (default false)
+///   bid_increment — step between numeric bids (default 1; e.g., 10 for Pinochle)
 ///
 /// State metadata keys written:
 ///   bid:{playerId}      — bid value ("0"–"13" | "nil" | "blind_nil" | suit name)
 ///   bid_trump           — trump suit chosen (used by trick_taking when trump = "bid_result")
+///   bid_winner          — playerId of the highest numeric bidder (number style only)
 ///   bidding_leader      — player who led the bidding this round
 ///   bidding_pass_count  — how many consecutive passes (for once_around)
 /// </summary>
@@ -33,6 +35,7 @@ public sealed class BiddingHandler : IPhaseHandler
     private readonly bool    _stickTheDealer;
     private readonly bool    _onceAround;
     private readonly bool    _goingAlone;
+    private readonly int     _bidIncrement;
     private readonly List<string> _specialBids;
     private readonly string? _excludeSuit;          // "turned_card_suit" or literal suit name
     private readonly string? _ifAcceptedNext;       // phase to go to when someone accepts
@@ -51,6 +54,7 @@ public sealed class BiddingHandler : IPhaseHandler
         _stickTheDealer = GetBool(def, "stick_the_dealer") ?? false;
         _onceAround     = GetBool(def, "once_around") ?? false;
         _goingAlone     = GetBool(def, "going_alone") ?? false;
+        _bidIncrement   = GetInt(def, "bid_increment") ?? 1;
         _specialBids    = ParseStringArray(def, "special_bids");
         _excludeSuit    = GetString(def, "exclude_suit");
         _ifAcceptedNext = GetNestedString(def, "if_accepted", "next");
@@ -68,7 +72,7 @@ public sealed class BiddingHandler : IPhaseHandler
         switch (_style)
         {
             case "number":
-                for (int i = _minBid; i <= _maxBid; i++)
+                for (int i = _minBid; i <= _maxBid; i += _bidIncrement)
                     actions.Add(new GameAction($"bid_{i}", Label: i.ToString()));
                 foreach (var s in _specialBids)
                     actions.Add(new GameAction($"bid_{s}", Label: Capitalize(s)));
@@ -225,12 +229,37 @@ public sealed class BiddingHandler : IPhaseHandler
 
     private static void FinishBiddingWith(GameState state, string nextPhaseId)
     {
+        // Record the high bidder for number-style auctions (used by name_trump phase).
+        RecordBidWinner(state);
+
         // Clear bidding bookkeeping (keep bid:{playerId} values for scoring)
         state.Metadata.Remove("bidding_leader");
         state.Metadata.Remove("bidding_pass_count");
         state.Metadata.Remove("bid_excluded_suit");
 
         state.CurrentPhaseId = nextPhaseId;
+    }
+
+    private static void RecordBidWinner(GameState state)
+    {
+        string? bestId  = null;
+        int     bestBid = -1;
+        foreach (var p in state.Players)
+        {
+            if (state.Metadata.TryGetValue($"bid:{p.Id}", out var bidStr)
+                && int.TryParse(bidStr, out int b) && b > bestBid)
+            {
+                bestBid = b;
+                bestId  = p.Id;
+            }
+        }
+        if (bestId is not null)
+        {
+            state.Metadata["bid_winner"] = bestId;
+            // Set the current player to the winner so name_trump phase starts correctly.
+            int idx = state.Players.FindIndex(p => p.Id == bestId);
+            if (idx >= 0) state.CurrentPlayerIndex = idx;
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

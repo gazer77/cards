@@ -37,7 +37,11 @@
       "bid_increment": 10,
       "pass_allowed": true,
       "stick_the_dealer": true,
-      "next": "meld"
+      "next": "name_trump"
+    },
+    {
+      "id": "name_trump",
+      "type": "name_trump"
     },
     {
       "id": "meld",
@@ -49,7 +53,7 @@
     {
       "id": "play",
       "type": "trick_taking",
-      "trump": "bidder_names_trump",
+      "trump": "bid_result",
       "follow_suit": true,
       "must_play_higher": true,
       "winner": "highest_trump_then_lead",

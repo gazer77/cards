@@ -35,6 +35,7 @@
       "id": "bet_preflop",
       "type": "poker_betting",
       "structure": "no_limit",
+      "post_blinds": true,
       "starting_player": "three_left_of_dealer",
       "can_check": false,
       "next": "flop"

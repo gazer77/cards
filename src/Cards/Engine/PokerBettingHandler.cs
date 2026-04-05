@@ -10,6 +10,7 @@ namespace Cards.Engine;
 ///   structure        — "no_limit" | "limit" | "pot_limit"
 ///   starting_player  — "left_of_dealer" | "two_left_of_dealer" | "three_left_of_dealer"
 ///   can_check        — true | false: whether check is allowed (false for preflop)
+///   post_blinds      — true: auto-post small and big blinds from game definition before betting
 ///
 /// Chip tracking uses state.Scores as chip counts.
 /// Pot is tracked in state.Metadata["pot"] (integer string).
@@ -29,6 +30,7 @@ public sealed class PokerBettingHandler : IPhaseHandler
     private readonly string _structure;
     private readonly string _startingPlayer;
     private readonly bool   _canCheck;
+    private readonly bool   _postBlinds;
 
     public PokerBettingHandler(PhaseDefinition def, string nextPhaseId)
     {
@@ -36,6 +38,7 @@ public sealed class PokerBettingHandler : IPhaseHandler
         _structure      = GetString(def, "structure")       ?? "no_limit";
         _startingPlayer = GetString(def, "starting_player") ?? "left_of_dealer";
         _canCheck       = GetBool(def, "can_check")         ?? true;
+        _postBlinds     = GetBool(def, "post_blinds")       ?? false;
     }
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
@@ -133,14 +136,50 @@ public sealed class PokerBettingHandler : IPhaseHandler
     {
         if (state.Metadata.ContainsKey("bet_leader")) return;
 
+        if (_postBlinds) PostBlinds(state);
+
         string leaderId = ResolveStartingPlayer(state);
         state.Metadata["bet_leader"]   = leaderId;
-        state.Metadata["bet_to_call"]  = "0";
+        // bet_to_call may already be set by PostBlinds; leave it if so.
+        state.Metadata.TryAdd("bet_to_call", "0");
 
         int leaderIdx = state.Players.FindIndex(p => p.Id == leaderId);
         if (leaderIdx >= 0) state.CurrentPlayerIndex = leaderIdx;
 
         UpdateStatus(state);
+    }
+
+    private static void PostBlinds(GameState state)
+    {
+        var blinds = state.Definition.Blinds;
+        if (blinds is null) return;
+
+        if (blinds.Small is { } sb)
+        {
+            string sbId = ResolvePosition(state, sb.Position);
+            PlaceBet(state, sbId, sb.Amount);
+        }
+
+        if (blinds.Big is { } bb)
+        {
+            string bbId = ResolvePosition(state, bb.Position);
+            PlaceBet(state, bbId, bb.Amount);
+            state.Metadata["bet_to_call"] = bb.Amount.ToString();
+            state.Metadata["bet_leader"]  = bbId;  // Betting opens to player after BB.
+        }
+    }
+
+    private static string ResolvePosition(GameState state, string position)
+    {
+        if (state.DealerId is null) return state.Players[0].Id;
+        int di = state.Players.FindIndex(p => p.Id == state.DealerId);
+        int offset = position switch
+        {
+            "two_left_of_dealer"   => 2,
+            "three_left_of_dealer" => 3,
+            _                      => 1,
+        };
+        return state.Players[(di + offset) % state.Players.Count].Id;
     }
 
     private string ResolveStartingPlayer(GameState state)

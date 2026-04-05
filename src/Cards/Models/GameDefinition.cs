@@ -57,6 +57,12 @@ public class GameDefinition
     [JsonPropertyName("overrides")]
     public Dictionary<string, JsonElement>? Overrides { get; set; }
 
+    [JsonPropertyName("blinds")]
+    public BlindsDefinition? Blinds { get; set; }
+
+    [JsonPropertyName("ante")]
+    public AnteDefinition? Ante { get; set; }
+
     [JsonPropertyName("scoring")]
     public ScoringDefinition? Scoring { get; set; }
 
@@ -403,4 +409,29 @@ public class HouseRule
     // Runtime state — not from JSON
     [JsonIgnore]
     public bool IsEnabled { get; set; }
+}
+
+public class BlindsDefinition
+{
+    [JsonPropertyName("small")]
+    public BlindEntry? Small { get; set; }
+
+    [JsonPropertyName("big")]
+    public BlindEntry? Big { get; set; }
+}
+
+public class BlindEntry
+{
+    /// <summary>"left_of_dealer" | "two_left_of_dealer"</summary>
+    [JsonPropertyName("position")]
+    public string Position { get; set; } = "left_of_dealer";
+
+    [JsonPropertyName("amount")]
+    public int Amount { get; set; } = 1;
+}
+
+public class AnteDefinition
+{
+    [JsonPropertyName("amount")]
+    public int Amount { get; set; } = 1;
 }

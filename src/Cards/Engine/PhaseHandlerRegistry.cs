@@ -11,6 +11,7 @@ namespace Cards.Engine;
 /// Built-in types:
 ///   flip_compare_ready   — each player reveals a card; highest rank wins the round.
 ///   flip_compare_result  — winner collects; advance round or end game.
+///   name_trump           — bid winner selects a trump suit (writes bid_trump metadata).
 /// </summary>
 public static class PhaseHandlerRegistry
 {
@@ -32,6 +33,7 @@ public static class PhaseHandlerRegistry
             ["blackjack_round"]     = (def, next) => new BlackjackRoundHandler(def, next),
             ["go_fish"]             = (def, next) => new GoFishHandler(def, next),
             ["deal"]                = (def, next) => new DealPhaseHandler(def, next),
+            ["name_trump"]          = (def, next) => new NameTrumpHandler(def, next),
         };
 
     /// <summary>
@@ -171,6 +173,72 @@ public static class PhaseHandlerRegistry
         if (def.Extra?.TryGetValue(key, out var el) == true)
             return el.GetString();
         return null;
+    }
+
+    // ── name_trump ────────────────────────────────────────────────────────────
+    // The bid winner (recorded in bid_winner metadata) selects a trump suit.
+    // Writes bid_trump metadata, then advances to the next phase.
+    //
+    // Phase definition parameters:
+    //   exclude_suit  — "bid_excluded_suit" | literal suit to exclude (optional)
+
+    private sealed class NameTrumpHandler : IPhaseHandler
+    {
+        private readonly string  _nextPhaseId;
+        private readonly string? _excludeSuit;
+        private static readonly string[] AllSuits = ["clubs", "diamonds", "hearts", "spades"];
+
+        public NameTrumpHandler(PhaseDefinition def, string nextPhaseId)
+        {
+            _nextPhaseId = nextPhaseId;
+            _excludeSuit = GetExtra(def, "exclude_suit");
+        }
+
+        public IReadOnlyList<GameAction> GetValidActions(GameState state)
+        {
+            EnsureCurrentPlayerIsBidWinner(state);
+            string? excluded = ResolveExclude(state);
+            return AllSuits
+                .Where(s => s != excluded)
+                .Select(s => new GameAction($"trump_{s}", Label: Capitalize(s)))
+                .ToList<GameAction>();
+        }
+
+        public void Apply(GameState state, GameAction action)
+        {
+            EnsureCurrentPlayerIsBidWinner(state);
+            if (!action.Type.StartsWith("trump_")) return;
+            string suit = action.Type["trump_".Length..];
+            if (!Array.Exists(AllSuits, s => s == suit)) return;
+
+            state.Metadata["bid_trump"] = suit;
+            state.Metadata.Remove("bid_winner");
+
+            string player = state.CurrentPlayer == state.Players[0]
+                ? "You" : state.CurrentPlayer.Name;
+            state.Metadata["status"] = $"{player} named {Capitalize(suit)} trump.";
+
+            state.CurrentPhaseId = _nextPhaseId;
+        }
+
+        private void EnsureCurrentPlayerIsBidWinner(GameState state)
+        {
+            if (!state.Metadata.TryGetValue("bid_winner", out var winnerId)) return;
+            int idx = state.Players.FindIndex(p => p.Id == winnerId);
+            if (idx >= 0 && state.CurrentPlayerIndex != idx)
+                state.CurrentPlayerIndex = idx;
+        }
+
+        private string? ResolveExclude(GameState state)
+        {
+            if (_excludeSuit is null) return null;
+            if (_excludeSuit == "bid_excluded_suit")
+                return state.Metadata.GetValueOrDefault("bid_excluded_suit");
+            return _excludeSuit;
+        }
+
+        private static string Capitalize(string s)
+            => s.Length == 0 ? s : char.ToUpper(s[0]) + s[1..];
     }
 
     // ── deal ──────────────────────────────────────────────────────────────────
