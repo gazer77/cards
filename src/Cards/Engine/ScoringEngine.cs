@@ -349,10 +349,22 @@ public static class ScoringEngine
                                StringComparison.OrdinalIgnoreCase)
                            && state.Teams.Count > 0;
 
-        int makers3or4 = GetNestedInt(scoring, "makers_win", "tricks_3_or_4") ?? 1;
-        int makers5    = GetNestedInt(scoring, "makers_win", "tricks_5")       ?? 2;
-        int euchredPts = GetNestedInt(scoring, "euchred",    "opponents_score") ?? 2;
-        int loner5     = GetNestedInt(scoring, "loner_win",  "tricks_5")       ?? 4;
+        // makers_win supports both "tricks_3_or_4" (4p) and "tricks_3_to_5" (3p unified key).
+        int? raw34   = GetNestedInt(scoring, "makers_win", "tricks_3_or_4");
+        int? raw3to5 = GetNestedInt(scoring, "makers_win", "tricks_3_to_5");
+        int? raw5    = GetNestedInt(scoring, "makers_win", "tricks_5");
+        int makers3or4 = raw34 ?? raw3to5 ?? 1;
+        // If tricks_3_to_5 used without a separate tricks_5, sweeping scores the same.
+        int makers5    = raw5 ?? (raw3to5.HasValue ? raw3to5.Value : 2);
+
+        // euchred: "opponents_score" (team/single key) or "opponents_each_score" (all opponents individually).
+        int oppoEachPts = GetNestedInt(scoring, "euchred", "opponents_each_score") ?? 0;
+        int euchredPts  = GetNestedInt(scoring, "euchred", "opponents_score")      ?? (oppoEachPts > 0 ? 0 : 2);
+
+        // loner_win: null in JSON means no loner scoring (0 pts).
+        bool lonerDisabled = scoring.Extra?.TryGetValue("loner_win", out var lv) == true
+                             && lv.ValueKind == JsonValueKind.Null;
+        int loner5 = lonerDisabled ? 0 : (GetNestedInt(scoring, "loner_win", "tricks_5") ?? 4);
 
         string makerId   = state.Metadata.GetValueOrDefault("euchre_maker", "");
         var    maker     = state.Players.FirstOrDefault(p => p.Id == makerId);
@@ -383,11 +395,20 @@ public static class ScoringEngine
 
         var roundScores = new Dictionary<string, int>();
         if (makerTricks >= 5)
-            roundScores[makerKey] = goingAlone ? loner5 : makers5;
+            roundScores[makerKey] = goingAlone && loner5 > 0 ? loner5 : makers5;
         else if (makerTricks >= 3)
             roundScores[makerKey] = makers3or4;
-        else if (oppoKey is not null)
-            roundScores[oppoKey] = euchredPts;    // euchred
+        else
+        {
+            // Euchred: award to team key or each individual opponent.
+            if (oppoEachPts > 0)
+            {
+                foreach (var p in state.Players)
+                    if (p.Id != makerId) roundScores[p.Id] = oppoEachPts;
+            }
+            else if (oppoKey is not null && euchredPts > 0)
+                roundScores[oppoKey] = euchredPts;
+        }
 
         foreach (var (id, pts) in roundScores)
         {

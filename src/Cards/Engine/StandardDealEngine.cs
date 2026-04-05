@@ -107,6 +107,33 @@ public sealed class StandardDealEngine : IDealStrategy
                 top.IsFaceUp = true;
         }
 
+        // Apply peek_count: flip N cards face-up in each player's grid zone after dealing.
+        // Cards are already in random order (deck was shuffled) so we flip the first N.
+        foreach (var zoneDef in state.Definition.Zones.Where(z => z.PeekCount > 0))
+        {
+            if (zoneDef.Owner == "each_player")
+            {
+                foreach (var p in state.Players)
+                {
+                    var zone = state.FindZone($"{zoneDef.Id}:{p.Id}");
+                    if (zone is null) continue;
+                    int count = Math.Min(zoneDef.PeekCount, zone.Count);
+                    for (int i = 0; i < count; i++)
+                        zone.Cards[i].IsFaceUp = true;
+                }
+            }
+            else
+            {
+                var zone = state.FindZone(zoneDef.Id);
+                if (zone is not null)
+                {
+                    int count = Math.Min(zoneDef.PeekCount, zone.Count);
+                    for (int i = 0; i < count; i++)
+                        zone.Cards[i].IsFaceUp = true;
+                }
+            }
+        }
+
         return RecordResult(state, byPlayer, steps, animDelayMs);
     }
 
