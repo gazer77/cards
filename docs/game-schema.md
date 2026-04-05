@@ -8,23 +8,21 @@ Games are defined as JSON files loaded at startup. The engine reads them to driv
 
 ```json
 {
-  "$schema": "cards-game/v1",
   "id": "hearts",
   "name": "Hearts",
   "version": "1.0",
-  "extends": null,
   "deck": "standard-52",
   "players": { "min": 4, "max": 4 },
   "teams": false,
-  "dealer": "random",
-  "rounds": { "repeat_until": "win_condition", "dealer": "rotates_left" },
+  "rounds": { "repeat_until": "win_condition", "dealer": "rotates_left", "first_dealer": "random" },
   "zones": [...],
   "deal": {...},
   "phases": [...],
   "scoring": {...},
   "win_condition": {...},
   "house_rules": [...],
-  "help": "hearts.md"
+  "help": "hearts.md",
+  "ui": { "card_scale": 1.0, "auto_sort_hand": "none", "allow_sort": true, "show_game_log": true }
 }
 ```
 
@@ -33,9 +31,13 @@ Inherit another game's definition and override specific fields. Useful for varia
 ```json
 "extends": "texas-holdem",
 "overrides": {
-  "scoring.wilds": [{ "rank": "2" }]
+  "scoring.wilds": [{ "rank": "2" }],
+  "players": { "min": 2, "max": 6 },
+  "win_condition.score": 20
 }
 ```
+
+Merge rules: the parent is deep-cloned, then direct child fields (`id`, `name`, `version`, `help`, `house_rules`, `ui`, `tags`) overwrite the parent's, and then each `overrides` entry is applied as a path patch (same syntax as `house_rules[].affects`). `extends` and `overrides` are stripped from the merged result.
 
 ---
 
@@ -65,7 +67,10 @@ Custom deck:
 
 ```json
 "players": { "min": 2, "max": 6 }
+"players": { "min": 4, "max": 4, "names": ["You", "West", "North", "East"] }
 ```
+
+`names`: display names indexed by seat (index 0 = human player). Defaults to "Player 1", "Player 2", … when absent.
 
 ---
 
@@ -78,20 +83,14 @@ Custom deck:
 "teams": {
   "count": 2,
   "size": 2,
-  "arrangement": "alternating"
+  "arrangement": "alternating",
+  "only_when_players": [4]
 }
 ```
 
 `arrangement` values: `"alternating"` (0,2 vs 1,3), `"sequential"` (0,1 vs 2,3)
 
----
-
-## Dealer
-
-```json
-"dealer": "random"
-"dealer": "high_card"
-```
+`only_when_players`: when set, teams are only active for games with these exact player counts; otherwise the game plays as individual.
 
 ---
 
@@ -109,7 +108,7 @@ Custom deck:
 
 `dealer`: `"rotates_left"` (default) | `"rotates_right"` | `"winner"` | `"loser"` | `"alternates"`
 
-`first_dealer`: `"random"` (default) | `"high_card"` (not yet implemented)
+`first_dealer`: `"random"` (default) | `"high_card"` (not yet implemented — falls back to random)
 
 ### How multi-round games work
 
@@ -228,38 +227,20 @@ All phase types are registered in `PhaseHandlerRegistry`.
 
 | Type | Status | Games |
 |---|---|---|
-| `trick_taking` | Implemented | Hearts, Spades, Euchre |
-| `bidding` | Implemented | Spades, Euchre |
+| `trick_taking` | Implemented | Hearts, Spades, Euchre, Pinochle |
+| `bidding` | Implemented | Spades, Euchre, Pinochle |
 | `pass_cards` | Implemented | Hearts |
-| `draw_discard` | Implemented | Gin Rummy, Golf, Crazy Eights |
-| `meld` | Implemented (set/run) | Gin Rummy, Hand and Foot |
-| `poker_betting` | Implemented | Texas Hold'em, Omaha, Stud |
+| `draw_discard` | Implemented | Gin Rummy, Golf |
+| `meld` | Implemented (set/run) | Gin Rummy, Pinochle, Hand and Foot |
+| `poker_betting` | Implemented | Texas Hold'em, Stud, Wilds |
 | `showdown` | Implemented | All poker variants |
 | `score` | Implemented | All multi-round games |
 | `free_play` | Implemented | Free Play mode |
-| `flip_compare_ready` | Implemented | War (internal) |
-| `flip_compare_result` | Implemented | War (internal) |
-| `deal` | Not yet registered | In-phase deals (Stud, community cards) |
-| `war` | Not yet registered | War (migrate from flip_compare) |
-| `go_fish` | Not yet registered | Go Fish (migrate from GoFishLogic) |
-| `blackjack_round` | Not yet registered | Blackjack (migrate from BlackjackLogic) |
-
-### `deal`
-Deals cards from the deck to a target zone.
-```json
-{
-  "id": "flop",
-  "type": "deal",
-  "burn_first": true,
-  "to": "community",
-  "count": 3,
-  "face": "up",
-  "next": "bet_flop"
-}
-```
-`to`: `"each_player"` | `"community"` | any zone id
-
----
+| `war` | Implemented | War |
+| `go_fish` | Implemented | Go Fish |
+| `blackjack_round` | Implemented | Blackjack |
+| `flip_compare_ready` | Implemented | High Card (internal) |
+| `flip_compare_result` | Implemented | High Card (internal) |
 
 ### `pass_cards`
 All players simultaneously choose cards to pass.
@@ -483,14 +464,16 @@ All types are dispatched by `ScoringEngine.Apply(state)`, called from the `score
 
 | Type | Status | Games |
 |---|---|---|
-| `none` | Implemented | War, Go Fish |
+| `none` | Implemented | War, Go Fish, Free Play |
 | `card_points` | Implemented | Hearts |
 | `trick_bid` | Implemented | Spades |
 | `grid_values` | Implemented | Golf |
+| `blackjack` | Implemented | Blackjack |
 | `euchre` | Stub | Euchre |
 | `hand_rank` | Stub | Poker variants |
 | `deadwood` | Stub | Gin Rummy |
-| `blackjack` | Handled by BlackjackLogic | Blackjack |
+| `meld_points` | Stub | Hand and Foot |
+| `pinochle` | Stub | Pinochle |
 
 ### `card_points`
 Cards in won zones are worth point values.
@@ -621,52 +604,114 @@ Each house rule declares an id, display info, default value, and what it overrid
 ```json
 "house_rules": [
   {
-    "id": "shoot_moon_subtract",
-    "name": "Shoot the Moon Subtracts",
-    "description": "Shooting the moon subtracts 26 from your score instead of adding to all others.",
+    "id": "short_game",
+    "name": "Short Game",
+    "description": "Game ends at 50 points instead of 100.",
     "default": false,
     "affects": {
-      "scoring.special[shoot_the_moon].effect": "subtract_26_from_self"
+      "win_condition.threshold": 50
+    }
+  },
+  {
+    "id": "extra_cards",
+    "name": "7-card deal",
+    "description": "Deal 7 cards instead of 5.",
+    "default": false,
+    "affects": {
+      "deal.cards_per_player": 7
     }
   }
 ]
 ```
 
-`affects` is a map of JSON-path-style keys to override values. The engine applies these when the house rule is enabled.
+`affects` is a map of path keys to JSON values. Supported path forms (same as `overrides`):
+
+| Path form | Example | Effect |
+|---|---|---|
+| `"deck"` | `"standard-52-jokers"` | Replace deck |
+| `"teams"` | `{ "count": 2, … }` | Replace teams config |
+| `"players"` | `{ "min": 2, "max": 4 }` | Replace players config |
+| `"scoring"` | `{ "type": "card_points", … }` | Replace scoring |
+| `"win_condition"` | `{ "type": "target_score", "score": 20 }` | Replace win condition |
+| `"deal.<field>"` | `"deal.cards_per_player": 7` | Patch a deal field |
+| `"win_condition.<field>"` | `"win_condition.threshold": 50` | Patch a win condition field |
+| `"scoring.<field>"` | `"scoring.bag_penalty": null` | Set/clear a scoring extra field |
+| `"<phaseId>.<param>"` | `"battle.tie_resolution": "split"` | Set a phase extra parameter |
 
 ---
 
-## Logic Modules Reference
+## UI Config
 
-These are named C# implementations the engine calls by type string. Each is registered in the engine at startup.
+Optional `ui` block for display hints.
 
-| Module | Games | What It Handles |
+```json
+"ui": {
+  "card_scale": 1.2,
+  "auto_sort_hand": "rank",
+  "allow_sort": true,
+  "show_game_log": false
+}
+```
+
+| Field | Default | Description |
 |---|---|---|
-| `trick_taking` | Hearts, Spades, Euchre, Pinochle | Lead, follow-suit, trump, trick collection |
-| `bidding` | Spades, Euchre, Pinochle | Auction bidding, pass/accept, stick-the-dealer |
-| `poker_betting` | All poker | Bet, call, raise, fold, check, all-in |
-| `hand_rank` | All poker | Hand evaluation high card → royal flush, with wilds |
-| `blackjack_round` | Blackjack | Deal, player actions, dealer AI, payout |
-| `draw_discard` | Gin Rummy, Golf | Per-player draw+discard loop, special actions |
-| `meld` | Gin Rummy, Pinochle, Hand and Foot | Meld detection (sets, runs, canasta, pinochle melds) |
-| `go_fish` | Go Fish | Ask/receive/go-fish loop, book collection |
-| `war` | War | Flip, compare, collect with war-on-tie |
-| `pass_cards` | Hearts | Simultaneous card passing with direction rotation |
-| `showdown` | All poker | Multi-hand reveal, rank comparison, pot split |
-| `free_play` | Free Play | Unconstrained card movement between zones |
-| `score` | All | Applies the game's `scoring` config at round end |
+| `card_scale` | `1.0` | Scale multiplier on the base card size |
+| `auto_sort_hand` | `"none"` | Auto-sort after every action: `"none"` \| `"rank"` \| `"rank_ace_high"` \| `"suit"` |
+| `allow_sort` | `true` | Show a Sort button in the HUD |
+| `show_game_log` | `true` | Show a Log button in the HUD |
+
+---
+
+## Phase Handler Reference
+
+All phase types are implemented as `IPhaseHandler` subclasses registered in `PhaseHandlerRegistry`. Each handler receives its `PhaseDefinition` (for parameters) and a `nextPhaseId` (the phase to transition to on completion).
+
+| Handler class | Phase type | What It Handles |
+|---|---|---|
+| `TrickTakingHandler` | `trick_taking` | Lead, follow-suit, trump, trick collection |
+| `BiddingHandler` | `bidding` | Auction bidding, pass/accept, stick-the-dealer |
+| `PokerBettingHandler` | `poker_betting` | Bet, call, raise, fold, check, all-in |
+| `ShowdownHandler` | `showdown` | Multi-hand reveal, rank comparison |
+| `BlackjackRoundHandler` | `blackjack_round` | Deal, player actions, dealer AI, payout |
+| `DrawDiscardHandler` | `draw_discard` | Per-player draw+discard loop, special actions |
+| `MeldHandler` | `meld` | Meld detection (sets, runs, canasta) |
+| `GoFishHandler` | `go_fish` | Ask/receive/go-fish loop, book collection |
+| `WarHandler` | `war` | Flip, compare, collect with war-on-tie |
+| `PassCardsHandler` | `pass_cards` | Simultaneous card passing with direction rotation |
+| `FreePlayHandler` | `free_play` | Unconstrained card movement between zones |
+| `ScorePhaseHandler` | `score` | Applies the game's `scoring` config at round end |
+| `FlipCompareReadyHandler` | `flip_compare_ready` | Each player reveals a card; highest rank wins |
+| `FlipCompareResultHandler` | `flip_compare_result` | Winner collects; advance round or end game |
 
 ---
 
 ## AI Interface
 
-The AI does not need game-specific knowledge from the schema. The engine exposes a `GetLegalActions(gameState)` call. The AI picks from that list based on difficulty. Game-specific strategy (Insane difficulty) is implemented per-game in C# and references the same game definition for context (e.g., what trump is, what the scoring table looks like).
+All AI-controlled players implement `IPlayerAgent`:
+```csharp
+public interface IPlayerAgent
+{
+    string PlayerId { get; }
+    GameAction ChooseAction(GameState visibleState, IReadOnlyList<GameAction> validActions);
+}
+```
+
+`DefaultAiAgent` is the built-in random agent — registered automatically by `DefaultGameLogic` for every non-human seat (players at index 1+) that doesn't already have an agent registered.
+
+The engine calls `IGameLogic.GetAutoAction(state)` during auto-advance ticks. When the current player has a registered agent, `GetAutoAction`:
+1. If selectable card IDs exist → builds `play_card` actions for each, lets the agent choose.
+2. Otherwise → filters valid actions to meaningful types (excludes `"tap"`, `"ai_step"`), lets the agent choose.
+3. Falls back to the first valid action for scripted/automated phases.
+
+Game-specific agents (e.g., `GoFishAiAgent`) are registered in the phase handler's `OnGameStart` via `state.PlayerAgents[playerId] = new MyAgent(playerId)`.
 
 ---
 
 ## Adding a New Game
 
 1. Create `games/<id>.json` using this schema.
-2. If the game uses a logic module not yet implemented, add it to the engine.
-3. Add a help file at `games/help/<id>.md`.
-4. The game appears automatically in the game picker — no code changes needed for the app layer.
+2. Add the game id to `GameLoader.GameIds`.
+3. If the game needs a new phase type, implement `IPhaseHandler` and register it in `PhaseHandlerRegistry`.
+4. If the game needs a new scoring type, add a case to `ScoringEngine.Apply`.
+5. Add a help file at `games/help/<id>.md`.
+6. The game appears automatically in the game picker — no other app-layer changes needed.
