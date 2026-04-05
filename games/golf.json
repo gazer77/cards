@@ -37,22 +37,7 @@
     },
     {
       "id": "score",
-      "type": "score",
-      "next": {
-        "if": "win_condition",
-        "then": "end",
-        "else": "deal_new_round"
-      }
-    },
-    {
-      "id": "deal_new_round",
-      "type": "deal",
-      "to": "each_player",
-      "target_zone": "grid",
-      "count": 6,
-      "face": "down",
-      "then_flip_top_to": "discard",
-      "next": "play"
+      "type": "score"
     }
   ],
   "scoring": {

@@ -7,10 +7,14 @@ namespace Cards.Engine;
 /// Phase handler for poker betting rounds (Texas Hold'em, Omaha, Stud).
 ///
 /// Phase definition parameters:
-///   structure        — "no_limit" | "limit" | "pot_limit"
-///   starting_player  — "left_of_dealer" | "two_left_of_dealer" | "three_left_of_dealer"
-///   can_check        — true | false: whether check is allowed (false for preflop)
-///   post_blinds      — true: auto-post small and big blinds from game definition before betting
+///   structure          — "no_limit" | "limit" | "pot_limit"
+///   starting_player    — "left_of_dealer" | "two_left_of_dealer" | "three_left_of_dealer"
+///                        | "lowest_up_card"   (stud 3rd street: player with lowest face-up card brings in)
+///                        | "highest_up_cards" (stud 4th–7th: player with best showing starts)
+///   can_check          — true | false: whether check is allowed (false for preflop)
+///   post_blinds        — true: auto-post small and big blinds from game definition before betting
+///   bring_in           — true: starting player (lowest_up_card) auto-posts a forced bring-in bet
+///   bring_in_amount    — chip amount of the bring-in; defaults to game ante amount or 1
 ///
 /// Chip tracking uses state.Scores as chip counts.
 /// Pot is tracked in state.Metadata["pot"] (integer string).
@@ -31,14 +35,18 @@ public sealed class PokerBettingHandler : IPhaseHandler
     private readonly string _startingPlayer;
     private readonly bool   _canCheck;
     private readonly bool   _postBlinds;
+    private readonly bool   _bringIn;
+    private readonly int    _bringInAmount;
 
     public PokerBettingHandler(PhaseDefinition def, string nextPhaseId)
     {
         _nextPhaseId    = nextPhaseId;
-        _structure      = GetString(def, "structure")       ?? "no_limit";
-        _startingPlayer = GetString(def, "starting_player") ?? "left_of_dealer";
-        _canCheck       = GetBool(def, "can_check")         ?? true;
-        _postBlinds     = GetBool(def, "post_blinds")       ?? false;
+        _structure      = GetString(def, "structure")        ?? "no_limit";
+        _startingPlayer = GetString(def, "starting_player")  ?? "left_of_dealer";
+        _canCheck       = GetBool(def, "can_check")          ?? true;
+        _postBlinds     = GetBool(def, "post_blinds")        ?? false;
+        _bringIn        = GetBool(def, "bring_in")           ?? false;
+        _bringInAmount  = GetInt(def, "bring_in_amount")     ?? 0; // resolved against ante at runtime
     }
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
@@ -138,15 +146,40 @@ public sealed class PokerBettingHandler : IPhaseHandler
 
         if (_postBlinds) PostBlinds(state);
 
-        string leaderId = ResolveStartingPlayer(state);
-        state.Metadata["bet_leader"]   = leaderId;
-        // bet_to_call may already be set by PostBlinds; leave it if so.
-        state.Metadata.TryAdd("bet_to_call", "0");
-
-        int leaderIdx = state.Players.FindIndex(p => p.Id == leaderId);
-        if (leaderIdx >= 0) state.CurrentPlayerIndex = leaderIdx;
+        if (_bringIn)
+        {
+            PostBringIn(state);
+        }
+        else
+        {
+            string leaderId = ResolveStartingPlayer(state);
+            state.Metadata["bet_leader"] = leaderId;
+            state.Metadata.TryAdd("bet_to_call", "0");
+            int leaderIdx = state.Players.FindIndex(p => p.Id == leaderId);
+            if (leaderIdx >= 0) state.CurrentPlayerIndex = leaderIdx;
+        }
 
         UpdateStatus(state);
+    }
+
+    private void PostBringIn(GameState state)
+    {
+        string bringInId = FindLowestUpCard(state);
+        int amount = _bringInAmount > 0 ? _bringInAmount
+                   : state.Definition.Ante?.Amount ?? 1;
+
+        PlaceBet(state, bringInId, amount);
+        state.Metadata["bet_to_call"] = amount.ToString();
+        state.Metadata["bet_leader"]  = bringInId;  // action completes back at bring-in player
+
+        // First to act is the player after the bring-in player (skip folded).
+        int idx = state.Players.FindIndex(p => p.Id == bringInId);
+        for (int i = 1; i <= state.Players.Count; i++)
+        {
+            int next = (idx + i) % state.Players.Count;
+            if (!IsFolded(state, state.Players[next].Id))
+            { state.CurrentPlayerIndex = next; break; }
+        }
     }
 
     private static void PostBlinds(GameState state)
@@ -184,6 +217,9 @@ public sealed class PokerBettingHandler : IPhaseHandler
 
     private string ResolveStartingPlayer(GameState state)
     {
+        if (_startingPlayer == "lowest_up_card")   return FindLowestUpCard(state);
+        if (_startingPlayer == "highest_up_cards") return FindHighestUpCards(state);
+
         if (state.DealerId is null) return state.Players[0].Id;
         int di = state.Players.FindIndex(p => p.Id == state.DealerId);
         int offset = _startingPlayer switch
@@ -194,6 +230,52 @@ public sealed class PokerBettingHandler : IPhaseHandler
         };
         return state.Players[(di + offset) % state.Players.Count].Id;
     }
+
+    private string FindLowestUpCard(GameState state)
+    {
+        string? bestId   = null;
+        int     bestRank = int.MaxValue;
+        int     bestSuit = int.MaxValue;
+
+        foreach (var p in state.Players)
+        {
+            if (IsFolded(state, p.Id)) continue;
+            var upCards = PlayerHand(state, p.Id)?.Cards.Where(c => c.IsFaceUp).ToList();
+            if (upCards is null || upCards.Count == 0) continue;
+            var low = upCards.OrderBy(c => (int)c.Rank).ThenBy(c => (int)c.Suit).First();
+            if ((int)low.Rank < bestRank || ((int)low.Rank == bestRank && (int)low.Suit < bestSuit))
+            {
+                bestRank = (int)low.Rank;
+                bestSuit = (int)low.Suit;
+                bestId   = p.Id;
+            }
+        }
+
+        return bestId ?? state.Players[0].Id;
+    }
+
+    private string FindHighestUpCards(GameState state)
+    {
+        string? bestId    = null;
+        int     bestScore = -1;
+
+        foreach (var p in state.Players)
+        {
+            if (IsFolded(state, p.Id)) continue;
+            var upCards = PlayerHand(state, p.Id)?.Cards.Where(c => c.IsFaceUp).ToList() ?? [];
+            if (upCards.Count == 0) continue;
+
+            var ranks  = upCards.Select(c => (int)c.Rank).OrderByDescending(r => r).ToList();
+            int pairs  = ranks.GroupBy(r => r).Count(g => g.Count() >= 2);
+            int score  = pairs * 10000 + ranks[0] * 100 + (ranks.Count > 1 ? ranks[1] : 0);
+            if (score > bestScore) { bestScore = score; bestId = p.Id; }
+        }
+
+        return bestId ?? state.Players[0].Id;
+    }
+
+    private static Zone? PlayerHand(GameState state, string playerId)
+        => state.FindZone($"hand:{playerId}") ?? state.FindZone("hand");
 
     // ── Betting logic ─────────────────────────────────────────────────────────
 
@@ -309,6 +391,13 @@ public sealed class PokerBettingHandler : IPhaseHandler
         if (def.Extra?.TryGetValue(key, out var el) == true &&
             el.ValueKind is JsonValueKind.True or JsonValueKind.False)
             return el.GetBoolean();
+        return null;
+    }
+
+    private static int? GetInt(PhaseDefinition def, string key)
+    {
+        if (def.Extra?.TryGetValue(key, out var el) == true && el.ValueKind == JsonValueKind.Number)
+            return el.GetInt32();
         return null;
     }
 }

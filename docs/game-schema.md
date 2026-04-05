@@ -335,9 +335,16 @@ Standard poker betting round.
 
 `structure`: `"no_limit"` | `"limit"` | `"pot_limit"`
 
-`starting_player`: `"left_of_dealer"` | `"two_left_of_dealer"` | `"three_left_of_dealer"`
+`starting_player`: `"left_of_dealer"` | `"two_left_of_dealer"` | `"three_left_of_dealer"` | `"lowest_up_card"` | `"highest_up_cards"`
+
+- `"lowest_up_card"` — player with the lowest face-up card starts (stud 3rd street); ties broken by suit (clubs < diamonds < hearts < spades)
+- `"highest_up_cards"` — player with the best showing (pairs first, then high card) starts (stud 4th–7th)
 
 `post_blinds`: `true` — auto-post small and big blinds from the top-level `blinds` definition before the round opens.
+
+`bring_in`: `true` — starting player (`lowest_up_card`) auto-posts a forced bring-in bet; remaining players can call, complete, or fold; bring-in player acts last.
+
+`bring_in_amount`: chip amount of the bring-in. Defaults to the game's `ante.amount`, or 1 if no ante is defined.
 
 **Blinds** (top-level field, consumed by `post_blinds: true`):
 ```json
@@ -347,7 +354,7 @@ Standard poker betting round.
 }
 ```
 
-**Ante** (top-level field — not yet auto-posted; reserved for Stud):
+**Ante** (top-level field — auto-posted for all players before each deal):
 ```json
 "ante": { "amount": 1 }
 ```

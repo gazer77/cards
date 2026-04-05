@@ -40,6 +40,7 @@ public sealed class DefaultGameLogic : GameLogicBase
             AssignInitialDealer(state);
 
         StandardDealEngine.Instance.Deal(state, playerCount, enabledHouseRules);
+        PostAntes(state);
 
         RegisterAllPhases(state);
 
@@ -87,6 +88,26 @@ public sealed class DefaultGameLogic : GameLogicBase
 
     }
 
+    // ── Ante posting ──────────────────────────────────────────────────────────
+
+    internal static void PostAntes(GameState state)
+    {
+        var ante = state.Definition.Ante;
+        if (ante is null || ante.Amount <= 0) return;
+        int total = 0;
+        foreach (var p in state.Players)
+        {
+            int chips  = state.GetScore(p.Id);
+            int amount = Math.Min(ante.Amount, chips);
+            if (amount > 0) { state.AddScore(p.Id, -amount); total += amount; }
+        }
+        if (total > 0)
+        {
+            int pot = int.TryParse(state.Metadata.GetValueOrDefault("pot", "0"), out int v) ? v : 0;
+            state.Metadata["pot"] = (pot + total).ToString();
+        }
+    }
+
     // ── New-round handler ─────────────────────────────────────────────────────
 
     private sealed class NewRoundHandler(DefaultGameLogic logic) : IPhaseHandler
@@ -113,6 +134,7 @@ public sealed class DefaultGameLogic : GameLogicBase
             ClearRoundZones(state);
 
             StandardDealEngine.Instance.Deal(state, logic._playerCount, logic._enabledHouseRules);
+            PostAntes(state);
 
             // Clear per-round tracking metadata.
             state.Metadata.Remove("trick_leader");

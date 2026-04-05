@@ -7,14 +7,16 @@ namespace Cards.Engine;
 /// Phase handler for draw-and-discard games (Gin Rummy, Crazy Eights, Golf).
 ///
 /// Phase definition parameters:
-///   draw_from       — ["deck"] | ["deck","discard"] — zones player may draw from
-///   draw_count      — cards to draw per turn (default 1)
-///   discard_count   — cards to discard per turn (default 1)
-///   target_zone     — "hand" (default) | "grid" — where drawn card goes
-///   special_actions — ["knock","gin","go_out"] — extra action buttons shown when conditions met
-///   knock_condition — "deadwood_lte_10" | "deadwood_eq_0" | "deadwood_lte_first_discard"
-///   gin_condition   — "deadwood_eq_0" (default)
-///   go_out_condition — "hand_empty" | "all_melds_complete_and_hand_empty" (default hand_empty)
+///   draw_from         — ["deck"] | ["deck","discard"] — zones player may draw from
+///   draw_count        — cards to draw per turn (default 1)
+///   discard_count     — cards to discard per turn (default 1)
+///   target_zone       — "hand" (default) | "grid" — where drawn card goes
+///   special_actions   — ["knock","gin","go_out"] — extra action buttons shown when conditions met
+///   knock_condition   — "deadwood_lte_10" | "deadwood_eq_0" | "deadwood_lte_first_discard"
+///   gin_condition     — "deadwood_eq_0" (default)
+///   go_out_condition  — "hand_empty" | "all_melds_complete_and_hand_empty" (default hand_empty)
+///   round_ends_when   — "any_player_grid_all_face_up": end round when any grid is fully revealed
+///   remaining_players_get_one_more_turn — true: after trigger, each other player gets one more turn
 ///
 /// Turn sub-states (stored in metadata["dd_turn_state"]):
 ///   "draw"    — player must draw a card
@@ -31,6 +33,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     private readonly string       _knockCondition;
     private readonly string       _ginCondition;
     private readonly string       _goOutCondition;
+    private readonly string?      _roundEndsWhen;
+    private readonly bool         _remainingGetOneTurn;
 
     public DrawDiscardHandler(PhaseDefinition def, string nextPhaseId)
     {
@@ -44,6 +48,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         _knockCondition  = GetString(def, "knock_condition")   ?? "deadwood_lte_10";
         _ginCondition    = GetString(def, "gin_condition")     ?? "deadwood_eq_0";
         _goOutCondition  = GetString(def, "go_out_condition")  ?? "hand_empty";
+        _roundEndsWhen   = GetString(def, "round_ends_when");
+        _remainingGetOneTurn = GetBool(def, "remaining_players_get_one_more_turn") ?? false;
     }
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
@@ -82,6 +88,15 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         EnsureInitialized(state);
         if (TurnState(state) != "discard") return [];
 
+        // Grid mode: player selects a grid card to swap with their drawn card.
+        if (_targetZone == "grid")
+        {
+            var grid = PlayerGrid(state, state.CurrentPlayer.Id);
+            if (grid is not null && state.Metadata.ContainsKey("dd_drawn_card"))
+                return grid.Cards.Select(c => c.Id).ToList();
+            // No drawn card yet — player can discard the drawn card (it's in hand temp)
+        }
+
         var hand = PlayerHand(state, state.CurrentPlayer.Id);
         return hand?.Cards.Select(c => c.Id).ToList() ?? [];
     }
@@ -89,6 +104,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     public IReadOnlyList<string> GetDropZoneIds(GameState state, string cardId)
     {
         if (TurnState(state) != "discard") return [];
+        // In grid mode, dropping a card onto the grid performs the swap.
+        if (_targetZone == "grid") return ["grid"];
         return ["discard"];
     }
 
@@ -114,6 +131,13 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         {
             DiscardCard(state, discardId);
             return;
+        }
+
+        // Grid mode: discard drawn card without swapping
+        if (_targetZone == "grid" && action.Type == "discard_drawn" && turnState == "discard")
+        {
+            string? drawnId = state.Metadata.GetValueOrDefault("dd_drawn_card");
+            if (drawnId is not null) { DiscardCard(state, drawnId); return; }
         }
 
         // If no explicit discard but a card was selected, use selected_card
@@ -149,8 +173,18 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         var card = fromZone.Draw()!;
         card.IsFaceUp = true;
 
-        var dest = PlayerHand(state, state.CurrentPlayer.Id);
-        dest?.Add(card);
+        if (_targetZone == "grid")
+        {
+            // In grid mode, hold the drawn card in a temp hand for the swap selection.
+            var temp = PlayerHand(state, state.CurrentPlayer.Id);
+            temp?.Add(card);
+            state.Metadata["dd_drawn_card"] = card.Id;
+        }
+        else
+        {
+            var dest = PlayerHand(state, state.CurrentPlayer.Id);
+            dest?.Add(card);
+        }
 
         state.Metadata["dd_turn_state"] = "discard";
         state.Metadata.Remove("selected_card");
@@ -159,9 +193,22 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
     private void DiscardCard(GameState state, string cardId)
     {
+        if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_drawn_card"))
+        {
+            // Grid mode: the selected card is a grid card to swap out.
+            // The drawn card (dd_drawn_card) goes face-up into the grid position,
+            // the grid card goes face-up to discard.
+            SwapGridCard(state, cardId);
+            return;
+        }
+
         var hand    = PlayerHand(state, state.CurrentPlayer.Id);
         var card    = hand?.Cards.FirstOrDefault(c => c.Id == cardId);
         if (card is null || hand is null) return;
+
+        // If discarding the drawn card itself in grid mode (player chose not to swap).
+        bool drawnCardDiscarded = _targetZone == "grid"
+            && state.Metadata.GetValueOrDefault("dd_drawn_card") == cardId;
 
         hand.Remove(card);
         card.IsFaceUp = true;
@@ -169,13 +216,115 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         var discard = state.FindZone("discard");
         discard?.Add(card);
 
+        if (drawnCardDiscarded)
+            state.Metadata.Remove("dd_drawn_card");
+
         state.Metadata.Remove("selected_card");
         state.Metadata.Remove("dd_turn_state");
 
-        // Advance to next player
+        AdvanceTurn(state);
+    }
+
+    private void SwapGridCard(GameState state, string gridCardId)
+    {
+        string drawnCardId = state.Metadata.GetValueOrDefault("dd_drawn_card", "");
+        var grid    = PlayerGrid(state, state.CurrentPlayer.Id);
+        var hand    = PlayerHand(state, state.CurrentPlayer.Id);
+        var discard = state.FindZone("discard");
+        if (grid is null || hand is null || discard is null) return;
+
+        // Remove drawn card from temp hand.
+        var drawnCard = hand.Cards.FirstOrDefault(c => c.Id == drawnCardId);
+        if (drawnCard is null) return;
+        hand.Remove(drawnCard);
+
+        // Remove grid card from grid.
+        var gridCard = grid.Cards.FirstOrDefault(c => c.Id == gridCardId);
+        if (gridCard is null) return;
+        grid.Remove(gridCard);
+
+        // Drawn card takes the grid position; grid card goes to discard.
+        drawnCard.IsFaceUp = true;
+        grid.Add(drawnCard);
+        gridCard.IsFaceUp = true;
+        discard.Add(gridCard);
+
+        state.Metadata.Remove("dd_drawn_card");
+        state.Metadata.Remove("selected_card");
+        state.Metadata.Remove("dd_turn_state");
+
+        AdvanceTurn(state);
+    }
+
+    private void AdvanceTurn(GameState state)
+    {
+        // Check round-end condition before advancing.
+        if (CheckRoundEnd(state)) return;
+
         state.AdvancePlayer();
+        // Skip players who have already had their "last turn" after the trigger.
+        while (state.Metadata.GetValueOrDefault($"dd_last_turn_done:{state.CurrentPlayer.Id}") == "true")
+            state.AdvancePlayer();
+
         state.Metadata["dd_turn_state"] = "draw";
         UpdateStatus(state);
+    }
+
+    private bool CheckRoundEnd(GameState state)
+    {
+        if (_roundEndsWhen is null) return false;
+
+        bool triggered = _roundEndsWhen == "any_player_grid_all_face_up"
+            && state.Players.Any(p =>
+            {
+                var g = PlayerGrid(state, p.Id);
+                return g is not null && g.Count > 0 && g.Cards.All(c => c.IsFaceUp);
+            });
+
+        if (!triggered) return false;
+
+        if (_remainingGetOneTurn)
+        {
+            // Mark the triggering player as done; others get one more turn.
+            string triggerId = state.CurrentPlayer.Id;
+            state.Metadata[$"dd_last_turn_done:{triggerId}"] = "true";
+
+            // Check if all others already had their last turn.
+            bool allDone = state.Players.All(p =>
+                state.Metadata.GetValueOrDefault($"dd_last_turn_done:{p.Id}") == "true");
+            if (allDone)
+            {
+                EndRound(state);
+                return true;
+            }
+
+            // Advance to the next player who still needs their last turn.
+            do { state.AdvancePlayer(); }
+            while (state.Metadata.GetValueOrDefault($"dd_last_turn_done:{state.CurrentPlayer.Id}") == "true");
+            state.Metadata["dd_turn_state"] = "draw";
+            UpdateStatus(state);
+            return true;
+        }
+
+        EndRound(state);
+        return true;
+    }
+
+    private void EndRound(GameState state)
+    {
+        // Flip all grid cards face-up before scoring.
+        foreach (var p in state.Players)
+        {
+            var g = PlayerGrid(state, p.Id);
+            if (g is null) continue;
+            foreach (var c in g.Cards) c.IsFaceUp = true;
+        }
+        // Clean up round-tracking metadata.
+        foreach (var p in state.Players)
+            state.Metadata.Remove($"dd_last_turn_done:{p.Id}");
+        state.Metadata.Remove("dd_drawn_card");
+        state.Metadata.Remove("dd_turn_state");
+        state.CurrentPhaseId = _nextPhaseId;
     }
 
     private void Knock(GameState state, bool isGin)
@@ -241,9 +390,19 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     private static Zone? PlayerHand(GameState state, string playerId)
         => state.FindZone($"hand:{playerId}") ?? state.FindZone("hand");
 
+    private static Zone? PlayerGrid(GameState state, string playerId)
+        => state.FindZone($"grid:{playerId}") ?? state.FindZone("grid");
+
     private void UpdateStatus(GameState state)
     {
-        string phase  = TurnState(state) == "draw" ? "Draw a card" : "Discard a card";
+        string phase;
+        if (TurnState(state) == "draw")
+            phase = "Draw a card";
+        else if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_drawn_card"))
+            phase = "Tap a card to swap, or discard the drawn card";
+        else
+            phase = "Discard a card";
+
         string player = state.CurrentPlayer == state.Players[0]
             ? "Your turn" : $"{state.CurrentPlayer.Name}'s turn";
         state.Metadata["status"] = $"{player} — {phase}";
@@ -277,5 +436,13 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             if (item.ValueKind == JsonValueKind.String && item.GetString() is { } s)
                 list.Add(s);
         return list;
+    }
+
+    private static bool? GetBool(PhaseDefinition def, string key)
+    {
+        if (def.Extra?.TryGetValue(key, out var el) == true &&
+            el.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            return el.GetBoolean();
+        return null;
     }
 }
