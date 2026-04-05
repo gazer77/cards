@@ -92,21 +92,21 @@ public static class ScoringEngine
             roundScores[p.Id] = pts;
         }
 
-        // Shoot the moon: if one player captured all point cards, add 26 to all others.
+        // Shoot the moon: if one player captured ALL point cards, redistribute.
         if (shootMoon)
         {
-            var special = scoring.Extra!["special"];
-            var moonPlayer = roundScores
-                .Where(kv => kv.Value == 26)
-                .Select(kv => kv.Key)
-                .FirstOrDefault();
+            var special      = scoring.Extra!["special"];
+            int totalPoints  = roundScores.Values.Sum();
+            string? moonPlayer = totalPoints > 0
+                ? roundScores.FirstOrDefault(kv => kv.Value == totalPoints).Key
+                : null;
 
             if (moonPlayer is not null)
             {
                 string effect = GetSpecialEffect(special, "shoot_the_moon") ?? "add_26_to_others";
                 if (effect == "subtract_26_from_self")
                 {
-                    roundScores[moonPlayer] = -26;
+                    roundScores[moonPlayer] = -totalPoints;
                     foreach (var p in state.Players.Where(p => p.Id != moonPlayer))
                         roundScores[p.Id] = 0;
                 }
@@ -114,7 +114,7 @@ public static class ScoringEngine
                 {
                     roundScores[moonPlayer] = 0;
                     foreach (var p in state.Players.Where(p => p.Id != moonPlayer))
-                        roundScores[p.Id] = 26;
+                        roundScores[p.Id] = totalPoints;
                 }
             }
         }
