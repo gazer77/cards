@@ -74,9 +74,20 @@ public sealed class PassCardsHandler : IPhaseHandler
             return;
         }
 
-        if (action.Type == "select_card" && action.CardId is { } cardId)
+        // play_card is treated as select_card (used by AI agent via GetAutoAction).
+        if ((action.Type is "select_card" or "play_card") && action.CardId is { } cardId)
         {
             ToggleSelection(state, state.CurrentPlayer.Id, cardId);
+            // Auto-confirm once enough cards are selected (AI workflow).
+            var mySelected = GetSelected(state, state.CurrentPlayer.Id);
+            if (mySelected.Count == _count)
+            {
+                state.Metadata[$"pass_done:{state.CurrentPlayer.Id}"] = "true";
+                if (state.Players.All(p => IsDone(state, p.Id)))
+                    ExecutePasses(state);
+                else
+                    state.AdvancePlayer();
+            }
             return;
         }
 

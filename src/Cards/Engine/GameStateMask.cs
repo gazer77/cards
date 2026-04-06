@@ -12,6 +12,7 @@ namespace Cards.Engine;
 ///   all        — full card list visible to everyone
 ///   owner      — full card list visible only to the zone's owner
 ///   top        — only the top card is visible
+///   mixed      — owner sees all cards; others see only face-up cards (Stud poker)
 ///   none       — no cards visible
 ///   count_only — no cards visible
 ///
@@ -53,7 +54,16 @@ public static class GameStateMask
             };
 
             if (seeAll)
+            {
                 dest.AddRange(src.Cards);
+            }
+            else if (src.Visibility == "mixed")
+            {
+                // Owner sees all their cards; others see only face-up cards.
+                bool isOwner = src.OwnerId == viewerId;
+                foreach (var c in src.Cards)
+                    if (isOwner || c.IsFaceUp) dest.Add(c);
+            }
             else if ((src.Visibility is "top" or "top_to_dealer") && src.TopCard is { } top)
                 dest.Add(top);
             // else: dest stays empty (count_only / none / non-matching owner)
