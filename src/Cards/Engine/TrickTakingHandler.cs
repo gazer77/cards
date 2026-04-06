@@ -114,6 +114,21 @@ public sealed class TrickTakingHandler : IPhaseHandler
             }
         }
 
+        // no_points_first_trick: when void in lead suit on trick 1, still block hearts + Qs.
+        if (_noPointsFirstTrick)
+        {
+            string trickNum = state.Metadata.GetValueOrDefault("trick_number", "1");
+            if (trickNum == "1")
+            {
+                var safe = hand.Cards
+                    .Where(c => !(c.Suit == Suit.Hearts ||
+                                  (c.Rank == Rank.Queen && c.Suit == Suit.Spades)))
+                    .ToList();
+                if (safe.Count > 0) return safe.Select(c => c.Id).ToList();
+                // Only points in hand — must play one; return full hand.
+            }
+        }
+
         return hand.Cards.Select(c => c.Id).ToList();
     }
 

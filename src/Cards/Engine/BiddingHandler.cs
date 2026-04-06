@@ -24,6 +24,7 @@ namespace Cards.Engine;
 ///   bid_winner          — playerId of the highest numeric bidder (number style only)
 ///   bidding_leader      — player who led the bidding this round
 ///   bidding_pass_count  — how many consecutive passes (for once_around)
+///   bid_high            — current highest numeric bid (competitive_bidding only)
 /// </summary>
 public sealed class BiddingHandler : IPhaseHandler
 {
@@ -42,6 +43,7 @@ public sealed class BiddingHandler : IPhaseHandler
     private readonly string? _ifCalledNext;         // phase to go to when someone calls trump
     private readonly string? _ifAllPassNext;        // phase to go to when all pass
     private readonly string? _dealerAction;         // "swap_turned_card": dealer picks up kitty on accept
+    private readonly bool   _competitive;           // true: each bid must exceed current high bid (Pinochle)
 
     private static readonly string[] AllSuits = ["clubs", "diamonds", "hearts", "spades"];
 
@@ -62,6 +64,11 @@ public sealed class BiddingHandler : IPhaseHandler
         _ifCalledNext   = GetNestedString(def, "if_called",   "next");
         _ifAllPassNext  = GetString(def, "if_all_pass");
         _dealerAction   = GetNestedString(def, "if_accepted", "dealer_action");
+        _competitive    = GetBool(def, "competitive_bidding") ?? false;
+
+        // Safety: if max_bid wasn't specified and defaults below min_bid, derive a sensible ceiling.
+        if (_maxBid < _minBid)
+            _maxBid = _minBid + 10 * _bidIncrement;
     }
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
@@ -74,7 +81,17 @@ public sealed class BiddingHandler : IPhaseHandler
         switch (_style)
         {
             case "number":
-                for (int i = _minBid; i <= _maxBid; i += _bidIncrement)
+                int floorBid  = _minBid;
+                int ceilingBid = _maxBid;
+                if (_competitive)
+                {
+                    int currentHigh = int.TryParse(state.Metadata.GetValueOrDefault("bid_high"), out int h) ? h : _minBid - _bidIncrement;
+                    floorBid = currentHigh + _bidIncrement;
+                    // Stuck dealer with no remaining bids within max: force-show one bid at floor.
+                    if (floorBid > _maxBid && IsLastAndStuck(state))
+                        ceilingBid = floorBid;
+                }
+                for (int i = floorBid; i <= ceilingBid; i += _bidIncrement)
                     actions.Add(new GameAction($"bid_{i}", Label: i.ToString()));
                 foreach (var s in _specialBids)
                     actions.Add(new GameAction($"bid_{s}", Label: Capitalize(s)));
@@ -137,6 +154,14 @@ public sealed class BiddingHandler : IPhaseHandler
         string bidValue = action.Type.StartsWith("bid_") ? action.Type["bid_".Length..] : action.Type;
         state.Metadata[$"bid:{player.Id}"] = bidValue;
 
+        // Competitive bidding: update current high bid when player bids a higher number.
+        if (_competitive && int.TryParse(bidValue, out int newBid))
+        {
+            int curHigh = int.TryParse(state.Metadata.GetValueOrDefault("bid_high"), out int ch) ? ch : _minBid - _bidIncrement;
+            if (newBid > curHigh)
+                state.Metadata["bid_high"] = newBid.ToString();
+        }
+
         // If bid sets trump (suit or accept), record it
         if (IsSuit(bidValue))
             state.Metadata["bid_trump"] = bidValue;
@@ -192,6 +217,7 @@ public sealed class BiddingHandler : IPhaseHandler
         // Clear any stale bid keys from a previous bidding phase.
         foreach (var p in state.Players)
             state.Metadata.Remove($"bid:{p.Id}");
+        state.Metadata.Remove("bid_high");
 
         // Set excluded suit for suit_or_pass style (e.g. Euchre's "no upcard suit").
         if (_excludeSuit is not null)
@@ -202,6 +228,10 @@ public sealed class BiddingHandler : IPhaseHandler
             if (excluded.Length > 0)
                 state.Metadata["bid_excluded_suit"] = excluded;
         }
+
+        // Competitive bidding: initialize high to one step below min so first player can bid min.
+        if (_competitive)
+            state.Metadata["bid_high"] = (_minBid - _bidIncrement).ToString();
 
         // Set starting player: left of dealer.
         string leaderId = LeftOfDealer(state);
@@ -259,6 +289,7 @@ public sealed class BiddingHandler : IPhaseHandler
         state.Metadata.Remove("bidding_leader");
         state.Metadata.Remove("bidding_pass_count");
         state.Metadata.Remove("bid_excluded_suit");
+        state.Metadata.Remove("bid_high");
 
         state.CurrentPhaseId = nextPhaseId;
     }
@@ -317,7 +348,11 @@ public sealed class BiddingHandler : IPhaseHandler
     {
         string player = state.CurrentPlayer == state.Players[0]
             ? "Your bid" : $"{state.CurrentPlayer.Name}'s bid";
-        state.Metadata["status"] = player;
+        if (_competitive && state.Metadata.TryGetValue("bid_high", out var highStr)
+            && int.TryParse(highStr, out int high) && high >= _minBid)
+            state.Metadata["status"] = $"{player} — current high: {high}";
+        else
+            state.Metadata["status"] = player;
     }
 
     private static string Capitalize(string s)

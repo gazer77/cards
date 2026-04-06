@@ -34,7 +34,9 @@
       "style": "number",
       "order": "left_of_dealer",
       "min_bid": 250,
+      "max_bid": 500,
       "bid_increment": 10,
+      "competitive_bidding": true,
       "pass_allowed": true,
       "stick_the_dealer": true,
       "next": "name_trump"
