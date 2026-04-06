@@ -12,6 +12,7 @@ namespace Cards.Engine;
 ///   flip_compare_ready   — each player reveals a card; highest rank wins the round.
 ///   flip_compare_result  — winner collects; advance round or end game.
 ///   name_trump           — bid winner selects a trump suit (writes bid_trump metadata).
+///   dealer_discard       — dealer selects one card to discard (Euchre kitty pick-up followup).
 /// </summary>
 public static class PhaseHandlerRegistry
 {
@@ -34,6 +35,7 @@ public static class PhaseHandlerRegistry
             ["go_fish"]             = (def, next) => new GoFishHandler(def, next),
             ["deal"]                = (def, next) => new DealPhaseHandler(def, next),
             ["name_trump"]          = (def, next) => new NameTrumpHandler(def, next),
+            ["dealer_discard"]      = (def, next) => new DealerDiscardHandler(next),
         };
 
     /// <summary>
@@ -346,6 +348,77 @@ public static class PhaseHandlerRegistry
             }
 
             state.CurrentPhaseId = _nextPhaseId;
+        }
+    }
+
+    // ── dealer_discard ────────────────────────────────────────────────────────
+    // Dealer selects one card from their hand to discard after picking up the kitty.
+    // Reads the target next phase from metadata["dealer_discard_next"] so BiddingHandler
+    // can set the correct continuation without hard-coding it here.
+
+    private sealed class DealerDiscardHandler(string fallbackNextPhaseId) : IPhaseHandler
+    {
+        public IReadOnlyList<string> GetSelectableCardIds(GameState state)
+        {
+            EnsureDealer(state);
+            var hand = DealerHand(state);
+            return hand is null ? [] : hand.Cards.Select(c => c.Id).ToList();
+        }
+
+        public IReadOnlyList<string> GetDropZoneIds(GameState _) => [];
+
+        public IReadOnlyList<GameAction> GetValidActions(GameState state)
+        {
+            EnsureDealer(state);
+            return [new GameAction("tap")];
+        }
+
+        public void Apply(GameState state, GameAction action)
+        {
+            EnsureDealer(state);
+
+            // Expect a play_card action carrying the selected card id.
+            string? cardId = action.CardId ?? (action.Type.StartsWith("play_card:") ? action.Type["play_card:".Length..] : null);
+
+            if (cardId is null)
+            {
+                // Tap with no card selected — pick the last card in hand automatically.
+                var hand = DealerHand(state);
+                if (hand is not null && hand.Count > 0)
+                    cardId = hand.Cards[^1].Id;
+            }
+
+            if (cardId is not null)
+            {
+                var hand   = DealerHand(state);
+                var kitty  = state.FindZone("kitty");
+                var card   = hand?.Cards.FirstOrDefault(c => c.Id == cardId);
+                if (card is not null && hand is not null)
+                {
+                    hand.Remove(card);
+                    card.IsFaceUp = false;
+                    kitty?.Add(card);
+                }
+            }
+
+            string next = state.Metadata.GetValueOrDefault("dealer_discard_next") ?? fallbackNextPhaseId;
+            state.Metadata.Remove("dealer_discard_next");
+            state.Metadata["status"] = "Dealer discarded. Let's play!";
+            state.CurrentPhaseId     = next;
+        }
+
+        private static void EnsureDealer(GameState state)
+        {
+            if (state.DealerId is not { } did) return;
+            int idx = state.Players.FindIndex(p => p.Id == did);
+            if (idx >= 0 && state.CurrentPlayerIndex != idx)
+                state.CurrentPlayerIndex = idx;
+        }
+
+        private static Zone? DealerHand(GameState state)
+        {
+            if (state.DealerId is not { } did) return null;
+            return state.FindZone($"hand:{did}") ?? state.FindZone("hand");
         }
     }
 

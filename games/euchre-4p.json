@@ -40,7 +40,7 @@
       "if_accepted": {
         "sets": { "trump": "turned_card_suit", "maker": "accepting_player" },
         "dealer_action": "swap_turned_card",
-        "next": "play"
+        "next": "dealer_discard"
       },
       "if_all_pass": "call_trump"
     },
@@ -57,6 +57,11 @@
         "sets": { "trump": "bidder_choice", "maker": "calling_player" },
         "next": "play"
       }
+    },
+    {
+      "id": "dealer_discard",
+      "type": "dealer_discard",
+      "next": "play"
     },
     {
       "id": "play",

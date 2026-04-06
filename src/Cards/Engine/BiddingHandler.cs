@@ -41,6 +41,7 @@ public sealed class BiddingHandler : IPhaseHandler
     private readonly string? _ifAcceptedNext;       // phase to go to when someone accepts
     private readonly string? _ifCalledNext;         // phase to go to when someone calls trump
     private readonly string? _ifAllPassNext;        // phase to go to when all pass
+    private readonly string? _dealerAction;         // "swap_turned_card": dealer picks up kitty on accept
 
     private static readonly string[] AllSuits = ["clubs", "diamonds", "hearts", "spades"];
 
@@ -60,6 +61,7 @@ public sealed class BiddingHandler : IPhaseHandler
         _ifAcceptedNext = GetNestedString(def, "if_accepted", "next");
         _ifCalledNext   = GetNestedString(def, "if_called",   "next");
         _ifAllPassNext  = GetString(def, "if_all_pass");
+        _dealerAction   = GetNestedString(def, "if_accepted", "dealer_action");
     }
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
@@ -146,6 +148,27 @@ public sealed class BiddingHandler : IPhaseHandler
         {
             state.Metadata["euchre_maker"] = player.Id;
             string next = _ifAcceptedNext ?? _ifCalledNext ?? _nextPhaseId;
+
+            // dealer_action: "swap_turned_card" — move kitty card to dealer's hand.
+            // The dealer will then discard via the dealer_discard phase.
+            if (_dealerAction == "swap_turned_card" && state.DealerId is { } dealerId)
+            {
+                var kitty     = state.FindZone("kitty");
+                var dealerHand = state.FindZone($"hand:{dealerId}") ?? state.FindZone("hand");
+                if (kitty?.TopCard is { } kittyCard && dealerHand is not null)
+                {
+                    kitty.Remove(kittyCard);
+                    kittyCard.IsFaceUp = false;   // dealer holds it face-down
+                    dealerHand.Add(kittyCard);
+                    // Point dealer_discard phase back to its configured next phase.
+                    state.Metadata["dealer_discard_next"] = _ifAcceptedNext ?? _nextPhaseId;
+                    // Set current player to dealer for the discard phase.
+                    int di = state.Players.FindIndex(p => p.Id == dealerId);
+                    if (di >= 0) state.CurrentPlayerIndex = di;
+                    next = "dealer_discard";
+                }
+            }
+
             FinishBiddingWith(state, next);
             return;
         }
