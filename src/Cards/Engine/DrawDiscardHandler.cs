@@ -117,13 +117,13 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         EnsureInitialized(state);
         if (TurnState(state) != "discard") return [];
 
-        // Grid mode: player selects a grid card to swap with their drawn card.
+        // Grid mode: player selects a grid card to swap with their drawn card,
+        // OR taps the drawn card itself to discard it without swapping.
         if (_targetZone == "grid")
         {
             var grid = PlayerGrid(state, state.CurrentPlayer.Id);
-            if (grid is not null && state.Metadata.ContainsKey("dd_drawn_card"))
-                return grid.Cards.Select(c => c.Id).ToList();
-            // No drawn card yet — player can discard the drawn card (it's in hand temp)
+            if (grid is not null && state.Metadata.TryGetValue("dd_drawn_card", out var drawnId))
+                return [.. grid.Cards.Select(c => c.Id), drawnId];
         }
 
         var hand = PlayerHand(state, state.CurrentPlayer.Id);
@@ -152,6 +152,13 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
         if (action.Type == "select_card" && action.CardId is { } selectId)
         {
+            // In grid mode, tapping the drawn card discards it without swapping.
+            if (_targetZone == "grid" &&
+                state.Metadata.GetValueOrDefault("dd_drawn_card") == selectId)
+            {
+                DiscardCard(state, selectId);
+                return;
+            }
             state.Metadata["selected_card"] = selectId;
             return;
         }
@@ -192,9 +199,27 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     private void EnsureInitialized(GameState state)
     {
         if (state.Metadata.ContainsKey("dd_turn_state")) return;
+
+        // Oklahoma Gin: record first discard card value as the knock threshold.
+        if (_knockCondition == "deadwood_lte_first_discard" &&
+            !state.Metadata.ContainsKey("dd_first_discard_value"))
+        {
+            var discard = state.FindZone("discard");
+            if (discard?.TopCard is { } top)
+                state.Metadata["dd_first_discard_value"] = GinCardValue(top.Rank).ToString();
+        }
+
         state.Metadata["dd_turn_state"] = "draw";
         UpdateStatus(state);
     }
+
+    /// <summary>Returns the Gin Rummy scoring value for a rank: A=1, 2-9=pip, 10/J/Q/K=10.</summary>
+    private static int GinCardValue(Rank rank) => rank switch
+    {
+        Rank.Ace => 1,
+        Rank.Jack or Rank.Queen or Rank.King => 10,
+        _ => (int)rank,
+    };
 
     private void DrawCard(GameState state, string fromZoneId)
     {
@@ -462,12 +487,14 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
     private bool ConditionMet(GameState state, string condition)
     {
-        // Simplified deadwood check: count unmelded card values in hand
         int deadwood = CountDeadwood(state, state.CurrentPlayer.Id);
         return condition switch
         {
-            "deadwood_eq_0"  => deadwood == 0,
-            "deadwood_lte_10" => deadwood <= 10,
+            "deadwood_eq_0"            => deadwood == 0,
+            "deadwood_lte_10"          => deadwood <= 10,
+            "deadwood_lte_first_discard" =>
+                int.TryParse(state.Metadata.GetValueOrDefault("dd_first_discard_value", "10"), out int fv)
+                    ? deadwood <= fv : deadwood <= 10,
             _ => false,
         };
     }

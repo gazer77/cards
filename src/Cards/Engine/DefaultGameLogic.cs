@@ -178,6 +178,7 @@ public sealed class DefaultGameLogic : GameLogicBase
             state.Metadata.Remove("dd_gin");
             state.Metadata.Remove("dd_go_out_player");
             state.Metadata.Remove("dd_go_out_team");
+            state.Metadata.Remove("dd_first_discard_value");
             state.Metadata.Remove("pot");
             foreach (var p in state.Players)
             {

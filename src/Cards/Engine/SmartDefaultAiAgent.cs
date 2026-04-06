@@ -28,10 +28,27 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         if (validActions.Count == 0) return new GameAction("tap");
         if (validActions.Count == 1) return validActions[0];
 
-        // Card-play decisions (trick-taking)
+        // Gin Rummy: always gin immediately; knock when available (it's +EV to stop)
+        if (validActions.Any(a => a.Type == "gin"))
+            return validActions.First(a => a.Type == "gin");
+        if (validActions.Any(a => a.Type == "knock"))
+            return validActions.First(a => a.Type == "knock");
+
+        // Card-play decisions — detect context before generic trick-taking
         var plays = validActions.Where(a => a.Type == "play_card" && a.CardId is not null).ToList();
         if (plays.Count > 0)
+        {
+            // Golf grid-swap: drawn card is one of the play_card options
+            string? drawnCardId = state.Metadata.GetValueOrDefault("dd_drawn_card");
+            if (drawnCardId is not null && plays.Any(a => a.CardId == drawnCardId))
+                return ChooseGolfGridAction(state, plays, drawnCardId);
+
+            // Draw-discard discard phase (gin rummy / hand-and-foot / etc.): smarter discard
+            if (state.Metadata.GetValueOrDefault("dd_turn_state") == "discard")
+                return ChooseDiscardCard(state, plays);
+
             return ChooseTrickCard(state, plays);
+        }
 
         // Draw phase for draw-discard games
         if (validActions.Any(a => a.Type.StartsWith("draw_from_")))
@@ -130,27 +147,149 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         return hand.OrderBy(c => (int)c.Rank).First();
     }
 
+    // ── Golf grid-swap strategy ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Chooses the best golf grid action from a list that includes both grid cards
+    /// (to swap with the drawn card) and the drawn card itself (to discard without swapping).
+    /// Strategy: swap with the worst face-up grid card if drawn card scores lower;
+    /// otherwise discard the drawn card, or swap a face-down card if drawn card is good.
+    /// </summary>
+    private GameAction ChooseGolfGridAction(GameState state, List<GameAction> plays, string drawnCardId)
+    {
+        var allCards = GetCardsByIds(state, plays.Select(a => a.CardId!));
+        var drawnCard = allCards.FirstOrDefault(c => c.Id == drawnCardId);
+        if (drawnCard is null) return plays[_rng.Next(plays.Count)];
+
+        var gridCards = allCards.Where(c => c.Id != drawnCardId).ToList();
+        int drawnValue = GolfCardValue(drawnCard);
+
+        // Find worst face-up grid card (highest golf value = most points = worst)
+        var worstFaceUp = gridCards
+            .Where(c => c.IsFaceUp)
+            .OrderByDescending(c => GolfCardValue(c))
+            .FirstOrDefault();
+
+        if (worstFaceUp is not null && drawnValue < GolfCardValue(worstFaceUp))
+        {
+            // Drawn card is better than worst known card — swap it in
+            return plays.First(a => a.CardId == worstFaceUp.Id);
+        }
+
+        // Drawn card is not better than any known grid card.
+        // If it's a low-scoring card (≤3), risk swapping a face-down slot.
+        var faceDownCards = gridCards.Where(c => !c.IsFaceUp).ToList();
+        if (faceDownCards.Count > 0 && drawnValue <= 3)
+            return plays.First(a => a.CardId == faceDownCards[_rng.Next(faceDownCards.Count)].Id);
+
+        // Discard the drawn card (play it back without swapping)
+        return plays.First(a => a.CardId == drawnCardId);
+    }
+
+    /// <summary>
+    /// Golf scoring value approximation (lower is better).
+    /// Jokers (-2) are not in the standard Rank enum; treated like 2s.
+    /// </summary>
+    private static int GolfCardValue(Card c) => c.Rank switch
+    {
+        Rank.Ace   => 1,
+        Rank.Two   => -2,
+        Rank.King  => 0,
+        Rank.Ten or Rank.Jack or Rank.Queen => 10,
+        _ => (int)c.Rank,  // Three=3 … Nine=9
+    };
+
     // ── Draw-discard strategy ─────────────────────────────────────────────────
 
     private GameAction ChooseDraw(GameState state, IReadOnlyList<GameAction> validActions)
     {
-        // Draw from discard if top discard card is lower rank than average hand rank.
         var discardAction = validActions.FirstOrDefault(a => a.Type == "draw_from_discard");
         if (discardAction is not null)
         {
             var discard = state.Zones.Values.FirstOrDefault(z => z.Id == "discard" || z.Id.StartsWith("discard"));
-            var hand    = state.FindZone($"hand:{PlayerId}") ?? state.FindZone("hand");
-            if (discard?.TopCard is { IsFaceUp: true } top && hand is not null && hand.Count > 0)
+            if (discard?.TopCard is { IsFaceUp: true } top)
             {
-                double avgHandRank = hand.Cards.Average(c => (int)c.Rank);
-                if ((int)top.Rank < avgHandRank)
-                    return discardAction;
+                // Golf (grid target): compare top discard value against worst face-up grid card
+                var myGrid = state.Zones.Values.FirstOrDefault(z => z.Type == "grid" && z.OwnerId == PlayerId);
+                if (myGrid is not null)
+                {
+                    int topValue = GolfCardValue(top);
+                    var worstFaceUp = myGrid.Cards.Where(c => c.IsFaceUp)
+                        .OrderByDescending(c => GolfCardValue(c)).FirstOrDefault();
+                    if (worstFaceUp is not null && topValue < GolfCardValue(worstFaceUp))
+                        return discardAction;
+                }
+                else
+                {
+                    // Regular draw-discard: draw from discard if top card ranks below hand average
+                    var hand = state.FindZone($"hand:{PlayerId}") ?? state.FindZone("hand");
+                    if (hand is not null && hand.Count > 0)
+                    {
+                        double avgHandRank = hand.Cards.Average(c => (int)c.Rank);
+                        if ((int)top.Rank < avgHandRank)
+                            return discardAction;
+                    }
+                }
             }
         }
 
         // Default: draw from deck
         return validActions.FirstOrDefault(a => a.Type == "draw_from_deck") ?? validActions[0];
     }
+
+    // ── Draw-discard discard strategy ────────────────────────────────────────
+
+    /// <summary>
+    /// Chooses the best card to discard in a draw-discard game (Gin Rummy, etc.).
+    /// Prefers discarding high-value isolated cards: cards that aren't part of any
+    /// set (same rank) or run (consecutive ranks of the same suit).
+    /// </summary>
+    private GameAction ChooseDiscardCard(GameState state, List<GameAction> plays)
+    {
+        var hand = GetCardsByIds(state, plays.Select(a => a.CardId!));
+        if (hand.Count == 0) return plays[_rng.Next(plays.Count)];
+
+        // Score each card by its "meld potential":
+        // A card near a set or run is valuable; high isolated cards are good discards.
+        var scores = hand.Select(c => (Card: c, Score: MeldPotential(c, hand))).ToList();
+
+        // Discard the card with the LOWEST meld potential and HIGHEST deadwood value.
+        // Tiebreak: prefer discarding higher-ranked cards.
+        var worst = scores
+            .OrderBy(x => x.Score)
+            .ThenByDescending(x => GinDeadwoodValue(x.Card))
+            .First();
+
+        var action = plays.First(a => a.CardId == worst.Card.Id);
+        return action;
+    }
+
+    /// <summary>
+    /// Estimates how likely a card is to contribute to a meld.
+    /// Higher = more valuable to keep. Range 0-4.
+    /// </summary>
+    private static int MeldPotential(Card card, List<Card> hand)
+    {
+        int score = 0;
+
+        // Set potential: other cards of the same rank
+        int sameRank = hand.Count(c => c.Id != card.Id && c.Rank == card.Rank);
+        score += sameRank * 2;
+
+        // Run potential: cards of the same suit within 2 ranks
+        int nearRun = hand.Count(c => c.Id != card.Id && c.Suit == card.Suit
+                                      && Math.Abs((int)c.Rank - (int)card.Rank) <= 2);
+        score += nearRun;
+
+        return score;
+    }
+
+    private static int GinDeadwoodValue(Card c) => c.Rank switch
+    {
+        Rank.Ace => 1,
+        Rank.Jack or Rank.Queen or Rank.King => 10,
+        _ => (int)c.Rank,
+    };
 
     // ── Poker betting strategy ────────────────────────────────────────────────
 
@@ -276,6 +415,17 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         }
 
         // number-style (Spades, Pinochle): estimate trick count from hand strength
+        // Check for nil option first: bid nil if hand is very weak (no aces or kings)
+        var nilBid = validActions.FirstOrDefault(a => a.Type == "bid_nil");
+        if (nilBid is not null)
+        {
+            bool hasAce = cards.Any(c => c.Rank == Rank.Ace);
+            bool hasKing = cards.Any(c => c.Rank == Rank.King);
+            bool hasHighSpade = cards.Any(c => c.Suit == Suit.Spades && (int)c.Rank >= (int)Rank.Queen);
+            if (!hasAce && !hasKing && !hasHighSpade)
+                return nilBid;
+        }
+
         var numberBids = validActions
             .Where(a => a.Type.StartsWith("bid_") && int.TryParse(a.Type["bid_".Length..], out _))
             .OrderBy(a => int.Parse(a.Type["bid_".Length..]))

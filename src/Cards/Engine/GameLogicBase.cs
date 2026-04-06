@@ -109,6 +109,12 @@ public abstract class GameLogicBase : IGameLogic
             var cardActs = selCards
                 .Select(id => new GameAction("play_card", CardId: id))
                 .ToList<GameAction>();
+
+            // Also include knock / gin / go_out so the agent can choose to end the hand
+            // instead of always playing a card. (meld_done / confirm_pass are NOT included
+            // here because they would be randomly selected before all melds/passes are done.)
+            cardActs.AddRange(valid.Where(a => a.Type is "knock" or "gin" or "go_out"));
+
             var masked = GameStateMask.CreateViewFor(state, state.CurrentPlayer.Id);
             return agent.ChooseAction(masked, cardActs);
         }
