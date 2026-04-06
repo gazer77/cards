@@ -74,10 +74,13 @@ public sealed class StandardDealEngine : IDealStrategy
             DealByPattern(state, playerCount, pattern, def.Face, deckZone, steps, byPlayer);
         else
         {
+            // When there is no deal config at all, or cardsPerPlayer is explicitly 0,
+            // skip dealing — phases handle the deal themselves (e.g. Texas Hold'em, Stud).
             int cardsPerPlayer = cardsPerPlayerOverride
                 ?? def?.GetCardsPerPlayer(playerCount)
-                ?? 5;
-            DealClockwise(state, playerCount, cardsPerPlayer, def?.Face, deckZone, steps, byPlayer);
+                ?? 0;   // default to 0 (no deal) when definition is absent
+            if (cardsPerPlayer > 0)
+                DealClockwise(state, playerCount, cardsPerPlayer, def?.Face, deckZone, steps, byPlayer);
         }
 
         // Move undealt cards out of the deck if requested.
