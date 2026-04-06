@@ -118,10 +118,7 @@ public static class HouseRuleEngine
 
             case "scoring":
                 if (def.Scoring is not null)
-                {
-                    def.Scoring.Extra ??= [];
-                    def.Scoring.Extra[rest] = value;
-                }
+                    PatchScoring(def.Scoring, rest, value);
                 break;
 
             default:
@@ -138,6 +135,67 @@ public static class HouseRuleEngine
     }
 
     // ── Field patchers ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Patches a <see cref="ScoringDefinition"/>'s Extra map.
+    /// Special forms:
+    ///   <c>card_values: { "append": {...} }</c>  — appends one entry to the card_values array.
+    ///   <c>special[name].field</c>               — patches a named entry in the special array.
+    /// Everything else is a plain key replace in <c>Scoring.Extra</c>.
+    /// </summary>
+    private static void PatchScoring(ScoringDefinition scoring, string rest, JsonElement value)
+    {
+        scoring.Extra ??= [];
+
+        // "special[name].field" — find named special entry and replace a property.
+        if (rest.StartsWith("special[", StringComparison.OrdinalIgnoreCase))
+        {
+            int close = rest.IndexOf(']');
+            if (close < 0) { scoring.Extra[rest] = value; return; }
+            string name  = rest[8..close];
+            string field = rest.Length > close + 2 ? rest[(close + 2)..] : "";
+
+            if (!scoring.Extra.TryGetValue("special", out var specialEl)
+                || specialEl.ValueKind != JsonValueKind.Array)
+            { scoring.Extra[rest] = value; return; }
+
+            var items = new List<Dictionary<string, JsonElement>>();
+            foreach (var el in specialEl.EnumerateArray())
+            {
+                var dict = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+                foreach (var prop in el.EnumerateObject())
+                    dict[prop.Name] = prop.Value;
+                if (el.TryGetProperty("name", out var n)
+                    && string.Equals(n.GetString(), name, StringComparison.OrdinalIgnoreCase)
+                    && field.Length > 0)
+                    dict[field] = value;
+                items.Add(dict);
+            }
+
+            string json = JsonSerializer.Serialize(items, _serOpts);
+            scoring.Extra["special"] = JsonDocument.Parse(json).RootElement;
+            return;
+        }
+
+        // "card_values: { append: {...} }" — append one element to the existing array.
+        if (rest.Equals("card_values", StringComparison.OrdinalIgnoreCase)
+            && value.ValueKind == JsonValueKind.Object
+            && value.TryGetProperty("append", out var appendEl))
+        {
+            if (!scoring.Extra.TryGetValue("card_values", out var cvEl)
+                || cvEl.ValueKind != JsonValueKind.Array)
+            { scoring.Extra[rest] = value; return; }
+
+            var parts = cvEl.EnumerateArray().Select(e => e.GetRawText()).ToList();
+            parts.Add(appendEl.GetRawText());
+            string json = $"[{string.Join(",", parts)}]";
+            scoring.Extra["card_values"] = JsonDocument.Parse(json).RootElement;
+            return;
+        }
+
+        // Default: plain replace.
+        scoring.Extra[rest] = value;
+    }
 
     private static void PatchDeal(DealDefinition deal, string field, JsonElement value)
     {

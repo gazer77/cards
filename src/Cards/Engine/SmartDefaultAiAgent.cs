@@ -41,6 +41,10 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         if (validActions.Any(a => a.Type is "call" or "check" or "fold" or "raise"))
             return ChoosePokerAction(state, validActions);
 
+        // Bidding — number, accept/pass, suit/pass styles
+        if (validActions.Any(a => a.Type.StartsWith("bid_")))
+            return ChooseBid(state, validActions);
+
         // Default: random
         return validActions[_rng.Next(validActions.Count)];
     }
@@ -166,6 +170,80 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         return validActions.FirstOrDefault(a => a.Type == "fold")
             ?? call
             ?? validActions[_rng.Next(validActions.Count)];
+    }
+
+    // ── Bidding strategy ─────────────────────────────────────────────────────
+
+    private GameAction ChooseBid(GameState state, IReadOnlyList<GameAction> validActions)
+    {
+        var hand = state.FindZone($"hand:{PlayerId}") ?? state.FindZone("hand");
+        if (hand is null) return validActions[_rng.Next(validActions.Count)];
+        var cards = hand.Cards;
+
+        // accept_or_pass (Euchre): accept if we hold 2+ trump-suited cards
+        if (validActions.Any(a => a.Type == "bid_accept"))
+        {
+            var kitty = state.FindZone("kitty");
+            if (kitty?.TopCard is { } top)
+            {
+                int trumpCount = cards.Count(c => c.Suit == top.Suit);
+                if (trumpCount >= 2) return validActions.First(a => a.Type == "bid_accept");
+            }
+            return validActions.First(a => a.Type == "bid_pass");
+        }
+
+        // suit_or_pass (Euchre second round): pick suit we hold most of
+        bool allSuitOrPass = validActions.All(a =>
+            a.Type is "bid_clubs" or "bid_diamonds" or "bid_hearts" or "bid_spades" or "bid_pass");
+        if (allSuitOrPass)
+        {
+            string? excluded = state.Metadata.GetValueOrDefault("bid_excluded_suit");
+            var bestSuit = Enum.GetValues<Suit>()
+                .Where(s => s.ToString().ToLower() != excluded)
+                .OrderByDescending(s => cards.Count(c => c.Suit == s))
+                .First();
+            if (cards.Count(c => c.Suit == bestSuit) >= 3)
+            {
+                string suitType = $"bid_{bestSuit.ToString().ToLower()}";
+                var suitAct = validActions.FirstOrDefault(a => a.Type == suitType);
+                if (suitAct is not null) return suitAct;
+            }
+            return validActions.FirstOrDefault(a => a.Type == "bid_pass")
+                ?? validActions[_rng.Next(validActions.Count)];
+        }
+
+        // number-style (Spades, Pinochle): estimate trick count from hand strength
+        var numberBids = validActions
+            .Where(a => a.Type.StartsWith("bid_") && int.TryParse(a.Type["bid_".Length..], out _))
+            .OrderBy(a => int.Parse(a.Type["bid_".Length..]))
+            .ToList();
+
+        if (numberBids.Count > 0)
+        {
+            string? trumpName = state.Metadata.GetValueOrDefault("trick_trump")
+                             ?? state.Metadata.GetValueOrDefault("bid_trump");
+            Suit? trump = trumpName is not null
+                ? Enum.GetValues<Suit>().Cast<Suit?>().FirstOrDefault(
+                    s => string.Equals(s!.Value.ToString(), trumpName, StringComparison.OrdinalIgnoreCase))
+                : null;
+
+            // Score: A=3, K=2, Q=1, J=0.5; trump cards get +0.5
+            double score = cards.Sum(c =>
+            {
+                double v = c.Rank switch { Rank.Ace => 3.0, Rank.King => 2.0,
+                                           Rank.Queen => 1.0, Rank.Jack => 0.5, _ => 0.0 };
+                if (trump.HasValue && c.Suit == trump.Value) v += 0.5;
+                return v;
+            });
+
+            int estimated = (int)Math.Round(score / 3.0);
+            int minBid    = int.Parse(numberBids.First().Type["bid_".Length..]);
+            int maxBid    = int.Parse(numberBids.Last().Type["bid_".Length..]);
+            int target    = Math.Clamp(estimated, minBid, maxBid);
+            return numberBids.OrderBy(a => Math.Abs(int.Parse(a.Type["bid_".Length..]) - target)).First();
+        }
+
+        return validActions[_rng.Next(validActions.Count)];
     }
 
     // ── Trick analysis helpers ────────────────────────────────────────────────
