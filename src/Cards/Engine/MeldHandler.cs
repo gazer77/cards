@@ -12,6 +12,7 @@ namespace Cards.Engine;
 ///   wilds_allowed   — true | false (default false)
 ///   max_wilds_per_meld — max wilds in a single meld (default 1)
 ///   layoff_allowed  — true | false: add to existing melds (default true)
+///   return_to_hand  — true | false: return meld zone cards to hand when phase ends (Pinochle, default auto)
 ///
 /// Players tap cards to select a group, then tap "Lay Meld" to place it.
 /// "Done" ends the meld phase for the current player.
@@ -35,6 +36,7 @@ public sealed class MeldHandler : IPhaseHandler
     private readonly bool         _wildsAllowed;
     private readonly int          _maxWildsPerMeld;
     private readonly bool         _layoffAllowed;
+    private readonly bool         _returnToHand;  // true = pick up meld cards at end of phase (Pinochle)
 
     public MeldHandler(PhaseDefinition def, string nextPhaseId)
     {
@@ -45,6 +47,8 @@ public sealed class MeldHandler : IPhaseHandler
         _wildsAllowed     = GetBool(def, "wilds_allowed")    ?? false;
         _maxWildsPerMeld  = GetInt(def, "max_wilds_per_meld") ?? 1;
         _layoffAllowed    = GetBool(def, "layoff_allowed")   ?? true;
+        // Default return_to_hand=true for Pinochle-type melds; false for all others.
+        _returnToHand     = GetBool(def, "return_to_hand") ?? _meldTypes.Contains("pinochle");
     }
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
@@ -192,6 +196,25 @@ public sealed class MeldHandler : IPhaseHandler
         if (nextIdx == state.Players.FindIndex(p => p.Id == startPlayer) || state.Players.Count == 1)
         {
             state.Metadata.Remove("meld_start_player");
+
+            // Return meld cards to each player's hand (e.g. Pinochle: melds shown for scoring,
+            // then picked up before trick-taking begins).
+            if (_returnToHand)
+            {
+                foreach (var p in state.Players)
+                {
+                    var meld = state.FindZone($"meld:{p.Id}") ?? state.FindZone("meld");
+                    var hand = state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand");
+                    if (meld is null || hand is null) continue;
+                    while (!meld.IsEmpty)
+                    {
+                        var c = meld.Draw()!;
+                        c.IsFaceUp = false;
+                        hand.Add(c);
+                    }
+                }
+            }
+
             state.CurrentPhaseId = _nextPhaseId;
         }
         else
