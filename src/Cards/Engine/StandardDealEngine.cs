@@ -274,8 +274,12 @@ public sealed class StandardDealEngine : IDealStrategy
     private static Zone? PlayerHandZone(GameState state, int playerIndex)
     {
         if (playerIndex >= state.Players.Count) return null;
-        var pid = state.Players[playerIndex].Id;
-        return state.FindZone($"hand:{pid}") ?? state.FindZone("hand");
+        var pid    = state.Players[playerIndex].Id;
+        string tgt = state.Definition.Deal?.TargetZone ?? "hand";
+        return state.FindZone($"{tgt}:{pid}")
+            ?? state.FindZone(tgt)
+            ?? state.FindZone($"hand:{pid}")
+            ?? state.FindZone("hand");
     }
 
     private static bool FaceUp(string? face, Zone zone) => face switch

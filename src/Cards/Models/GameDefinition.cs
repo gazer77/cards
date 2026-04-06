@@ -307,6 +307,13 @@ public class DealDefinition
     [JsonPropertyName("cards_per_stack")]
     public int CardsPerStack { get; set; } = 13;
 
+    /// <summary>
+    /// Zone type to deal into.  Defaults to "hand"; set to "grid" for Golf-style games
+    /// where cards are dealt face-down into a player layout instead of a hand zone.
+    /// </summary>
+    [JsonPropertyName("target_zone")]
+    public string TargetZone { get; set; } = "hand";
+
     [JsonPropertyName("remainder_to")]
     public string? RemainderTo { get; set; }
 

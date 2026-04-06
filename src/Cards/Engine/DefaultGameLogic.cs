@@ -197,7 +197,8 @@ public sealed class DefaultGameLogic : GameLogicBase
         {
             foreach (var zone in state.Zones.Values)
             {
-                if (zone.Type is "hand" or "spread" or "trick" or "pile" or "deck")
+                if (zone.Type is "hand" or "spread" or "trick" or "pile" or "deck"
+                              or "grid" or "foot")
                     zone.Clear();
             }
         }

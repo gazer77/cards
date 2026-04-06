@@ -177,19 +177,20 @@ public static class HouseRuleEngine
             return;
         }
 
-        // "card_values: { append: {...} }" — append one element to the existing array.
-        if (rest.Equals("card_values", StringComparison.OrdinalIgnoreCase)
-            && value.ValueKind == JsonValueKind.Object
+        // "key: { append: item_or_array }" — append one item or a list of items to an existing array.
+        if (value.ValueKind == JsonValueKind.Object
             && value.TryGetProperty("append", out var appendEl))
         {
-            if (!scoring.Extra.TryGetValue("card_values", out var cvEl)
-                || cvEl.ValueKind != JsonValueKind.Array)
+            if (!scoring.Extra.TryGetValue(rest, out var existingEl)
+                || existingEl.ValueKind != JsonValueKind.Array)
             { scoring.Extra[rest] = value; return; }
 
-            var parts = cvEl.EnumerateArray().Select(e => e.GetRawText()).ToList();
-            parts.Add(appendEl.GetRawText());
-            string json = $"[{string.Join(",", parts)}]";
-            scoring.Extra["card_values"] = JsonDocument.Parse(json).RootElement;
+            var parts = existingEl.EnumerateArray().Select(e => e.GetRawText()).ToList();
+            if (appendEl.ValueKind == JsonValueKind.Array)
+                parts.AddRange(appendEl.EnumerateArray().Select(e => e.GetRawText()));
+            else
+                parts.Add(appendEl.GetRawText());
+            scoring.Extra[rest] = JsonDocument.Parse($"[{string.Join(",", parts)}]").RootElement;
             return;
         }
 
