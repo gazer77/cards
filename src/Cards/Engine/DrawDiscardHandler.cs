@@ -26,7 +26,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 {
     private readonly string       _nextPhaseId;
     private readonly List<string> _drawFrom;
-    private readonly int          _drawCount;
+    // Per-zone draw counts: zone id → count (0 = entire pile)
+    private readonly Dictionary<string, int> _drawCounts = [];
     private readonly int          _discardCount;
     private readonly string       _targetZone;
     private readonly List<string> _specialActions;
@@ -41,7 +42,31 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         _nextPhaseId     = nextPhaseId;
         _drawFrom        = ParseStringArray(def, "draw_from");
         if (_drawFrom.Count == 0) _drawFrom = ["deck"];
-        _drawCount       = GetInt(def, "draw_count")    ?? 1;
+
+        // draw_count: integer (same for all zones) or object { "from_deck": 2, "from_discard": "pile" }
+        if (def.Extra?.TryGetValue("draw_count", out var dcEl) == true)
+        {
+            if (dcEl.ValueKind == System.Text.Json.JsonValueKind.Number)
+            {
+                int n = dcEl.GetInt32();
+                foreach (var z in _drawFrom) _drawCounts[z] = n;
+            }
+            else if (dcEl.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var prop in dcEl.EnumerateObject())
+                {
+                    // key: "from_deck" → zone "deck"; "from_discard" → zone "discard"
+                    string zone = prop.Name.StartsWith("from_") ? prop.Name["from_".Length..] : prop.Name;
+                    int count = prop.Value.ValueKind == System.Text.Json.JsonValueKind.Number
+                        ? prop.Value.GetInt32()
+                        : 0; // "pile" = 0 = entire pile
+                    _drawCounts[zone] = count;
+                }
+            }
+        }
+        if (_drawCounts.Count == 0)
+            foreach (var z in _drawFrom) _drawCounts[z] = 1;
+
         _discardCount    = GetInt(def, "discard_count") ?? 1;
         _targetZone      = GetString(def, "target_zone") ?? "hand";
         _specialActions  = ParseStringArray(def, "special_actions");
@@ -78,6 +103,10 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 actions.Add(new GameAction("knock", Label: "Knock"));
             if (_specialActions.Contains("go_out") && GoOutConditionMet(state))
                 actions.Add(new GameAction("go_out", Label: "Go Out"));
+            if (_specialActions.Contains("meld"))
+                actions.Add(new GameAction("meld", Label: "Lay Meld"));
+            if (_specialActions.Contains("add_to_meld"))
+                actions.Add(new GameAction("add_to_meld", Label: "Add to Meld"));
         }
 
         return actions;
@@ -151,9 +180,11 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             }
         }
 
-        if (action.Type == "knock")   { Knock(state, false); return; }
-        if (action.Type == "gin")     { Knock(state, true);  return; }
-        if (action.Type == "go_out")  { GoOut(state);        return; }
+        if (action.Type == "knock")    { Knock(state, false); return; }
+        if (action.Type == "gin")      { Knock(state, true);  return; }
+        if (action.Type == "go_out")   { GoOut(state);        return; }
+        if (action.Type == "meld")     { LayMeld(state, addToExisting: false); return; }
+        if (action.Type == "add_to_meld") { LayMeld(state, addToExisting: true); return; }
     }
 
     // ── Core turn logic ───────────────────────────────────────────────────────
@@ -170,20 +201,37 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         var fromZone = state.FindZone(fromZoneId);
         if (fromZone is null || fromZone.IsEmpty) return;
 
-        var card = fromZone.Draw()!;
-        card.IsFaceUp = true;
+        int count = _drawCounts.TryGetValue(fromZoneId, out int n) ? n : 1;
+        bool entirePile = count == 0; // 0 = take everything
 
-        if (_targetZone == "grid")
+        var dest = PlayerHand(state, state.CurrentPlayer.Id);
+
+        if (entirePile)
         {
-            // In grid mode, hold the drawn card in a temp hand for the swap selection.
-            var temp = PlayerHand(state, state.CurrentPlayer.Id);
-            temp?.Add(card);
+            // Take whole pile (canasta discard pickup)
+            while (!fromZone.IsEmpty)
+            {
+                var c = fromZone.Draw()!;
+                c.IsFaceUp = true;
+                dest?.Add(c);
+            }
+        }
+        else if (_targetZone == "grid")
+        {
+            // Grid mode: hold the one drawn card in hand temp for the swap selection.
+            var card = fromZone.Draw()!;
+            card.IsFaceUp = true;
+            dest?.Add(card);
             state.Metadata["dd_drawn_card"] = card.Id;
         }
         else
         {
-            var dest = PlayerHand(state, state.CurrentPlayer.Id);
-            dest?.Add(card);
+            for (int i = 0; i < count && !fromZone.IsEmpty; i++)
+            {
+                var card = fromZone.Draw()!;
+                card.IsFaceUp = true;
+                dest?.Add(card);
+            }
         }
 
         state.Metadata["dd_turn_state"] = "discard";
@@ -258,6 +306,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
     private void AdvanceTurn(GameState state)
     {
+        // When a player's hand is empty, they pick up their foot zone automatically.
+        PickUpFootIfNeeded(state, state.CurrentPlayer.Id);
+
         // Check round-end condition before advancing.
         if (CheckRoundEnd(state)) return;
 
@@ -268,6 +319,24 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
         state.Metadata["dd_turn_state"] = "draw";
         UpdateStatus(state);
+    }
+
+    private static void PickUpFootIfNeeded(GameState state, string playerId)
+    {
+        var hand = state.FindZone($"hand:{playerId}") ?? state.FindZone("hand");
+        if (hand is null || !hand.IsEmpty) return;
+
+        var foot = state.FindZone($"foot:{playerId}");
+        if (foot is null || foot.IsEmpty) return;
+
+        // Move all foot cards to hand (face-up since player now holds them).
+        while (!foot.IsEmpty)
+        {
+            var c = foot.Draw()!;
+            c.IsFaceUp = true;
+            hand.Add(c);
+        }
+        state.Metadata["status"] = "You picked up your foot!";
     }
 
     private bool CheckRoundEnd(GameState state)
@@ -327,6 +396,42 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         state.CurrentPhaseId = _nextPhaseId;
     }
 
+    /// <summary>
+    /// Simplified inline meld for games like Hand and Foot where melding happens
+    /// within the draw/discard phase rather than a separate meld phase.
+    /// Moves the currently selected cards from the player's hand to their team/player meld zone.
+    /// Validates: ≥3 cards of the same rank (or 1–2 wilds mixed in).
+    /// </summary>
+    private static void LayMeld(GameState state, bool addToExisting)
+    {
+        string? selectedRaw = state.Metadata.GetValueOrDefault("selected_card");
+        if (string.IsNullOrEmpty(selectedRaw)) return;
+
+        var selectedIds = selectedRaw.Split(',').ToHashSet();
+        var hand        = PlayerHand(state, state.CurrentPlayer.Id);
+        if (hand is null) return;
+
+        var selectedCards = hand.Cards.Where(c => selectedIds.Contains(c.Id)).ToList();
+        if (selectedCards.Count < 3 && !addToExisting) return; // need at least 3 for a new meld
+
+        // Find the player's team meld zone, fall back to player meld zone.
+        var team     = state.GetPlayerTeam(state.CurrentPlayer.Id);
+        var meldZone = (team is not null ? state.FindZone($"meld:{team.Id}") : null)
+                    ?? state.FindZone($"meld:{state.CurrentPlayer.Id}")
+                    ?? state.FindZone("meld");
+        if (meldZone is null) return;
+
+        foreach (var card in selectedCards)
+        {
+            hand.Remove(card);
+            card.IsFaceUp = true;
+            meldZone.Add(card);
+        }
+
+        state.Metadata.Remove("selected_card");
+        state.Metadata["status"] = addToExisting ? "Added to meld." : "Meld laid!";
+    }
+
     private void Knock(GameState state, bool isGin)
     {
         state.Metadata["dd_knock_player"] = state.CurrentPlayer.Id;
@@ -371,15 +476,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     {
         var hand = PlayerHand(state, playerId);
         if (hand is null) return int.MaxValue;
-
-        // Simple approximation: face cards = 10, A = 1, else pip value
-        // Full meld detection requires MeldHandler — this stub enables knock/gin actions
-        return hand.Cards.Sum(c => c.Rank switch
-        {
-            Rank.Ace  => 1,
-            >= Rank.Jack => 10,
-            _ => (int)c.Rank
-        });
+        return ScoringEngine.CalcDeadwood(hand.Cards);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

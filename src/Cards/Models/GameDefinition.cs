@@ -295,6 +295,18 @@ public class DealDefinition
     [JsonPropertyName("pattern")]
     public string? Pattern { get; set; }
 
+    /// <summary>
+    /// Hand and Foot-style deal: deal this many stacks per player.
+    /// First stack → <c>hand:{playerId}</c>, second → <c>foot:{playerId}</c>, etc.
+    /// Use with <c>cards_per_stack</c>.
+    /// </summary>
+    [JsonPropertyName("stacks_per_player")]
+    public int StacksPerPlayer { get; set; } = 0;
+
+    /// <summary>Cards per stack when <c>stacks_per_player</c> is set.</summary>
+    [JsonPropertyName("cards_per_stack")]
+    public int CardsPerStack { get; set; } = 13;
+
     [JsonPropertyName("remainder_to")]
     public string? RemainderTo { get; set; }
 

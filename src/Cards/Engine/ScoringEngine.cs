@@ -524,6 +524,14 @@ public static class ScoringEngine
     }
 
     /// <summary>
+    /// <summary>
+    /// Public helper: computes minimum deadwood for <paramref name="hand"/> using
+    /// standard Gin Rummy values (A=1, J/Q/K=10, pip otherwise).
+    /// Used by <see cref="DrawDiscardHandler"/> to gate knock/gin actions.
+    /// </summary>
+    public static int CalcDeadwood(IReadOnlyList<Card> hand)
+        => CalcMinDeadwood(hand, new DeadwoodValues());
+
     /// Returns the minimum deadwood total for a hand by finding the optimal
     /// non-overlapping set of melds (sets of same rank, runs of same suit).
     /// </summary>

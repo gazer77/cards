@@ -75,8 +75,18 @@ public sealed class DefaultGameLogic : GameLogicBase
                 : (hasRounds ? "new_round" : phases[0].Id);
 
             // Respect an explicit "next" in the phase definition when present.
-            string nextId  = phases[i].NextPhase ?? defaultNext;
-            var    handler = PhaseHandlerRegistry.Create(phases[i], nextId);
+            string nextId = phases[i].NextPhase ?? defaultNext;
+
+            // A phase with skip:true is bypassed entirely — auto-advance to next.
+            bool skip = phases[i].Extra?.TryGetValue("skip", out var skipEl) == true
+                        && skipEl.ValueKind == System.Text.Json.JsonValueKind.True;
+            if (skip)
+            {
+                RegisterPhase(phases[i].Id, new SkipPhaseHandler(nextId));
+                continue;
+            }
+
+            var handler = PhaseHandlerRegistry.Create(phases[i], nextId);
             if (handler is not null)
                 RegisterPhase(phases[i].Id, handler);
         }
@@ -106,6 +116,19 @@ public sealed class DefaultGameLogic : GameLogicBase
             int pot = int.TryParse(state.Metadata.GetValueOrDefault("pot", "0"), out int v) ? v : 0;
             state.Metadata["pot"] = (pot + total).ToString();
         }
+    }
+
+    // ── Skip-phase handler ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// A no-op handler registered when a phase definition has <c>skip: true</c>
+    /// (set by a house rule).  Auto-advances immediately.
+    /// </summary>
+    private sealed class SkipPhaseHandler(string nextPhaseId) : IPhaseHandler
+    {
+        public TimeSpan? GetAutoAdvanceDelay(GameState _) => TimeSpan.FromMilliseconds(0);
+        public IReadOnlyList<GameAction> GetValidActions(GameState _) => [new GameAction("tap")];
+        public void Apply(GameState state, GameAction action) => state.CurrentPhaseId = nextPhaseId;
     }
 
     // ── New-round handler ─────────────────────────────────────────────────────

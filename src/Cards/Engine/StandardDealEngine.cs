@@ -66,7 +66,9 @@ public sealed class StandardDealEngine : IDealStrategy
         var byPlayer     = new Dictionary<int, List<string>>();
         for (int i = 0; i < playerCount; i++) byPlayer[i] = [];
 
-        if (def?.AnimDealSteps is { Count: > 0 } animSteps)
+        if (def?.StacksPerPlayer > 0)
+            DealStacks(state, playerCount, def.StacksPerPlayer, def.CardsPerStack, def.Face, deckZone, steps, byPlayer);
+        else if (def?.AnimDealSteps is { Count: > 0 } animSteps)
             DealByExplicitSteps(state, playerCount, animSteps, def.Face, deckZone, steps, byPlayer);
         else if (def?.Pattern is { Length: > 0 } pattern)
             DealByPattern(state, playerCount, pattern, def.Face, deckZone, steps, byPlayer);
@@ -138,6 +140,39 @@ public sealed class StandardDealEngine : IDealStrategy
     }
 
     // ── Deal strategies ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Hand-and-Foot style: deal <paramref name="stackCount"/> stacks of
+    /// <paramref name="cardsPerStack"/> cards to each player.
+    /// Stack 0 → hand:{p}, stack 1 → foot:{p}, stack 2+ → hand2:{p}, etc.
+    /// Cards in each stack are dealt one-at-a-time round-robin across all players
+    /// so the animation mirrors a real deal.
+    /// </summary>
+    private static void DealStacks(
+        GameState state, int playerCount, int stackCount, int cardsPerStack, string? face,
+        Zone deckZone, List<(int, int)> steps, Dictionary<int, List<string>> byPlayer)
+    {
+        string[] stackZoneNames = ["hand", "foot", "hand2", "hand3"];
+        for (int stack = 0; stack < stackCount; stack++)
+        {
+            string zoneSuffix = stack < stackZoneNames.Length ? stackZoneNames[stack] : $"hand{stack}";
+            for (int card = 0; card < cardsPerStack; card++)
+            {
+                for (int pIdx = 0; pIdx < playerCount; pIdx++)
+                {
+                    if (deckZone.IsEmpty) return;
+                    var pid  = state.Players[pIdx].Id;
+                    var zone = state.FindZone($"{zoneSuffix}:{pid}") ?? state.FindZone(zoneSuffix);
+                    if (zone is null) continue;
+                    var c = deckZone.Draw()!;
+                    c.IsFaceUp = FaceUp(face, zone);
+                    zone.Add(c);
+                    byPlayer[pIdx].Add(c.Id);
+                    steps.Add((pIdx, 1));
+                }
+            }
+        }
+    }
 
     private static void DealClockwise(
         GameState state, int playerCount, int cardsPerPlayer, string? face,
