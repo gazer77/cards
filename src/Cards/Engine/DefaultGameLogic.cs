@@ -172,6 +172,8 @@ public sealed class DefaultGameLogic : GameLogicBase
             state.Metadata.Remove("euchre_maker");
             state.Metadata.Remove("bid_winner");
             state.Metadata.Remove("bid_trump");
+            state.Metadata.Remove("meld_turn_player");
+            state.Metadata.Remove("meld_start_player");
             state.Metadata.Remove("dd_knock_player");
             state.Metadata.Remove("dd_gin");
             state.Metadata.Remove("dd_go_out_player");
