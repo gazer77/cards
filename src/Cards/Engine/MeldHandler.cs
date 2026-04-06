@@ -78,9 +78,15 @@ public sealed class MeldHandler : IPhaseHandler
     {
         EnsureInitialized(state);
 
-        if (action.Type == "select_card" && action.CardId is { } cardId)
+        // play_card is treated as select_card (used by AI agent via GetAutoAction).
+        if ((action.Type is "select_card" or "play_card") && action.CardId is { } cardId)
         {
             ToggleSelection(state, cardId);
+            // AI auto-lays when a valid meld is assembled.
+            var sel = GetSelected(state);
+            int effectiveMin = _meldTypes.Contains("pinochle") ? 1 : _minMeldSize;
+            if (sel.Count >= effectiveMin && IsValidMeld(state, sel))
+                LayMeld(state);
             return;
         }
 

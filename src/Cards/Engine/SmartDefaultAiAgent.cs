@@ -45,6 +45,14 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         if (validActions.Any(a => a.Type.StartsWith("bid_")))
             return ChooseBid(state, validActions);
 
+        // Trump naming (name_trump phase): pick suit held most
+        if (validActions.Any(a => a.Type.StartsWith("trump_")))
+            return ChooseTrump(state, validActions);
+
+        // meld_done / lay_meld — prefer laying melds before ending
+        if (validActions.Any(a => a.Type == "lay_meld"))
+            return validActions.First(a => a.Type == "lay_meld");
+
         // Default: random
         return validActions[_rng.Next(validActions.Count)];
     }
@@ -170,6 +178,28 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         return validActions.FirstOrDefault(a => a.Type == "fold")
             ?? call
             ?? validActions[_rng.Next(validActions.Count)];
+    }
+
+    // ── Trump naming strategy ─────────────────────────────────────────────────
+
+    private GameAction ChooseTrump(GameState state, IReadOnlyList<GameAction> validActions)
+    {
+        var hand = state.FindZone($"hand:{PlayerId}") ?? state.FindZone("hand");
+        if (hand is null) return validActions[_rng.Next(validActions.Count)];
+
+        // Pick the suit we hold the most cards of (among available trump choices).
+        var bestAction = validActions
+            .Where(a => a.Type.StartsWith("trump_"))
+            .OrderByDescending(a =>
+            {
+                string suitName = a.Type["trump_".Length..];
+                return Enum.TryParse<Suit>(suitName, ignoreCase: true, out var s)
+                    ? hand.Cards.Count(c => c.Suit == s)
+                    : 0;
+            })
+            .FirstOrDefault();
+
+        return bestAction ?? validActions[_rng.Next(validActions.Count)];
     }
 
     // ── Bidding strategy ─────────────────────────────────────────────────────
