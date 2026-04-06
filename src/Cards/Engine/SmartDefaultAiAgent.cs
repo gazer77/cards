@@ -160,24 +160,57 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         var check = validActions.FirstOrDefault(a => a.Type == "check");
         if (check is not null) return check;
 
-        // Call if pot odds are reasonable (call size ≤ 20% of chips)
-        var call = validActions.FirstOrDefault(a => a.Type == "call");
-        if (call is not null)
+        int handStrength = EvaluatePokerHandStrength(state);
+        double callThreshold = handStrength switch
         {
-            int myChips = state.GetScore(PlayerId);
-            int pot     = int.TryParse(state.Metadata.GetValueOrDefault("pot", "0"), out int p) ? p : 0;
-            int toCall  = int.TryParse(state.Metadata.GetValueOrDefault("bet_to_call", "0"), out int tc) ? tc : 0;
-            int myBet   = int.TryParse(state.Metadata.GetValueOrDefault($"bet:{PlayerId}", "0"), out int mb) ? mb : 0;
-            int needed  = toCall - myBet;
+            >= 4 => 0.5,   // two-pair or better: call up to 50%
+            >= 2 => 0.30,  // one pair: call up to 30%
+            _    => 0.12,  // high card: call up to 12%
+        };
 
-            if (myChips > 0 && needed <= myChips * 0.2)
-                return call;
-        }
+        var raise = validActions.FirstOrDefault(a => a.Type == "raise");
+        var call  = validActions.FirstOrDefault(a => a.Type == "call");
+        int myChips = state.GetScore(PlayerId);
+        int toCall  = int.TryParse(state.Metadata.GetValueOrDefault("bet_to_call", "0"), out int tc) ? tc : 0;
+        int myBet   = int.TryParse(state.Metadata.GetValueOrDefault($"bet:{PlayerId}", "0"), out int mb) ? mb : 0;
+        int needed  = toCall - myBet;
+
+        // Raise with very strong hands (two-pair or better) if affordable
+        if (raise is not null && handStrength >= 4 && myChips > 0 && needed <= myChips * 0.3)
+            return raise;
+
+        if (call is not null && myChips > 0 && needed <= myChips * callThreshold)
+            return call;
 
         // Fold if we can, else call
         return validActions.FirstOrDefault(a => a.Type == "fold")
             ?? call
             ?? validActions[_rng.Next(validActions.Count)];
+    }
+
+    /// <summary>
+    /// Quick hand-strength estimate: 0=high card, 2=pair, 4=two-pair,
+    /// 6=three-of-a-kind, 8=straight/flush, 10=full house+.
+    /// Checks hole cards + community cards but doesn't do full 5-card evaluation.
+    /// </summary>
+    private int EvaluatePokerHandStrength(GameState state)
+    {
+        var hand      = state.FindZone($"hand:{PlayerId}") ?? state.FindZone("hand");
+        var community = state.Zones.Values.FirstOrDefault(z => z.Type == "spread")?.Cards ?? [];
+        if (hand is null) return 0;
+
+        var allCards = hand.Cards.Concat(community).ToList();
+        var byRank   = allCards.GroupBy(c => c.Rank).ToDictionary(g => g.Key, g => g.Count());
+
+        int maxGroup = byRank.Values.DefaultIfEmpty(0).Max();
+        int pairs    = byRank.Values.Count(n => n >= 2);
+
+        if (maxGroup >= 4) return 10;       // four of a kind
+        if (maxGroup == 3 && pairs >= 2) return 10; // full house
+        if (maxGroup == 3) return 6;        // three of a kind
+        if (pairs >= 2)    return 4;        // two pair
+        if (pairs == 1)    return 2;        // one pair
+        return 0;                           // high card
     }
 
     // ── Trump naming strategy ─────────────────────────────────────────────────
