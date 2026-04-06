@@ -61,6 +61,9 @@ public static class PhaseHandlerRegistry
             string.Equals(GetExtra(def, "tie_resolution") ?? "split", "split",
                 StringComparison.OrdinalIgnoreCase);
 
+        public void OnGameStart(GameState state)
+            => state.Metadata["status"] = "Tap to flip!";
+
         public IReadOnlyList<GameAction> GetValidActions(GameState _) => [new GameAction("tap")];
 
         public void Apply(GameState state, GameAction action)

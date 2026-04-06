@@ -54,8 +54,10 @@ public sealed class DefaultGameLogic : GameLogicBase
 
         CallOnGameStart(_firstPhaseId, state);
 
-        state.CurrentPhaseId     = _firstPhaseId;
-        state.Metadata["status"] = "Tap to flip!";
+        state.CurrentPhaseId = _firstPhaseId;
+        // Only set a default status if the first phase handler didn't already set one.
+        if (!state.Metadata.ContainsKey("status"))
+            state.Metadata["status"] = "Game started!";
     }
 
     // ── Phase registration ────────────────────────────────────────────────────
@@ -183,7 +185,11 @@ public sealed class DefaultGameLogic : GameLogicBase
                 state.Metadata.Remove($"bet_folded:{p.Id}");
                 state.Metadata.Remove($"bet_all_in:{p.Id}");
                 state.Metadata.Remove($"meld_score:{p.Id}");
+                state.Metadata.Remove($"dd_last_turn_done:{p.Id}");
+                // Note: bags:{p.Id} is intentionally NOT cleared — carries across rounds for Spades bag penalties.
             }
+            foreach (var team in state.Teams)
+                state.Metadata.Remove($"meld_score:{team.Id}");
 
             state.CurrentPhaseId     = logic._firstPhaseId;
             state.Metadata["status"] = $"Round {state.RoundNumber}";
