@@ -49,12 +49,7 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
 
             // Draw-discard discard phase (gin rummy / hand-and-foot / etc.): smarter discard
             if (state.Metadata.GetValueOrDefault("dd_turn_state") == "discard")
-            {
-                // Meld before discarding when possible (Hand-and-Foot / Canasta).
-                var meldAction = validActions.FirstOrDefault(a => a.Type == "meld");
-                if (meldAction is not null) return meldAction;
                 return ChooseDiscardCard(state, plays);
-            }
 
             return ChooseTrickCard(state, plays);
         }
