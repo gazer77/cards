@@ -192,10 +192,10 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
 
     /// <summary>
     /// Golf scoring value approximation (lower is better).
-    /// Jokers (-2) are not in the standard Rank enum; treated like 2s.
     /// </summary>
     private static int GolfCardValue(Card c) => c.Rank switch
     {
+        Rank.Joker => -2,
         Rank.Ace   => 1,
         Rank.Two   => -2,
         Rank.King  => 0,

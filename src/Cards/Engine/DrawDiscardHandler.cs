@@ -366,7 +366,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             c.IsFaceUp = true;
             hand.Add(c);
         }
-        state.Metadata["status"] = "You picked up your foot!";
+        var player = state.Players.FirstOrDefault(p => p.Id == playerId);
+        string footMsg = player == state.Players[0] ? "You picked" : $"{player?.Name ?? "Player"} picked";
+        state.Metadata["status"] = $"{footMsg} up their foot!";
     }
 
     private bool CheckRoundEnd(GameState state)

@@ -417,11 +417,13 @@ public static class ScoringEngine
         }
 
         // Status line: "Euchred! Opponents +2" or "Makers win +2" etc.
+        string euchredDisplay = oppoEachPts > 0
+            ? $"+{oppoEachPts} each to opponents" : $"+{euchredPts} to opponents";
         string outcome = makerTricks >= 5
             ? (goingAlone ? $"Loner! +{(goingAlone ? loner5 : makers5)}" : $"Makers sweep! +{makers5}")
             : makerTricks >= 3
             ? $"Makers win ({makerTricks} tricks) +{makers3or4}"
-            : $"Euchred! (+{euchredPts} to opponents)";
+            : $"Euchred! ({euchredDisplay})";
 
         // Build score summary per team.
         if (state.Teams.Count > 0)
