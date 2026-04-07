@@ -524,7 +524,6 @@ public static class ScoringEngine
     }
 
     /// <summary>
-    /// <summary>
     /// Public helper: computes minimum deadwood for <paramref name="hand"/> using
     /// standard Gin Rummy values (A=1, J/Q/K=10, pip otherwise).
     /// Used by <see cref="DrawDiscardHandler"/> to gate knock/gin actions.
@@ -532,6 +531,7 @@ public static class ScoringEngine
     public static int CalcDeadwood(IReadOnlyList<Card> hand)
         => CalcMinDeadwood(hand, new DeadwoodValues());
 
+    /// <summary>
     /// Returns the minimum deadwood total for a hand by finding the optimal
     /// non-overlapping set of melds (sets of same rank, runs of same suit).
     /// </summary>
@@ -761,7 +761,11 @@ public static class ScoringEngine
 
     /// <summary>
     /// Scores cards in a meld zone: card point values, natural canasta bonuses,
-    /// and wild canasta bonuses.  Cards are grouped by rank; a group of 7+ is a canasta.
+    /// and wild canasta bonuses.
+    ///
+    /// Canasta detection: wild cards (jokers/twos) supplement the largest natural
+    /// rank groups.  A pile of 4 Aces + 3 wild Twos = 7-card mixed canasta.
+    /// Standard limit of 3 wilds per canasta is enforced.
     /// </summary>
     private static int ScoreMeldZone(
         Zone zone, MeldCardValues values, HashSet<string> wildCards,
@@ -769,14 +773,39 @@ public static class ScoringEngine
     {
         int pts = zone.Cards.Sum(c => values.GetValue(c));
 
-        // Group by rank to detect canastas (7+ of same rank).
-        var byRank = zone.Cards.GroupBy(c => c.Rank);
-        foreach (var group in byRank)
+        bool IsWildCard(Card c) =>
+            wildCards.Contains(c.Rank.ToString().ToLower()) ||
+            (c.Rank == Rank.Two && wildCards.Contains("2")) ||
+            wildCards.Contains(c.Rank == Rank.Ace ? "a" : ((int)c.Rank).ToString());
+
+        const int maxWildsPerCanasta = 3;
+
+        // Separate wilds from naturals.
+        int wildsRemaining = zone.Cards.Count(IsWildCard);
+        var naturalGroups  = zone.Cards
+            .Where(c => !IsWildCard(c))
+            .GroupBy(c => c.Rank)
+            .OrderByDescending(g => g.Count())
+            .ToList();
+
+        // Assign wilds to complete natural groups into canastas (greedy, largest first).
+        foreach (var group in naturalGroups)
         {
-            if (group.Count() < 7) continue;
-            bool hasWild = group.Any(c => wildCards.Contains(c.Rank.ToString().ToLower())
-                                       || (c.Rank == Rank.Two && wildCards.Contains("2")));
-            pts += hasWild ? wildCanBonus : natCanBonus;
+            int count    = group.Count();
+            int need     = Math.Max(0, 7 - count);
+            int canUse   = Math.Min(need, Math.Min(wildsRemaining, maxWildsPerCanasta));
+
+            if (count + canUse < 7) continue;  // can't reach canasta size
+
+            wildsRemaining -= canUse;
+            pts += canUse > 0 ? wildCanBonus : natCanBonus;
+        }
+
+        // Pure wild canasta (7+ wilds with no natural cards assigned above).
+        while (wildsRemaining >= 7)
+        {
+            wildsRemaining -= 7;
+            pts += wildCanBonus;
         }
 
         return pts;

@@ -125,7 +125,8 @@ public sealed class MeldHandler : IPhaseHandler
     private void LayMeld(GameState state)
     {
         var selected = GetSelected(state);
-        if (selected.Count < _minMeldSize) return;
+        int effectiveMin = _meldTypes.Contains("pinochle") ? 1 : _minMeldSize;
+        if (selected.Count < effectiveMin) return;
 
         var hand     = PlayerHand(state, state.CurrentPlayer.Id);
         var meldZone = state.FindZone($"meld:{state.CurrentPlayer.Id}") ?? state.FindZone("meld");
