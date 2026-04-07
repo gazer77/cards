@@ -38,6 +38,10 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         var plays = validActions.Where(a => a.Type == "play_card" && a.CardId is not null).ToList();
         if (plays.Count > 0)
         {
+            // Pass-cards phase (Hearts): pick high-value cards not already selected.
+            if (state.Metadata.ContainsKey("pass_direction"))
+                return ChoosePassCard(state, plays);
+
             // Golf grid-swap: drawn card is one of the play_card options
             string? drawnCardId = state.Metadata.GetValueOrDefault("dd_drawn_card");
             if (drawnCardId is not null && plays.Any(a => a.CardId == drawnCardId))
@@ -372,6 +376,48 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
             .FirstOrDefault();
 
         return bestAction ?? validActions[_rng.Next(validActions.Count)];
+    }
+
+    // ── Pass-cards strategy (Hearts) ─────────────────────────────────────────
+
+    /// <summary>
+    /// Picks a card to pass: high-value cards first (hearts, Qs, high-rank off-suit),
+    /// excluding cards that have already been selected for passing this round.
+    /// </summary>
+    private GameAction ChoosePassCard(GameState state, IReadOnlyList<GameAction> plays)
+    {
+        // Exclude already-selected card IDs to avoid toggle loop.
+        var alreadySelected = (state.Metadata.GetValueOrDefault($"pass_selected:{PlayerId}") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet();
+
+        var candidates = plays
+            .Where(a => !alreadySelected.Contains(a.CardId!))
+            .ToList();
+
+        if (candidates.Count == 0) return plays[_rng.Next(plays.Count)];
+
+        var hand = state.FindZone($"hand:{PlayerId}") ?? state.FindZone("hand");
+
+        // Score each candidate: higher = more desirable to pass.
+        // Hearts = high value to pass; Qs = very high; high off-suit ranks = moderate.
+        GameAction? best = null;
+        int bestScore = int.MinValue;
+
+        foreach (var action in candidates)
+        {
+            var card = hand?.Cards.FirstOrDefault(c => c.Id == action.CardId);
+            if (card is null) continue;
+
+            int score;
+            if (card.Rank == Rank.Queen && card.Suit == Suit.Spades) score = 1300;
+            else if (card.Suit == Suit.Hearts) score = 100 + (int)card.Rank;
+            else score = (int)card.Rank;  // pass highest non-heart off-suit cards
+
+            if (score > bestScore) { bestScore = score; best = action; }
+        }
+
+        return best ?? candidates[_rng.Next(candidates.Count)];
     }
 
     // ── Bidding strategy ─────────────────────────────────────────────────────

@@ -311,14 +311,15 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         if (drawnCard is null) return;
         hand.Remove(drawnCard);
 
-        // Remove grid card from grid.
-        var gridCard = grid.Cards.FirstOrDefault(c => c.Id == gridCardId);
-        if (gridCard is null) return;
+        // Remove grid card from grid, preserving its slot index for the replacement.
+        int slotIdx = grid.Cards.FindIndex(c => c.Id == gridCardId);
+        if (slotIdx < 0) return;
+        var gridCard = grid.Cards[slotIdx];
         grid.Remove(gridCard);
 
-        // Drawn card takes the grid position; grid card goes to discard.
+        // Drawn card takes the same slot; grid card goes to discard.
         drawnCard.IsFaceUp = true;
-        grid.Add(drawnCard);
+        grid.Cards.Insert(slotIdx, drawnCard);
         gridCard.IsFaceUp = true;
         discard.Add(gridCard);
 
