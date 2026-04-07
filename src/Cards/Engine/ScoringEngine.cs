@@ -677,6 +677,18 @@ public static class ScoringEngine
         string? goOutPlayer = state.Metadata.GetValueOrDefault("dd_go_out_player");
         string? goOutTeam   = state.Metadata.GetValueOrDefault("dd_go_out_team");
 
+        // red_three_penalty: applied per Three held in hand at end of round.
+        // Card-values "3": negative value is for meld zone scoring; hand deduction
+        // uses this positive penalty instead to avoid a sign-inversion bonus.
+        int redThreePenalty = Math.Abs(GetInt(scoring, "red_three_penalty") ?? 0);
+
+        // Local helper: card value used for hand/foot deductions.
+        // Uses redThreePenalty for Threes (avoids sign-inversion from negative card_values["3"]).
+        // Clamps other values to ≥0 so no card in hand ever produces a scoring bonus.
+        int HandCardPenalty(Card c) => c.Rank == Rank.Three
+            ? redThreePenalty
+            : Math.Max(0, cardValues.GetValue(c));
+
         var scores = new Dictionary<string, int>();
 
         if (countByTeam)
@@ -697,11 +709,11 @@ public static class ScoringEngine
                 {
                     var hand = state.FindZone($"hand:{pid}") ?? state.FindZone("hand");
                     if (hand is not null)
-                        pts -= hand.Cards.Sum(c => cardValues.GetValue(c));
+                        pts -= hand.Cards.Sum(c => HandCardPenalty(c));
                     // Also deduct foot zone if present.
                     var foot = state.FindZone($"foot:{pid}");
                     if (foot is not null)
-                        pts -= foot.Cards.Sum(c => cardValues.GetValue(c));
+                        pts -= foot.Cards.Sum(c => HandCardPenalty(c));
                 }
 
                 // Go-out bonus.
@@ -723,7 +735,7 @@ public static class ScoringEngine
 
                 var hand = state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand");
                 if (hand is not null)
-                    pts -= hand.Cards.Sum(c => cardValues.GetValue(c));
+                    pts -= hand.Cards.Sum(c => HandCardPenalty(c));
 
                 if (goOutPlayer == p.Id)
                     pts += goOutBonus;

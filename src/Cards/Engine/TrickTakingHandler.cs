@@ -9,7 +9,7 @@ namespace Cards.Engine;
 /// Phase definition parameters:
 ///   trump              — "spades" | "hearts" | null | "bid_result"
 ///                        "bid_result" reads state.Metadata["bid_trump"]
-///   lead               — "left_of_dealer" (default) | "2_of_clubs" | etc.
+///   lead               — "left_of_dealer" (default) | "current_player" (honour preceding phase's active player, e.g. Pinochle bid winner)
 ///   follow_suit        — true (default) | false
 ///   lead_restrictions  — array of { suit, until } or { card, first_trick }
 ///   no_points_first_trick — true | false (default): hearts + Qs blocked first trick
@@ -38,6 +38,7 @@ public sealed class TrickTakingHandler : IPhaseHandler
     private readonly string? _trumpConfig;         // null, "spades", "bid_result", etc.
     private readonly bool    _followSuit;
     private readonly string? _leadCard;            // "2_of_clubs" — player with this card leads
+    private readonly string  _leadPolicy;          // "left_of_dealer" | "current_player" (default left_of_dealer)
     private readonly string  _winnerMode;          // "highest" or "highest_trump_then_lead"
     private readonly bool    _trickWinnerLeadsNext;
     private readonly string  _collectTo;           // zone id prefix, default "won_tricks"
@@ -55,6 +56,7 @@ public sealed class TrickTakingHandler : IPhaseHandler
         _trumpConfig          = GetString(def, "trump");
         _followSuit           = GetBool(def, "follow_suit") ?? true;
         _leadCard             = GetString(def, "lead_card");
+        _leadPolicy           = GetString(def, "lead") ?? "left_of_dealer";
         _winnerMode           = GetString(def, "winner") ?? "highest_trump_then_lead";
         _trickWinnerLeadsNext = GetBool(def, "trick_winner_leads_next") ?? true;
         _collectTo            = GetString(def, "collect_tricks_to") ?? "won_tricks";
@@ -366,7 +368,12 @@ public sealed class TrickTakingHandler : IPhaseHandler
             }
         }
 
-        // Otherwise left of dealer
+        // "current_player": honour whoever the preceding phase left as active
+        // (e.g. Pinochle name_trump sets bid winner as current player).
+        if (_leadPolicy == "current_player")
+            return state.CurrentPlayer.Id;
+
+        // Default: left of dealer
         return LeftOfDealer(state);
     }
 

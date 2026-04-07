@@ -198,6 +198,11 @@ public sealed class MeldHandler : IPhaseHandler
         {
             state.Metadata.Remove("meld_start_player");
 
+            // Restore current player to the one who opened the meld phase (e.g., the
+            // Pinochle bid winner), so the next phase sees the right "current player".
+            int startIdx = state.Players.FindIndex(p => p.Id == startPlayer);
+            if (startIdx >= 0) state.CurrentPlayerIndex = startIdx;
+
             // Return meld cards to each player's hand (e.g. Pinochle: melds shown for scoring,
             // then picked up before trick-taking begins).
             if (_returnToHand)

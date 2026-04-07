@@ -56,6 +56,7 @@
       "id": "play",
       "type": "trick_taking",
       "trump": "bid_result",
+      "lead": "current_player",
       "follow_suit": true,
       "must_play_higher": true,
       "winner": "highest_trump_then_lead",

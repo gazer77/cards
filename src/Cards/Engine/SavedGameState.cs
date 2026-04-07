@@ -13,6 +13,7 @@ public sealed class SavedGameState
     public string         PhaseId      { get; set; } = string.Empty;
     public int            PlayerIndex  { get; set; }
     public int            RoundNumber  { get; set; } = 1;
+    public string?        DealerId     { get; set; }
     public Dictionary<string, int>    Scores   { get; set; } = [];
     public Dictionary<string, string> Metadata { get; set; } = [];
     public List<string>   GameLog  { get; set; } = [];

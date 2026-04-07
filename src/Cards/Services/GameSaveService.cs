@@ -32,6 +32,7 @@ public sealed class GameSaveService
             PhaseId      = state.CurrentPhaseId,
             PlayerIndex  = state.CurrentPlayerIndex,
             RoundNumber  = state.RoundNumber,
+            DealerId     = state.DealerId,
             Scores       = new Dictionary<string, int>(state.Scores),
             Metadata     = new Dictionary<string, string>(state.Metadata),
             GameLog      = [.. state.GameLog],
@@ -102,6 +103,7 @@ public sealed class GameSaveService
             state.CurrentPhaseId     = dto.PhaseId;
             state.CurrentPlayerIndex = dto.PlayerIndex;
             state.RoundNumber        = dto.RoundNumber;
+            state.DealerId           = dto.DealerId;
 
             state.Scores.Clear();
             foreach (var (k, v) in dto.Scores)   state.Scores[k]   = v;
@@ -137,6 +139,7 @@ public sealed class GameSaveService
             PhaseId      = state.CurrentPhaseId,
             PlayerIndex  = state.CurrentPlayerIndex,
             RoundNumber  = state.RoundNumber,
+            DealerId     = state.DealerId,
             Scores       = new Dictionary<string, int>(state.Scores),
             Metadata     = new Dictionary<string, string>(state.Metadata),
             GameLog      = [.. state.GameLog],
