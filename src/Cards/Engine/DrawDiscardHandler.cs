@@ -268,18 +268,22 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     {
         if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_drawn_card"))
         {
-            // Grid mode: the selected card is a grid card to swap out.
-            // The drawn card (dd_drawn_card) goes face-up into the grid position,
-            // the grid card goes face-up to discard.
-            SwapGridCard(state, cardId);
-            return;
+            string drawnId = state.Metadata["dd_drawn_card"];
+            if (cardId != drawnId)
+            {
+                // Grid mode: the selected card is a grid card to swap out.
+                // The drawn card goes face-up into the grid slot; the grid card goes to discard.
+                SwapGridCard(state, cardId);
+                return;
+            }
+            // cardId == drawnId: player chose to discard the drawn card without swapping.
+            // Fall through to standard discard logic so the drawn card is removed from hand.
         }
 
         var hand    = PlayerHand(state, state.CurrentPlayer.Id);
         var card    = hand?.Cards.FirstOrDefault(c => c.Id == cardId);
         if (card is null || hand is null) return;
 
-        // If discarding the drawn card itself in grid mode (player chose not to swap).
         bool drawnCardDiscarded = _targetZone == "grid"
             && state.Metadata.GetValueOrDefault("dd_drawn_card") == cardId;
 
