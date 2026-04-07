@@ -774,6 +774,7 @@ public static class ScoringEngine
         int pts = zone.Cards.Sum(c => values.GetValue(c));
 
         bool IsWildCard(Card c) =>
+            c.IsWild ||
             wildCards.Contains(c.Rank.ToString().ToLower()) ||
             (c.Rank == Rank.Two && wildCards.Contains("2")) ||
             wildCards.Contains(c.Rank == Rank.Ace ? "a" : ((int)c.Rank).ToString());
@@ -860,7 +861,7 @@ public static class ScoringEngine
 
         public int GetValue(Card c)
         {
-            // Joker is a special rank in extended decks; fall back to DefaultVal.
+            if (c.Rank == Rank.Joker || c.IsWild) return Joker;
             if (c.Rank == Rank.Ace)   return Ace;
             if (c.Rank == Rank.King)  return King;
             if (c.Rank == Rank.Queen) return Queen;

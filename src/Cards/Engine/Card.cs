@@ -4,6 +4,8 @@ public enum Suit { Clubs, Diamonds, Hearts, Spades }
 
 public enum Rank
 {
+    // Joker = 0 sorts below all pip cards and is detected via IsWild.
+    Joker = 0,
     Two = 2, Three, Four, Five, Six, Seven, Eight, Nine, Ten,
     Jack, Queen, King, Ace
 }
@@ -26,6 +28,12 @@ public class Card
     {
         get
         {
+            if (Rank == Rank.Joker)
+            {
+                // Two Jokers distinguished by suit: JKRc = "black" joker, JKRr = "red" joker.
+                char jSuit = IsRed ? 'r' : 'k';
+                return $"JKR{jSuit}";
+            }
             string rank = Rank switch
             {
                 Rank.Jack  => "J",
@@ -43,6 +51,7 @@ public class Card
     {
         get
         {
+            if (Rank == Rank.Joker) return IsRed ? "Red Joker" : "Black Joker";
             string rank = Rank switch
             {
                 Rank.Jack  => "Jack",

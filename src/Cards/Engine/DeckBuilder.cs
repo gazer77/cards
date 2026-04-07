@@ -46,8 +46,13 @@ public static class DeckBuilder
     private static List<Card> BuildWithJokers(Rank[] ranks, int copies, int jokers)
     {
         var cards = BuildWith(ranks, copies);
-        // Jokers represented as Ace of a special suit isn't ideal — placeholder until
-        // a proper Joker card type is added.
+        // Add Joker cards: alternating red/black for visual distinction.
+        // Jokers use Rank.Joker and IsWild = true.
+        for (int i = 0; i < jokers; i++)
+        {
+            var suit = (i % 2 == 0) ? Suit.Clubs : Suit.Hearts;  // black, red, …
+            cards.Add(new Card(suit, Rank.Joker) { IsWild = true });
+        }
         return cards;
     }
 }
