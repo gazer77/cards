@@ -35,6 +35,7 @@ public static class GameStateMask
         masked.DealerId           = source.DealerId;
 
         masked.Players.AddRange(source.Players);
+        masked.Teams.AddRange(source.Teams);
 
         foreach (var kv in source.Scores)           masked.Scores[kv.Key]            = kv.Value;
         foreach (var kv in source.Metadata)         masked.Metadata[kv.Key]          = kv.Value;
