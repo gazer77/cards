@@ -230,6 +230,7 @@ public sealed class GameClient : IAsyncDisposable
             _state.CurrentPhaseId     = saved.PhaseId;
             _state.CurrentPlayerIndex = saved.PlayerIndex;
             _state.RoundNumber        = saved.RoundNumber;
+            _state.DealerId           = saved.DealerId;
 
             _state.Scores.Clear();
             foreach (var (k, v) in saved.Scores)   _state.Scores[k]   = v;
