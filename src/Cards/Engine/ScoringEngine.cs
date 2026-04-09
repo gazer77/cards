@@ -92,21 +92,34 @@ public static class ScoringEngine
             roundScores[p.Id] = pts;
         }
 
-        // Shoot the moon: if one player captured ALL point cards, redistribute.
+        // Shoot the moon: if one player captured ALL positive-point cards, redistribute.
+        // We compare positive totals only so that negative-value cards (e.g. Jack of Diamonds
+        // house rule, -10) don't mask a legitimate moon shot when another player holds them.
         if (shootMoon)
         {
-            var special      = scoring.Extra!["special"];
-            int totalPoints  = roundScores.Values.Sum();
-            string? moonPlayer = totalPoints > 0
-                ? roundScores.FirstOrDefault(kv => kv.Value == totalPoints).Key
+            var special = scoring.Extra!["special"];
+
+            // Positive points for each player (negative-value cards excluded from both sides).
+            var posScores = new Dictionary<string, int>();
+            foreach (var p in state.Players)
+            {
+                var zone = state.FindZone($"{countFrom}:{p.Id}") ?? state.FindZone(countFrom);
+                posScores[p.Id] = zone?.Cards.Sum(c => Math.Max(0, rules.GetCardValue(c))) ?? 0;
+            }
+            int totalPositive = posScores.Values.Sum();
+            string? moonPlayer = totalPositive > 0
+                ? posScores.FirstOrDefault(kv => kv.Value == totalPositive).Key
                 : null;
 
             if (moonPlayer is not null)
             {
+                // Use the full raw totals for the redistribution amount so the penalty/bonus
+                // matches the number of point cards in play (26 in a standard Hearts round).
+                int totalPoints = roundScores.Values.Sum();
                 string effect = GetSpecialEffect(special, "shoot_the_moon") ?? "add_26_to_others";
                 if (effect == "subtract_26_from_self")
                 {
-                    roundScores[moonPlayer] = -totalPoints;
+                    roundScores[moonPlayer] = -totalPositive;
                     foreach (var p in state.Players.Where(p => p.Id != moonPlayer))
                         roundScores[p.Id] = 0;
                 }
@@ -114,7 +127,7 @@ public static class ScoringEngine
                 {
                     roundScores[moonPlayer] = 0;
                     foreach (var p in state.Players.Where(p => p.Id != moonPlayer))
-                        roundScores[p.Id] = totalPoints;
+                        roundScores[p.Id] = totalPositive;
                 }
             }
         }
