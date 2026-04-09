@@ -255,18 +255,25 @@ public sealed class ShowdownHandler : IPhaseHandler
         var c = cards.OrderByDescending(x => (int)x.Rank).ToList();
         if (c.Count == 0) return new HandRank(0, "No cards");
 
-        var suits    = c.GroupBy(x => x.Suit);
-        var ranks    = c.GroupBy(x => x.Rank).OrderByDescending(g => g.Count()).ThenByDescending(g => (int)g.Key).ToList();
-        bool flush   = suits.Any(g => g.Count() >= 5);
-        bool straight = IsStraight(c.Select(x => (int)x.Rank).Distinct().OrderDescending().ToList());
+        var suits      = c.GroupBy(x => x.Suit);
+        var rankGroups = c.GroupBy(x => x.Rank)
+                          .OrderByDescending(g => g.Count())
+                          .ThenByDescending(g => (int)g.Key)
+                          .ToList();
+        bool flush     = suits.Any(g => g.Count() >= 5);
+        var  dRanks    = c.Select(x => (int)x.Rank).Distinct().OrderDescending().ToList();
+        bool straight  = IsStraight(dRanks);
+        // Wheel = A-2-3-4-5: Ace plays as 1; this is the lowest straight.
+        bool isWheel   = straight && dRanks.Contains((int)Rank.Ace) && dRanks.Contains(2);
 
         int topRank = (int)c[0].Rank;
-        var groups  = ranks.Select(g => g.Count()).ToList();
+        var groups  = rankGroups.Select(g => g.Count()).ToList();
 
-        // Rank category (higher = better hand)
+        // Rank category (higher = better hand).
+        // Royal Flush requires A-K-Q-J-10 specifically; a steel wheel is Straight Flush only.
         (int cat, string name) = (groups, flush, straight) switch
         {
-            _ when flush && straight && topRank == (int)Rank.Ace => (9, "Royal Flush"),
+            _ when flush && straight && topRank == (int)Rank.Ace && !isWheel => (9, "Royal Flush"),
             _ when flush && straight                              => (8, "Straight Flush"),
             _ when groups[0] == 4                                 => (7, "Four of a Kind"),
             _ when groups[0] == 3 && groups.Count > 1 && groups[1] >= 2 => (6, "Full House"),
@@ -278,7 +285,23 @@ public sealed class ShowdownHandler : IPhaseHandler
             _                                                     => (0, "High Card"),
         };
 
-        return new HandRank(cat * 100 + topRank, name);
+        // Tiebreaker: encode group ranks in base-15 (pair/trips rank comes first, then kickers).
+        // For wheel straights the Ace plays low — move it to last position in the rank order.
+        var orderedRanks = rankGroups.Select(g => (int)g.Key).ToList();
+        if (isWheel && cat is 4 or 8)   // Straight or Straight Flush wheel
+        {
+            orderedRanks.Remove((int)Rank.Ace);
+            orderedRanks.Add(1);   // Ace counts as 1 at the low end
+        }
+
+        // cat * 15^5 + r0 * 15^4 + r1 * 15^3 + r2 * 15^2 + r3 * 15 + r4
+        // Max value ≈ 9 * 759375 + 14 * 54241 ≈ 7.6M — safely within int range.
+        const int B = 15;
+        int score = cat * B * B * B * B * B;
+        for (int i = 0; i < Math.Min(orderedRanks.Count, 5); i++)
+            score += orderedRanks[i] * (int)Math.Pow(B, 4 - i);
+
+        return new HandRank(score, name);
     }
 
     private static bool IsStraight(List<int> distinctRanks)

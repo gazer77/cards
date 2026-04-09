@@ -120,12 +120,14 @@ public sealed class PokerBettingHandler : IPhaseHandler
                 break;
 
             case "all_in":
-                int allIn = state.GetScore(p.Id);
+                int allIn   = state.GetScore(p.Id);
+                int prevBet = GetPlayerBet(state, p.Id);
                 PlaceBet(state, p.Id, allIn);
                 state.Metadata[$"bet_all_in:{p.Id}"] = "true";
-                if (allIn + GetPlayerBet(state, p.Id) > GetToCall(state))
+                int totalBet = prevBet + allIn;
+                if (totalBet > GetToCall(state))
                 {
-                    state.Metadata["bet_to_call"] = (allIn + GetPlayerBet(state, p.Id)).ToString();
+                    state.Metadata["bet_to_call"] = totalBet.ToString();
                     state.Metadata["bet_leader"]   = p.Id;
                 }
                 AdvanceBetting(state);
