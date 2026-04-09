@@ -441,8 +441,11 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         }
 
         // suit_or_pass (Euchre second round): pick suit we hold most of
+        // bid_alone may appear alongside suit bids (going_alone option); include it so the check
+        // correctly identifies this context even when the loner option is available.
         bool allSuitOrPass = validActions.All(a =>
-            a.Type is "bid_clubs" or "bid_diamonds" or "bid_hearts" or "bid_spades" or "bid_pass");
+            a.Type is "bid_clubs" or "bid_diamonds" or "bid_hearts" or "bid_spades"
+                    or "bid_pass" or "bid_alone");
         if (allSuitOrPass)
         {
             string? excluded = state.Metadata.GetValueOrDefault("bid_excluded_suit");
