@@ -113,9 +113,6 @@ public static class ScoringEngine
 
             if (moonPlayer is not null)
             {
-                // Use the full raw totals for the redistribution amount so the penalty/bonus
-                // matches the number of point cards in play (26 in a standard Hearts round).
-                int totalPoints = roundScores.Values.Sum();
                 string effect = GetSpecialEffect(special, "shoot_the_moon") ?? "add_26_to_others";
                 if (effect == "subtract_26_from_self")
                 {
