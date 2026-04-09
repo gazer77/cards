@@ -943,15 +943,13 @@ public static class ScoringEngine
         }
 
         // Bid-set check: maker must meet or exceed bid.
+        bool bidMade = true;
         if (makerTeam is not null && bid > 0)
         {
             int makerPts = roundScores.GetValueOrDefault(makerTeam.Id);
-            if (makerPts < bid)
-            {
-                // Set: maker loses bid amount.
-                if (bidSetPenalty)
-                    roundScores[makerTeam.Id] = -bid;
-            }
+            bidMade = makerPts >= bid;
+            if (!bidMade && bidSetPenalty)
+                roundScores[makerTeam.Id] = -bid;
         }
 
         foreach (var (id, pts) in roundScores)
@@ -961,7 +959,7 @@ public static class ScoringEngine
         }
 
         // Status line.
-        bool wasMade = makerTeam is null || roundScores.GetValueOrDefault(makerTeam.Id) >= 0;
+        bool wasMade = makerTeam is null || bidMade;
         string outcome = makerTeam is null ? ""
             : wasMade ? $"Bid of {bid} made!  " : $"Set! Bid of {bid} lost.  ";
 

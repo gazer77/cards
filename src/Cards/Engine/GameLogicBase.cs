@@ -167,7 +167,7 @@ public abstract class GameLogicBase : IGameLogic
             "rotates_right" => (current - 1 + state.Players.Count) % state.Players.Count,
             "winner"        => FindPlayerIndex(state, "last_winner", current),
             "loser"         => FindPlayerIndex(state, "last_loser",  current),
-            "alternates"    => (current + state.RoundNumber) % state.Players.Count,
+            "alternates"    => (current + 1) % state.Players.Count,
             _               => (current + 1) % state.Players.Count,  // rotates_left
         };
 
