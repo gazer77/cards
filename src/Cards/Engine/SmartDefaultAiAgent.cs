@@ -483,7 +483,8 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         if (numberBids.Count > 0)
         {
             string? trumpName = state.Metadata.GetValueOrDefault("trick_trump")
-                             ?? state.Metadata.GetValueOrDefault("bid_trump");
+                             ?? state.Metadata.GetValueOrDefault("bid_trump")
+                             ?? GetDefinedTrump(state);
             Suit? trump = trumpName is not null
                 ? Enum.GetValues<Suit>().Cast<Suit?>().FirstOrDefault(
                     s => string.Equals(s!.Value.ToString(), trumpName, StringComparison.OrdinalIgnoreCase))
@@ -575,4 +576,22 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         "clubs"    => Suit.Clubs,
         _          => null,
     };
+
+    /// <summary>
+    /// Reads the fixed trump from the game definition's trick_taking phase.
+    /// Used during bidding when trick_trump/bid_trump metadata isn't set yet.
+    /// Returns null when trump is dynamic (e.g. "bid_result") or absent.
+    /// </summary>
+    private static string? GetDefinedTrump(GameState state)
+    {
+        var trickPhase = state.Definition.Phases.FirstOrDefault(p => p.Type == "trick_taking");
+        if (trickPhase?.Extra?.TryGetValue("trump", out var el) == true
+            && el.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            var val = el.GetString();
+            // Only return literal suit names — "bid_result" is dynamic.
+            return val is "spades" or "hearts" or "diamonds" or "clubs" ? val : null;
+        }
+        return null;
+    }
 }

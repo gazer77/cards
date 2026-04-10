@@ -159,6 +159,24 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 DiscardCard(state, selectId);
                 return;
             }
+
+            // Multi-select mode: when meld special actions are active, toggle the card
+            // in a comma-separated list so the player can assemble a 3+ card meld.
+            if (_specialActions.Contains("meld") || _specialActions.Contains("add_to_meld"))
+            {
+                var current = (state.Metadata.GetValueOrDefault("selected_card") ?? "")
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .ToList();
+                if (current.Remove(selectId))
+                    state.Metadata["selected_card"] = string.Join(",", current);
+                else
+                {
+                    current.Add(selectId);
+                    state.Metadata["selected_card"] = string.Join(",", current);
+                }
+                return;
+            }
+
             state.Metadata["selected_card"] = selectId;
             return;
         }
@@ -176,8 +194,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             if (drawnId is not null) { DiscardCard(state, drawnId); return; }
         }
 
-        // If no explicit discard but a card was selected, use selected_card
-        if (turnState == "discard")
+        // If no explicit discard but a single card was selected, use it as the discard.
+        // Skip this fallback in multi-select meld mode (selected_card may be a comma-separated list).
+        if (turnState == "discard" && !_specialActions.Contains("meld") && !_specialActions.Contains("add_to_meld"))
         {
             string? selected = state.Metadata.GetValueOrDefault("selected_card");
             if (selected is not null)
