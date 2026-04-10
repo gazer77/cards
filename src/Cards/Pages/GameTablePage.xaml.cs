@@ -311,7 +311,7 @@ public partial class GameTablePage : ContentPage
         if (GameOverOverlay.IsVisible || GameLogOverlay.IsVisible || _isAutoAdvancing) return;
 
         string? selectedCard = _state.Metadata.GetValueOrDefault("selected_card");
-        if (selectedCard is null) return;
+        if (selectedCard is null || selectedCard.Contains(',')) return;
 
         var dropZones = _logic.GetDropZoneIds(_state, selectedCard);
         if (!dropZones.Contains(zoneId)) return;
@@ -624,7 +624,10 @@ public partial class GameTablePage : ContentPage
         string? selectedCard = _state.Metadata.GetValueOrDefault("selected_card");
         TableCanvas.SelectedCardId = selectedCard;
 
-        TableCanvas.DropZoneIds = selectedCard is not null
+        // In multi-select mode (comma-separated IDs, e.g. Hand-and-Foot meld assembly),
+        // drop zones don't apply — the meld is submitted via an action button, not drag-drop.
+        bool isMultiSelect = selectedCard is not null && selectedCard.Contains(',');
+        TableCanvas.DropZoneIds = !isMultiSelect && selectedCard is not null
             ? _logic.GetDropZoneIds(_state, selectedCard)
             : [];
     }

@@ -66,7 +66,9 @@ public sealed class PokerBettingHandler : IPhaseHandler
 
         var actions = new List<GameAction>();
 
-        if (needed <= 0 && _canCheck)
+        // Allow check whenever player owes nothing (BB option, post-flop free check).
+        // _canCheck=false only applies to active bets; it cannot block a free pass.
+        if (needed <= 0)
             actions.Add(new GameAction("check", Label: "Check"));
         else if (needed > 0 && needed <= myChips)
             actions.Add(new GameAction("call", Label: $"Call {needed}"));

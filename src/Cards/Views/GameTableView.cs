@@ -17,6 +17,7 @@ public class GameTableView : SKCanvasView
 
     private IReadOnlyList<string> _selectableCardIds = [];
     private string?               _selectedCardId;
+    private HashSet<string>       _selectedCardIds   = [];
     private IReadOnlyList<string> _dropZoneIds       = [];
 
     private string? _dragCardId;
@@ -172,7 +173,13 @@ public class GameTableView : SKCanvasView
     public string? SelectedCardId
     {
         get => _selectedCardId;
-        set { _selectedCardId = value; InvalidateSurface(); }
+        set
+        {
+            _selectedCardId = value;
+            _selectedCardIds = value is null ? []
+                : new HashSet<string>(value.Split(',', StringSplitOptions.RemoveEmptyEntries));
+            InvalidateSurface();
+        }
     }
 
     public IReadOnlyList<string> DropZoneIds
@@ -755,7 +762,7 @@ public class GameTableView : SKCanvasView
 
     private void DrawCardInteractiveHint(SKCanvas canvas, SKRect rect, string cardId)
     {
-        bool isSelected   = cardId == _selectedCardId;
+        bool isSelected   = _selectedCardIds.Contains(cardId);
         bool isSelectable = !isSelected && _selectableCardIds.Contains(cardId);
         if (!isSelected && !isSelectable) return;
 
