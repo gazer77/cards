@@ -22,6 +22,7 @@ public class GameTableView : SKCanvasView
 
     private string? _dragCardId;
     private string? _dragSourceZoneId;
+    private string? _tooltipCardId;
     private SKPoint _touchStartPt;
     private SKPoint _dragCurrentPt;
     private bool    _isDragging;
@@ -93,7 +94,8 @@ public class GameTableView : SKCanvasView
                 .Where(z => z.Type == "hand")
                 .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet() ?? [];
 
-            _state = value;
+            _state         = value;
+            _tooltipCardId = null;   // dismiss tooltip whenever the game state advances
 
             if (value is not null)
             {
@@ -434,6 +436,8 @@ public class GameTableView : SKCanvasView
 
         if (_isDragging && _dragCardId is not null)
             DrawDragGhost(canvas);
+
+        DrawCardTooltip(canvas, info);
     }
 
     // ── Zone rendering ────────────────────────────────────────────────────────
@@ -908,9 +912,18 @@ public class GameTableView : SKCanvasView
                 {
                     var cardId = HitTestCard(e.Location);
                     if (cardId is not null)
+                    {
+                        // Toggle info tooltip on face-up cards (any card, not just selectable ones)
+                        if (IsCardFaceUp(cardId))
+                            _tooltipCardId = (_tooltipCardId == cardId) ? null : cardId;
+                        else
+                            _tooltipCardId = null;
+
                         CardTapped?.Invoke(cardId);
+                    }
                     else
                     {
+                        _tooltipCardId = null;  // dismiss tooltip on empty-space tap
                         var zoneId = HitTestZone(e.Location);
                         if (zoneId is not null)
                             ZoneTapped?.Invoke(zoneId);
@@ -1131,6 +1144,131 @@ public class GameTableView : SKCanvasView
             tipX + arrowLen * MathF.Cos(wing1), tipY + arrowLen * MathF.Sin(wing1), arrowPaint);
         canvas.DrawLine(tipX, tipY,
             tipX + arrowLen * MathF.Cos(wing2), tipY + arrowLen * MathF.Sin(wing2), arrowPaint);
+    }
+
+    // ── Card info tooltip ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns true if the card with the given ID was drawn face-up in the last paint.
+    /// Only non-rotated zone layouts record card rects, so rotated opponent hands are
+    /// naturally excluded.
+    /// </summary>
+    private bool IsCardFaceUp(string cardId)
+    {
+        foreach (var layout in _lastLayouts)
+        {
+            if (!layout.FaceUp) continue;
+            if (layout.Zone.Cards.Any(c => c.Id == cardId)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Draws a chat-bubble tooltip showing the display name of the tapped card.
+    /// The bubble appears above the card (or below if near the top edge) with a
+    /// triangular tail pointing at the card.
+    /// </summary>
+    private void DrawCardTooltip(SKCanvas canvas, SKImageInfo info)
+    {
+        if (_tooltipCardId is null || _state is null) return;
+
+        // Find the card's last-drawn screen rect
+        var entry = _cardRects.LastOrDefault(r => r.CardId == _tooltipCardId);
+        if (entry.CardId is null) return;
+
+        // Find the card for its display name
+        Card? card = _state.Zones.Values
+            .SelectMany(z => z.Cards)
+            .FirstOrDefault(c => c.Id == _tooltipCardId);
+        if (card is null) return;
+
+        string text     = card.DisplayName;
+        float  cardW    = entry.Rect.Width;
+        float  fontSize = Math.Clamp(cardW * 0.26f, 13f, 22f);
+
+        using var font  = new SKFont(SKTypeface.Default, fontSize);
+        float textW     = font.MeasureText(text);
+
+        float padX    = fontSize * 0.85f;
+        float padY    = fontSize * 0.60f;
+        float tailH   = fontSize * 0.55f;
+        float tailW   = fontSize * 0.80f;
+        float bubbleW = textW + padX * 2f;
+        float bubbleH = fontSize + padY * 2f;
+        float cornerR = bubbleH / 2f;   // full pill shape
+
+        // Prefer showing above the card; fall back to below if too close to top edge
+        bool aboveCard = (entry.Rect.Top - tailH - bubbleH - 4f) > 8f;
+
+        float bubbleTop = aboveCard
+            ? entry.Rect.Top  - tailH - bubbleH - 4f
+            : entry.Rect.Bottom + tailH + 4f;
+
+        // Centre bubble on the card, clamped to screen
+        float midX = Math.Clamp(entry.Rect.MidX,
+            bubbleW / 2f + 8f,
+            info.Width - bubbleW / 2f - 8f);
+
+        float bubbleLeft   = midX - bubbleW / 2f;
+        float bubbleRight  = midX + bubbleW / 2f;
+        float bubbleBottom = bubbleTop + bubbleH;
+        var   bubbleRect   = new SKRect(bubbleLeft, bubbleTop, bubbleRight, bubbleBottom);
+
+        // Tail horizontal anchor: card centre, clamped inside the bubble's curved area
+        float tailCX = Math.Clamp(entry.Rect.MidX, bubbleLeft + cornerR, bubbleRight - cornerR);
+
+        // ── Shadow ────────────────────────────────────────────────────────────
+        using var shadowPaint = new SKPaint
+        {
+            Color      = new SKColor(0, 0, 0, 70),
+            IsAntialias = true,
+            MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 5f),
+        };
+        canvas.DrawRoundRect(
+            new SKRect(bubbleLeft + 3f, bubbleTop + 3f, bubbleRight + 3f, bubbleBottom + 3f),
+            cornerR, cornerR, shadowPaint);
+
+        // ── Bubble + tail fill ────────────────────────────────────────────────
+        using var fillPaint = new SKPaint
+        {
+            Color       = new SKColor(0xF8, 0xF2, 0xE4),   // warm cream
+            IsAntialias = true,
+        };
+
+        // Draw tail first so the bubble paints over its base and hides the seam
+        using var tailPath = new SKPath();
+        if (aboveCard)
+        {
+            tailPath.MoveTo(tailCX - tailW / 2f, bubbleBottom - 1f);
+            tailPath.LineTo(tailCX + tailW / 2f, bubbleBottom - 1f);
+            tailPath.LineTo(tailCX,               bubbleBottom + tailH);
+        }
+        else
+        {
+            tailPath.MoveTo(tailCX - tailW / 2f, bubbleTop + 1f);
+            tailPath.LineTo(tailCX + tailW / 2f, bubbleTop + 1f);
+            tailPath.LineTo(tailCX,               bubbleTop - tailH);
+        }
+        tailPath.Close();
+        canvas.DrawPath(tailPath, fillPaint);
+        canvas.DrawRoundRect(bubbleRect, cornerR, cornerR, fillPaint);
+
+        // ── Border ────────────────────────────────────────────────────────────
+        using var borderPaint = new SKPaint
+        {
+            Color       = new SKColor(0xC8, 0xA9, 0x6E, 0xBB),
+            Style       = SKPaintStyle.Stroke,
+            StrokeWidth = 1.5f,
+            IsAntialias = true,
+        };
+        canvas.DrawRoundRect(bubbleRect, cornerR, cornerR, borderPaint);
+
+        // ── Text ──────────────────────────────────────────────────────────────
+        using var textPaint = new SKPaint { Color = new SKColor(0x1C, 0x1C, 0x1C), IsAntialias = true };
+        canvas.DrawText(text,
+            midX - textW / 2f,
+            bubbleTop + padY + fontSize * 0.82f,
+            font, textPaint);
     }
 
     // ── Felt background ───────────────────────────────────────────────────────
