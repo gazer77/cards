@@ -1074,7 +1074,10 @@ public class GameTableView : SKCanvasView
             l.Zone.Type == "trick" && l.Zone.OwnerId == leaderId);
         if (trickLayout is null) return;
 
-        bool clockwise = !string.Equals(direction, "counter_clockwise", StringComparison.OrdinalIgnoreCase);
+        // Screen Y-axis is down, so the seating order P0(bottom)→P1(right)→P2(top)→P3(left)
+        // traces a counter-clockwise arc on screen even though it is "clockwise" by card-game
+        // convention.  Invert so the icon matches what the player sees visually.
+        bool clockwise = string.Equals(direction, "counter_clockwise", StringComparison.OrdinalIgnoreCase);
         float size = trickLayout.CardWidth * 0.42f;
 
         // Place icon at upper-right corner of the trick zone, slightly outside the bounds
