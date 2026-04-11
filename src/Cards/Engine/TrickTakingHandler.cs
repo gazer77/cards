@@ -46,6 +46,7 @@ public sealed class TrickTakingHandler : IPhaseHandler
     private readonly bool    _leftBower;
     private readonly bool    _mustPlayHigher;
     private readonly bool    _lonerSkipsPartner;
+    private readonly string  _direction;             // "clockwise" | "counter_clockwise"
 
     // Lead restrictions: hearts/spades broken tracking, Qs first trick
     private readonly List<LeadRestriction> _leadRestrictions;
@@ -64,6 +65,7 @@ public sealed class TrickTakingHandler : IPhaseHandler
         _leftBower            = GetBool(def, "left_bower") ?? false;
         _mustPlayHigher       = GetBool(def, "must_play_higher") ?? false;
         _lonerSkipsPartner    = GetBool(def, "loner_skips_partner") ?? false;
+        _direction            = GetString(def, "direction") ?? "clockwise";
 
         _leadRestrictions = ParseLeadRestrictions(def);
     }
@@ -135,7 +137,11 @@ public sealed class TrickTakingHandler : IPhaseHandler
     }
 
     public IReadOnlyList<string> GetDropZoneIds(GameState state, string cardId)
-        => IsMyTurn(state) && !IsCollecting(state) ? ["trick"] : [];
+    {
+        if (!IsMyTurn(state) || IsCollecting(state)) return [];
+        var zone = TrickZoneFor(state, state.CurrentPlayer.Id);
+        return zone is null ? [] : [zone.Id];
+    }
 
     public void Apply(GameState state, GameAction action)
     {
@@ -185,7 +191,8 @@ public sealed class TrickTakingHandler : IPhaseHandler
     public void StartHand(GameState state)
     {
         string trump = ResolveTrump(state);
-        state.Metadata["trick_trump"] = trump;
+        state.Metadata["trick_trump"]     = trump;
+        state.Metadata["trick_direction"] = _direction;
 
         // Find who leads.
         string leaderId = FindFirstLeader(state);
@@ -208,10 +215,10 @@ public sealed class TrickTakingHandler : IPhaseHandler
         var card   = hand?.Cards.FirstOrDefault(c => c.Id == cardId);
         if (card is null || hand is null) return;
 
-        // Move card to trick zone
+        // Move card to this player's trick zone (per-player or shared)
         hand.Remove(card);
         card.IsFaceUp = true;
-        var trick = state.FindZone("trick");
+        var trick = TrickZoneFor(state, player.Id);
         if (trick is null) return;
         trick.Add(card);
 
@@ -257,9 +264,8 @@ public sealed class TrickTakingHandler : IPhaseHandler
 
     private void CollectTrick(GameState state)
     {
-        string winnerId = state.Metadata.GetValueOrDefault("trick_winner", "");
-        var trick       = state.FindZone("trick");
-        if (trick is null) return;
+        string winnerId   = state.Metadata.GetValueOrDefault("trick_winner", "");
+        var    trickZones = AllTrickZones(state).ToList();
 
         // Move all trick cards to winner's collection zone.
         // Try player zone first, then team zone, then fall back to unowned zone.
@@ -272,15 +278,16 @@ public sealed class TrickTakingHandler : IPhaseHandler
                 if (team is not null) dest = state.FindZone($"{_collectTo}:{team.Id}");
             }
             dest ??= state.FindZone(_collectTo);
-            while (dest is not null && !trick.IsEmpty)
-                dest.Add(trick.Draw()!);
+            if (dest is not null)
+                foreach (var tz in trickZones)
+                    while (!tz.IsEmpty) dest.Add(tz.Draw()!);
 
             int prev = int.TryParse(state.Metadata.GetValueOrDefault($"tricks_taken:{winnerId}"), out int p) ? p : 0;
             state.Metadata[$"tricks_taken:{winnerId}"] = (prev + 1).ToString();
         }
         else
         {
-            trick.Clear(); // Discard if no winner (edge case)
+            foreach (var tz in trickZones) tz.Clear(); // Discard if no winner (edge case)
         }
 
         // Clear per-player play records
@@ -330,6 +337,7 @@ public sealed class TrickTakingHandler : IPhaseHandler
         // NewRoundHandler clears them at the start of the next round.
         state.Metadata.Remove("trick_number");
         state.Metadata.Remove("trick_trump");
+        state.Metadata.Remove("trick_direction");
         state.Metadata.Remove("trick_hearts_broken");
         state.Metadata.Remove("trick_spades_broken");
 
@@ -390,8 +398,6 @@ public sealed class TrickTakingHandler : IPhaseHandler
     private string DetermineWinner(GameState state, string trump)
     {
         string leadSuit = state.Metadata.GetValueOrDefault("trick_lead_suit", "");
-        var trick       = state.FindZone("trick");
-        if (trick is null) return state.Players[0].Id;
 
         // Build map: cardId → playerId
         var cardToPlayer = new Dictionary<string, string>();
@@ -402,7 +408,7 @@ public sealed class TrickTakingHandler : IPhaseHandler
         Card? best     = null;
         string bestPid = state.Players[0].Id;
 
-        foreach (var card in trick.Cards)
+        foreach (var card in AllTrickZones(state).SelectMany(z => z.Cards))
         {
             if (!cardToPlayer.TryGetValue(card.Id, out var pid)) continue;
 
@@ -548,10 +554,8 @@ public sealed class TrickTakingHandler : IPhaseHandler
     /// </summary>
     private Card? BestTrumpPlayed(GameState state, string trump)
     {
-        var trick = state.FindZone("trick");
-        if (trick is null) return null;
         Card? best = null;
-        foreach (var card in trick.Cards)
+        foreach (var card in AllTrickZones(state).SelectMany(z => z.Cards))
         {
             if (!string.Equals(EffectiveSuit(card, trump), trump, StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -573,6 +577,19 @@ public sealed class TrickTakingHandler : IPhaseHandler
 
     private static Zone? PlayerHand(GameState state, string playerId)
         => state.FindZone($"hand:{playerId}") ?? state.FindZone("hand");
+
+    /// <summary>Returns this player's trick zone (per-player if available, shared fallback).</summary>
+    private static Zone? TrickZoneFor(GameState state, string playerId)
+        => state.FindZone($"trick:{playerId}") ?? state.FindZone("trick");
+
+    /// <summary>Returns all per-player trick zones, or the single shared zone if no per-player zones exist.</summary>
+    private static IEnumerable<Zone> AllTrickZones(GameState state)
+    {
+        var perPlayer = state.Zones.Values.Where(z => z.Type == "trick" && z.OwnerId is not null).ToList();
+        if (perPlayer.Count > 0) return perPlayer;
+        var shared = state.FindZone("trick");
+        return shared is null ? [] : [shared];
+    }
 
     private static string NormalizeCardId(string spec)
     {

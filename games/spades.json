@@ -17,13 +17,13 @@
   },
   "deal": {
     "cards_per_player": 13,
-    "face": "down",
+    "face": "owner",
     "order": "clockwise"
   },
   "zones": [
     { "id": "deck",       "type": "deck",  "visibility": "none" },
     { "id": "hand",       "type": "hand",  "owner": "each_player", "visibility": "owner" },
-    { "id": "trick",      "type": "trick", "visibility": "all" },
+    { "id": "trick",      "type": "trick", "owner": "each_player", "visibility": "all" },
     { "id": "won_tricks", "type": "pile",  "owner": "each_team",   "visibility": "count_only" }
   ],
   "phases": [
@@ -42,6 +42,7 @@
       "id": "play",
       "type": "trick_taking",
       "trump": "spades",
+      "direction": "clockwise",
       "follow_suit": true,
       "lead_restrictions": [
         { "suit": "spades", "until": "spades_broken", "unless": "only_spades_in_hand" }

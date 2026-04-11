@@ -24,7 +24,7 @@
     { "id": "deck",       "type": "deck",   "visibility": "none" },
     { "id": "hand",       "type": "hand",   "owner": "each_player", "visibility": "owner" },
     { "id": "meld",       "type": "spread", "owner": "each_player", "visibility": "all" },
-    { "id": "trick",      "type": "trick",  "visibility": "all" },
+    { "id": "trick",      "type": "trick",  "owner": "each_player", "visibility": "all" },
     { "id": "won_tricks", "type": "pile",   "owner": "each_team",   "visibility": "count_only" }
   ],
   "phases": [
@@ -57,6 +57,7 @@
       "type": "trick_taking",
       "trump": "bid_result",
       "lead": "current_player",
+      "direction": "clockwise",
       "follow_suit": true,
       "must_play_higher": true,
       "winner": "highest_trump_then_lead",

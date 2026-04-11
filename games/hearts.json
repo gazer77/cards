@@ -19,7 +19,7 @@
   "zones": [
     { "id": "deck",       "type": "deck",   "visibility": "none" },
     { "id": "hand",       "type": "hand",   "owner": "each_player", "visibility": "owner" },
-    { "id": "trick",      "type": "trick",  "visibility": "all" },
+    { "id": "trick",      "type": "trick",  "owner": "each_player", "visibility": "all" },
     { "id": "won_tricks", "type": "pile",   "owner": "each_player", "visibility": "count_only" }
   ],
   "phases": [
@@ -35,6 +35,7 @@
       "id": "play",
       "type": "trick_taking",
       "trump": null,
+      "direction": "clockwise",
       "lead_card": "2_of_clubs",
       "follow_suit": true,
       "lead_restrictions": [

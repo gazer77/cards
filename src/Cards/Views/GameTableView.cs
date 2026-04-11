@@ -410,6 +410,8 @@ public class GameTableView : SKCanvasView
                 DrawDropZoneHighlight(canvas, layout.Bounds);
         }
 
+        DrawTrickDirectionIndicator(canvas, layouts);
+
         // Clean up finished animations after all zones are drawn
         foreach (var id in _finishedDealAnims)    _dealAnims.Remove(id);
         foreach (var id in _finishedFlipAnims)    _flipAnims.Remove(id);
@@ -1039,6 +1041,96 @@ public class GameTableView : SKCanvasView
             IsAntialias = true,
         };
         canvas.DrawRoundRect(inflated, r + 4f, r + 4f, paint);
+    }
+
+    // ── Trick direction indicator ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Draws a circular arrow (↻ or ↺) next to the trick leader's card zone to show
+    /// the direction of play.  Only active when per-player trick zones are in use and
+    /// trick_direction / trick_leader metadata are present.
+    /// </summary>
+    private void DrawTrickDirectionIndicator(SKCanvas canvas, IReadOnlyList<ZoneLayout> layouts)
+    {
+        if (_state is null) return;
+        if (!_state.Metadata.TryGetValue("trick_direction", out var direction)) return;
+        if (!_state.Metadata.TryGetValue("trick_leader",    out var leaderId))  return;
+
+        // Find the leader's per-player trick zone layout
+        var trickLayout = layouts.FirstOrDefault(l =>
+            l.Zone.Type == "trick" && l.Zone.OwnerId == leaderId);
+        if (trickLayout is null) return;
+
+        bool clockwise = !string.Equals(direction, "counter_clockwise", StringComparison.OrdinalIgnoreCase);
+        float size = trickLayout.CardWidth * 0.42f;
+
+        // Place icon at upper-right corner of the trick zone, slightly outside the bounds
+        float cx = trickLayout.Bounds.Right  + size * 0.55f;
+        float cy = trickLayout.Bounds.Top    - size * 0.55f;
+
+        DrawCircularArrow(canvas, cx, cy, size, clockwise);
+    }
+
+    /// <summary>
+    /// Draws a semi-transparent dark background circle and a ↻/↺ arc-plus-arrowhead icon.
+    /// CW version has its arrowhead at the upper-right of the arc; CCW is a mirror image.
+    /// </summary>
+    private static void DrawCircularArrow(SKCanvas canvas, float cx, float cy, float size, bool clockwise)
+    {
+        float arcR    = size * 0.52f;   // radius of the circular arc
+        float strokeW = size * 0.19f;
+
+        // Semi-transparent background circle
+        using var bgPaint = new SKPaint { Color = new SKColor(0, 0, 0, 150), IsAntialias = true };
+        canvas.DrawCircle(cx, cy, size * 0.72f, bgPaint);
+
+        using var arcPaint = new SKPaint
+        {
+            Color       = new SKColor(255, 255, 255, 220),
+            Style       = SKPaintStyle.Stroke,
+            StrokeWidth = strokeW,
+            IsAntialias = true,
+            StrokeCap   = SKStrokeCap.Round,
+        };
+
+        // CW:  arc from 30° (lower-right) sweeping +300° CW → ends at 330° (upper-right).
+        // CCW: arc from 150° (lower-left) sweeping -300° CCW → ends at 210° (upper-left).
+        // The two are mirror images around the vertical axis.
+        float startAngle = clockwise ? 30f  : 150f;
+        float sweepAngle = clockwise ? 300f : -300f;
+        float endAngle   = startAngle + sweepAngle;   // 330° CW, 210° (= -150°) CCW
+
+        var oval = new SKRect(cx - arcR, cy - arcR, cx + arcR, cy + arcR);
+        using var arcPath = new SKPath();
+        arcPath.AddArc(oval, startAngle, sweepAngle);
+        canvas.DrawPath(arcPath, arcPaint);
+
+        // Arrowhead at end of arc
+        float endRad = endAngle * MathF.PI / 180f;
+        float tipX   = cx + arcR * MathF.Cos(endRad);
+        float tipY   = cy + arcR * MathF.Sin(endRad);
+
+        // Tangent direction at tip (direction of travel along the arc)
+        float tangentDeg = clockwise ? endAngle + 90f : endAngle - 90f;
+        float tangentRad = tangentDeg * MathF.PI / 180f;
+
+        // Wing lines point backward from tip (±140° from tangent = 40° open V)
+        float arrowLen  = size * 0.28f;
+        float wing1 = tangentRad + 2.44f;  // ~+140°
+        float wing2 = tangentRad - 2.44f;  // ~-140°
+
+        using var arrowPaint = new SKPaint
+        {
+            Color       = new SKColor(255, 255, 255, 220),
+            Style       = SKPaintStyle.Stroke,
+            StrokeWidth = strokeW,
+            IsAntialias = true,
+            StrokeCap   = SKStrokeCap.Round,
+        };
+        canvas.DrawLine(tipX, tipY,
+            tipX + arrowLen * MathF.Cos(wing1), tipY + arrowLen * MathF.Sin(wing1), arrowPaint);
+        canvas.DrawLine(tipX, tipY,
+            tipX + arrowLen * MathF.Cos(wing2), tipY + arrowLen * MathF.Sin(wing2), arrowPaint);
     }
 
     // ── Felt background ───────────────────────────────────────────────────────

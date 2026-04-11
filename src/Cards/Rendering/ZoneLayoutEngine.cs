@@ -204,6 +204,9 @@ public static class ZoneLayoutEngine
                 new SKRect(W * 0.01f, H * 0.28f, W * 0.01f + sideW, H * 0.28f + sideH),
                 cardW, cardH, faceUp: false);
 
+        // Per-player trick zones in compass positions (if this game uses them)
+        PlaceTrickZonesCompass(state, layouts, W, H, cardW, cardH);
+
         // Center zones
         PlaceCenterZones(state, layouts,
             new SKRect(centerX, H * 0.26f, centerX + centerW, H * 0.72f),
@@ -273,6 +276,42 @@ public static class ZoneLayoutEngine
             return score > 0 ? $"{name}: {score}" : $"{name} BOOKS";
         }
         return $"{name} BOOKS";
+    }
+
+    // ── Per-player trick zone compass layout ──────────────────────────────────
+
+    /// <summary>
+    /// Places each player's trick zone in a compass pattern (bottom / right / top / left)
+    /// within the center play area.  Does nothing if the game uses a shared trick zone.
+    /// </summary>
+    private static void PlaceTrickZonesCompass(GameState state, List<ZoneLayout> layouts,
+        float W, float H, float cardW, float cardH)
+    {
+        // Compass positions as fractions of screen (cx, cy) per player index.
+        // P0 = bottom, P1 = right, P2 = top, P3 = left — matches the seating layout.
+        ReadOnlySpan<(float fx, float fy)> compass =
+        [
+            (0.50f, 0.635f),  // Player 0 — bottom
+            (0.715f, 0.490f), // Player 1 — right
+            (0.50f, 0.345f),  // Player 2 — top
+            (0.285f, 0.490f), // Player 3 — left
+        ];
+
+        for (int i = 0; i < state.Players.Count && i < compass.Length; i++)
+        {
+            var player = state.Players[i];
+            var zone   = state.FindZone($"trick:{player.Id}");
+            if (zone is null) continue;
+
+            float cx = W * compass[i].fx;
+            float cy = H * compass[i].fy;
+            var   bounds = new SKRect(cx - cardW / 2f, cy - cardH / 2f,
+                                      cx + cardW / 2f, cy + cardH / 2f);
+            var hint = zone.IsEmpty ? ZoneRenderHint.Empty : ZoneRenderHint.Spread;
+
+            layouts.Add(new ZoneLayout(zone, bounds, cardW, cardH, hint,
+                FaceUp: true, RotationDegrees: 0f, Label: null, IsCurrentPlayer: false));
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
