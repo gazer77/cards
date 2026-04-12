@@ -3,12 +3,14 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Cards.Engine;
 using Cards.Models;
+using Cards.Services;
 
 namespace Cards.ViewModels;
 
 public class HomeViewModel : INotifyPropertyChanged
 {
-    private readonly GameLoader _loader;
+    private readonly GameLoader      _loader;
+    private readonly GameSaveService _saves;
 
     private List<GameDefinition>              _allGames  = [];
     private ObservableCollection<GameDefinition> _games  = [];
@@ -17,9 +19,10 @@ public class HomeViewModel : INotifyPropertyChanged
     private string           _filterText    = string.Empty;
     private GameDefinition?  _selectedGame;
 
-    public HomeViewModel(GameLoader loader)
+    public HomeViewModel(GameLoader loader, GameSaveService saves)
     {
         _loader = loader;
+        _saves  = saves;
     }
 
     // ── Games list (filtered) ─────────────────────────────────────────────────
@@ -57,15 +60,26 @@ public class HomeViewModel : INotifyPropertyChanged
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsPreviewVisible));
             OnPropertyChanged(nameof(SelectedGameHasHelp));
+            OnPropertyChanged(nameof(SelectedGameHasSave));
+            OnPropertyChanged(nameof(StartButtonText));
             OnPropertyChanged(nameof(SelectedGameName));
             OnPropertyChanged(nameof(SelectedGamePlayerRange));
         }
     }
 
-    public bool IsPreviewVisible     => _selectedGame is not null;
-    public bool SelectedGameHasHelp  => !string.IsNullOrEmpty(_selectedGame?.Help);
-    public string SelectedGameName        => _selectedGame?.Name          ?? string.Empty;
+    public bool IsPreviewVisible      => _selectedGame is not null;
+    public bool SelectedGameHasHelp   => !string.IsNullOrEmpty(_selectedGame?.Help);
+    public bool SelectedGameHasSave   => _selectedGame is not null && _saves.HasSave(_selectedGame.Id);
+    public string StartButtonText     => SelectedGameHasSave ? "Resume" : "Start Game";
+    public string SelectedGameName        => _selectedGame?.Name           ?? string.Empty;
     public string SelectedGamePlayerRange => _selectedGame?.PlayerRangeText ?? string.Empty;
+
+    /// <summary>Deletes the save for the selected game so the next start is fresh.</summary>
+    public void DeleteSelectedSave()
+    {
+        if (_selectedGame is not null)
+            _saves.DeleteSave(_selectedGame.Id);
+    }
 
     // ── Load ──────────────────────────────────────────────────────────────────
 

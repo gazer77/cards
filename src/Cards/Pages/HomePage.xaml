@@ -140,12 +140,21 @@
                         Style="{StaticResource BodyText}"
                         Margin="0,0,0,28" />
 
-                    <!-- Start Game -->
+                    <!-- Resume / Start Game -->
                     <Button
-                        Text="Start Game"
+                        Text="{Binding StartButtonText}"
                         Style="{StaticResource PrimaryButton}"
                         Clicked="OnStartGameClicked"
                         Margin="0,0,0,12" />
+
+                    <!-- New Game (only when a save exists) -->
+                    <Button
+                        Text="New Game"
+                        Style="{StaticResource HudButton}"
+                        IsVisible="{Binding SelectedGameHasSave}"
+                        HorizontalOptions="Center"
+                        Clicked="OnNewGameClicked"
+                        Margin="0,0,0,4" />
 
                     <!-- Host Multiplayer -->
                     <Button
