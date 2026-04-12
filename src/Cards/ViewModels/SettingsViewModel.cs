@@ -45,6 +45,16 @@ public class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
+    public bool ShowGameMessages
+    {
+        get => _settings.ShowGameMessages;
+        set
+        {
+            _settings.ShowGameMessages = value;
+            OnPropertyChanged();
+        }
+    }
+
     public string AppVersion => AppInfo.VersionString;
 
     private static string IdToSkinName(string id) => id switch

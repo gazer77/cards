@@ -2,9 +2,10 @@ namespace Cards.Services;
 
 public class SettingsService
 {
-    private const string KeyCardSkin   = "card_skin";
-    private const string KeyTableTheme = "table_theme";
-    private const string KeyPlayerName = "player_name";
+    private const string KeyCardSkin        = "card_skin";
+    private const string KeyTableTheme     = "table_theme";
+    private const string KeyPlayerName     = "player_name";
+    private const string KeyShowMessages   = "show_game_messages";
 
     public string CardSkinId
     {
@@ -22,5 +23,11 @@ public class SettingsService
     {
         get => Preferences.Get(KeyPlayerName, "Player");
         set => Preferences.Set(KeyPlayerName, value);
+    }
+
+    public bool ShowGameMessages
+    {
+        get => Preferences.Get(KeyShowMessages, true);
+        set => Preferences.Set(KeyShowMessages, value);
     }
 }

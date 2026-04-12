@@ -35,6 +35,7 @@ public partial class GameTablePage : ContentPage
         TableCanvas.ZoneTapped          += OnZoneTapped;
         TableCanvas.CardDropped         += OnCardDropped;
         TableCanvas.CardReorderedInHand += OnCardReorderedInHand;
+        TableCanvas.SizeChanged         += OnCanvasSizeChanged;
     }
 
     public string        GameId        { get; set; } = string.Empty;
@@ -88,7 +89,7 @@ public partial class GameTablePage : ContentPage
         var definition = await _loader.LoadAsync(GameId);
         if (definition is null) { await Shell.Current.GoToAsync(".."); return; }
 
-        GameTitleLabel.Text = definition.Name;
+        Title = definition.Name;
         TableCanvas.SetSkin(SkinFactory.Create(_settings.CardSkinId));
 
         // Configure HUD buttons from game definition
@@ -174,7 +175,7 @@ public partial class GameTablePage : ContentPage
         var definition = await _loader.LoadAsync(state.GameId);
         if (definition is null) { await Shell.Current.GoToAsync(".."); return; }
 
-        GameTitleLabel.Text = definition.Name;
+        Title = definition.Name;
         TableCanvas.SetSkin(SkinFactory.Create(_settings.CardSkinId));
 
         var ui = definition.Ui;
@@ -264,13 +265,9 @@ public partial class GameTablePage : ContentPage
         }
     }
 
-    private void SortPlayerHand()
+    private void SortPlayerHand(string mode)
     {
-        if (_state is null) return;
-        // Manual sort uses rank (ace low) regardless of auto-sort setting
-        string mode = _state.Definition.Ui?.AutoSortHand is null or "none"
-            ? "rank"
-            : _state.Definition.Ui.AutoSortHand;
+        if (_state is null || string.IsNullOrEmpty(mode) || mode == "none") return;
 
         foreach (var zone in _state.Zones.Values)
         {
@@ -279,6 +276,60 @@ public partial class GameTablePage : ContentPage
         }
         TableCanvas.GameState = _state;
     }
+
+    // ── Sort mode picker ──────────────────────────────────────────────────────
+
+    // All known sort modes and their display labels, in default display order.
+    private static readonly (string Mode, string Label)[] AllSortOptions =
+    [
+        ("suit_value",    "By Suit & Value"),
+        ("suit_stable",   "By Suit"),
+        ("rank_ace_high", "By Value (Ace High)"),
+        ("rank",          "By Value (Ace Low)"),
+    ];
+
+    private string[] BuildSortLabels()
+    {
+        var ui = _state?.Definition.Ui;
+        var configuredModes = ui?.SortModes;
+        var defaultMode     = ui?.DefaultSort;
+
+        // Decide which modes to include
+        IEnumerable<(string Mode, string Label)> options;
+        if (configuredModes is { Count: > 0 })
+        {
+            // Show only the game-configured modes, in configured order
+            options = configuredModes
+                .Select(m => AllSortOptions.FirstOrDefault(o => o.Mode == m))
+                .Where(o => o.Mode is not null);
+        }
+        else
+        {
+            options = AllSortOptions;
+        }
+
+        var list = options.ToList();
+
+        // Promote default_sort to the top of the list
+        if (!string.IsNullOrEmpty(defaultMode))
+        {
+            int idx = list.FindIndex(o => o.Mode == defaultMode);
+            if (idx > 0)
+            {
+                var entry = list[idx];
+                list.RemoveAt(idx);
+                list.Insert(0, entry);
+            }
+        }
+
+        // Always append "Custom (Drag to Arrange)" as the last option
+        list.Add(("none", "Custom (Drag to Arrange)"));
+
+        return list.Select(o => o.Label).ToArray();
+    }
+
+    private string? LabelToMode(string label)
+        => AllSortOptions.FirstOrDefault(o => o.Label == label).Mode;
 
     // ── Touch / interaction handlers ──────────────────────────────────────────
 
@@ -363,11 +414,11 @@ public partial class GameTablePage : ContentPage
             return;
         }
 
-        var (received, sourcePts) = ApplyWithSound(action);
+        var (moved, sourcePts) = ApplyWithSound(action);
         MaybeSortHands();
         TableCanvas.GameState = _state;
 
-        var flyIns = BuildReceiveEntries(received, sourcePts);
+        var flyIns = BuildAllFlyInEntries(moved, sourcePts);
         if (flyIns.Count > 0)
         {
             TableCanvas.QueueFlyIns(flyIns);
@@ -404,11 +455,11 @@ public partial class GameTablePage : ContentPage
                 var next = _logic.GetValidActions(_state!);
                 if (next.Count == 0) break;
 
-                var (received, sourcePts) = ApplyWithSound(_logic.GetAutoAction(_state!));
+                var (moved, sourcePts) = ApplyWithSound(_logic.GetAutoAction(_state!));
                 MaybeSortHands();
                 TableCanvas.GameState = _state;
 
-                var flyIns = BuildReceiveEntries(received, sourcePts);
+                var flyIns = BuildAllFlyInEntries(moved, sourcePts);
                 if (flyIns.Count > 0)
                 {
                     TableCanvas.QueueFlyIns(flyIns);
@@ -509,20 +560,20 @@ public partial class GameTablePage : ContentPage
     }
 
     /// <summary>
-    /// Applies an action, plays sound, and returns the list of cards that just
-    /// arrived in any hand zone together with each card's source position.
+    /// Applies an action, plays sound, and returns all cards that changed zones
+    /// together with each card's source screen position.
     /// The caller must set <c>TableCanvas.GameState</c> before passing the return
-    /// values to <c>BuildReceiveEntries</c> so that fan-slot destinations can
-    /// be computed against the updated layout.
+    /// values to <c>BuildAllFlyInEntries</c> so destinations can be resolved
+    /// against the updated layout.
     /// </summary>
-    private (IReadOnlyList<string> Received, IReadOnlyDictionary<string, SkiaSharp.SKPoint> SourcePts)
+    private (IReadOnlyList<(string CardId, string DestZoneId)> Moved, IReadOnlyDictionary<string, SkiaSharp.SKPoint> SourcePts)
         ApplyWithSound(GameAction action)
     {
         var faceDownBefore = _state!.Zones.Values
             .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Id).ToHashSet();
         var handCountBefore = _state.Zones
             .Where(kv => kv.Key.StartsWith("hand:")).Sum(kv => kv.Value.Count);
-        // Snapshot card → zone BEFORE the action so we can detect all arrivals and
+        // Snapshot card → zone BEFORE the action so we can detect all movements and
         // resolve source positions for cards in rotated zones.
         var cardSourceZone = new Dictionary<string, string>();
         foreach (var (zoneId, zone) in _state.Zones)
@@ -533,14 +584,12 @@ public partial class GameTablePage : ContentPage
 
         PlaySoundForStateChange(faceDownBefore, handCountBefore);
 
-        // Any card now in a hand zone that came from a DIFFERENT zone gets a fly-in.
-        // This covers player-receives-from-deck, player-receives-from-opponent,
-        // AND opponent-receives-from-deck or opponent-receives-from-player.
-        var received = _state.Zones.Values
-            .Where(z => z.Type == "hand")
-            .SelectMany(z => z.Cards.Select(c => (CardId: c.Id, ZoneId: z.Id)))
-            .Where(x => !cardSourceZone.TryGetValue(x.CardId, out var prev) || prev != x.ZoneId)
-            .Select(x => x.CardId)
+        // All cards that moved to a different zone (hand, trick, pile, spread …)
+        // Exclude deck arrivals — reshuffles don't benefit from individual fly-ins.
+        var moved = _state.Zones.Values
+            .Where(z => z.Type != "deck")
+            .SelectMany(z => z.Cards.Select(c => (CardId: c.Id, DestZoneId: z.Id)))
+            .Where(x => !cardSourceZone.TryGetValue(x.CardId, out var prev) || prev != x.DestZoneId)
             .ToList();
 
         // Resolve source positions:
@@ -548,38 +597,61 @@ public partial class GameTablePage : ContentPage
         //   2. Zone center (works for rotated zones like 4-player sides or play zones).
         //   3. Deck center as last resort.
         var sourcePts = new Dictionary<string, SkiaSharp.SKPoint>();
-        foreach (var id in received)
+        foreach (var (cardId, _) in moved)
         {
-            var rect = TableCanvas.GetLastCardRect(id);
-            if (rect.HasValue) { sourcePts[id] = new SkiaSharp.SKPoint(rect.Value.MidX, rect.Value.MidY); continue; }
+            var rect = TableCanvas.GetLastCardRect(cardId);
+            if (rect.HasValue) { sourcePts[cardId] = new SkiaSharp.SKPoint(rect.Value.MidX, rect.Value.MidY); continue; }
 
             SkiaSharp.SKPoint? center = null;
-            if (cardSourceZone.TryGetValue(id, out var srcZoneId))
+            if (cardSourceZone.TryGetValue(cardId, out var srcZoneId))
                 center = TableCanvas.GetZoneCenter(srcZoneId);
             center ??= TableCanvas.GetZoneCenter("deck");
-            if (center.HasValue) sourcePts[id] = center.Value;
+            if (center.HasValue) sourcePts[cardId] = center.Value;
         }
 
-        return (received, sourcePts);
+        return (moved, sourcePts);
     }
 
     // ── Fly-in entry builders ─────────────────────────────────────────────────
 
     /// <summary>
-    /// Builds fly-in entries for cards that just arrived in any hand zone.
-    /// Must be called after <c>TableCanvas.GameState</c> is updated so fan-slot
-    /// positions are computed against the new layout.
+    /// Builds fly-in entries for ALL cards that changed zones (hand, trick, pile, spread).
+    /// Must be called after <c>TableCanvas.GameState</c> is updated so destinations
+    /// can be resolved against the new layout.
+    /// Hand-zone arrivals use precise fan-slot centers; all other arrivals use zone centers.
     /// </summary>
-    private List<(string CardId, SkiaSharp.SKPoint From, SkiaSharp.SKPoint To)> BuildReceiveEntries(
-        IReadOnlyList<string> received,
+    private List<(string CardId, SkiaSharp.SKPoint From, SkiaSharp.SKPoint To)> BuildAllFlyInEntries(
+        IReadOnlyList<(string CardId, string DestZoneId)> moved,
         IReadOnlyDictionary<string, SkiaSharp.SKPoint> sourcePts)
     {
-        if (received.Count == 0 || _state is null) return [];
-        var destinations = TableCanvas.ComputeHandSlotCenters(_state, received);
-        var entries = new List<(string, SkiaSharp.SKPoint, SkiaSharp.SKPoint)>(received.Count);
-        foreach (var id in received)
-            if (sourcePts.TryGetValue(id, out var from) && destinations.TryGetValue(id, out var to))
-                entries.Add((id, from, to));
+        if (moved.Count == 0 || _state is null) return [];
+
+        // Pre-compute precise fan-slot centers for hand-zone arrivals
+        var handArrivals = moved
+            .Where(m => _state.Zones.TryGetValue(m.DestZoneId, out var z) && z.Type == "hand")
+            .Select(m => m.CardId)
+            .ToList();
+        var handDests = TableCanvas.ComputeHandSlotCenters(_state, handArrivals);
+
+        var entries = new List<(string, SkiaSharp.SKPoint, SkiaSharp.SKPoint)>(moved.Count);
+        foreach (var (cardId, destZoneId) in moved)
+        {
+            if (!sourcePts.TryGetValue(cardId, out var from)) continue;
+
+            SkiaSharp.SKPoint? to = null;
+            if (_state.Zones.TryGetValue(destZoneId, out var destZone))
+            {
+                if (destZone.Type == "hand")
+                {
+                    if (handDests.TryGetValue(cardId, out var handPt)) to = handPt;
+                }
+                else
+                    to = TableCanvas.GetZoneCenter(destZoneId);
+            }
+
+            if (to.HasValue)
+                entries.Add((cardId, from, to.Value));
+        }
         return entries;
     }
 
@@ -726,8 +798,17 @@ public partial class GameTablePage : ContentPage
         ShowMessage(text);
     }
 
+    private void OnCanvasSizeChanged(object? sender, EventArgs e)
+    {
+        // Keep messages just above the player hand (bottom 13% of canvas = hand 11% + gap 2%)
+        double margin = TableCanvas.Height * 0.13;
+        StatusMessagesPanel.Margin = new Thickness(0, 0, 0, margin);
+    }
+
     private void ShowMessage(string text)
     {
+        if (!_settings.ShowGameMessages) return;
+
         // Limit visible stack to 3 — remove the oldest if we're at the cap
         while (StatusMessagesPanel.Children.Count >= 3)
             StatusMessagesPanel.Children.RemoveAt(0);
@@ -794,10 +875,20 @@ public partial class GameTablePage : ContentPage
         GearMenuBackdrop.IsVisible = false;
     }
 
-    private void OnGearSortClicked(object? sender, EventArgs e)
+    private async void OnGearSortClicked(object? sender, EventArgs e)
     {
         OnGearMenuDismissed(sender, e);
-        SortPlayerHand();
+        if (_state is null) return;
+
+        string[] labels = BuildSortLabels();
+        string? chosen  = await DisplayActionSheetAsync("Sort Hand", "Cancel", null, labels);
+
+        if (chosen is null || chosen == "Cancel") return;
+        if (chosen == "Custom (Drag to Arrange)") return;   // no-op; player drags manually
+
+        string? mode = LabelToMode(chosen);
+        if (mode is not null)
+            SortPlayerHand(mode);
     }
 
     private void OnGearLogClicked(object? sender, EventArgs e)

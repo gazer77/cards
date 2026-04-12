@@ -31,6 +31,22 @@
                     TitleColor="{StaticResource TextSecondary}" />
             </VerticalStackLayout>
 
+            <!-- Game Messages -->
+            <VerticalStackLayout Spacing="12">
+                <Label Text="GAMEPLAY" Style="{StaticResource FieldLabel}" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <Label
+                        Grid.Column="0"
+                        Text="Show on-screen messages"
+                        TextColor="{StaticResource TextPrimary}"
+                        VerticalOptions="Center" />
+                    <Switch
+                        Grid.Column="1"
+                        IsToggled="{Binding ShowGameMessages, Mode=TwoWay}"
+                        OnColor="{StaticResource Gold}" />
+                </Grid>
+            </VerticalStackLayout>
+
             <!-- About -->
             <VerticalStackLayout Spacing="8">
                 <Label Text="ABOUT" Style="{StaticResource FieldLabel}" />

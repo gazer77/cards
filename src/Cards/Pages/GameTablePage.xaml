@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage
+    x:Name="ThisPage"
     x:Class="Cards.Pages.GameTablePage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
@@ -7,42 +8,43 @@
     Shell.NavBarIsVisible="False"
     BackgroundColor="Black">
 
-    <Grid RowDefinitions="*,Auto">
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Thin title strip -->
+        <Border
+            Grid.Row="0"
+            BackgroundColor="{StaticResource HudBackground}"
+            StrokeThickness="0"
+            Padding="0,4">
+            <Label
+                Text="{Binding Title, Source={x:Reference ThisPage}}"
+                HorizontalOptions="Center"
+                VerticalOptions="Center"
+                FontSize="13"
+                FontAttributes="Bold"
+                TextColor="White" />
+        </Border>
 
         <!-- SkiaSharp game canvas (touch handled natively via EnableTouchEvents) -->
         <views:GameTableView
             x:Name="TableCanvas"
-            Grid.Row="0"
+            Grid.Row="1"
             HorizontalOptions="Fill"
             VerticalOptions="Fill" />
 
-        <!-- Stacking message overlay (centered over canvas) -->
+        <!-- Stacking message overlay (just above player hand) -->
         <VerticalStackLayout
             x:Name="StatusMessagesPanel"
-            Grid.Row="0"
-            VerticalOptions="Center"
+            Grid.Row="1"
+            VerticalOptions="End"
             HorizontalOptions="Center"
-            Margin="0,-60,0,0"
             Spacing="6"
             MaximumWidthRequest="300"
             InputTransparent="True" />
 
-        <!-- HUD overlay — game title -->
-        <Grid
-            Grid.Row="0"
-            VerticalOptions="End"
-            HorizontalOptions="Fill"
-            Margin="0,0,0,80"
-            Padding="16,0">
-            <Label
-                x:Name="GameTitleLabel"
-                HorizontalOptions="Center"
-                Style="{StaticResource HudGameTitle}" />
-        </Grid>
-
         <!-- Bottom action bar -->
         <Border
-            Grid.Row="1"
+            Grid.Row="2"
             BackgroundColor="{StaticResource HudBackground}"
             StrokeThickness="0">
             <Grid ColumnDefinitions="*,Auto" Padding="12,12">
@@ -64,7 +66,7 @@
         <!-- Gear menu backdrop — tap to dismiss -->
         <BoxView
             x:Name="GearMenuBackdrop"
-            Grid.Row="0"
+            Grid.Row="1"
             Color="Transparent"
             IsVisible="False">
             <BoxView.GestureRecognizers>
@@ -75,7 +77,7 @@
         <!-- Gear menu panel -->
         <Border
             x:Name="GearMenuPanel"
-            Grid.Row="0"
+            Grid.Row="1"
             IsVisible="False"
             VerticalOptions="End"
             HorizontalOptions="End"
@@ -88,7 +90,7 @@
             <VerticalStackLayout Spacing="4" MinimumWidthRequest="170">
                 <Button
                     x:Name="GearSortButton"
-                    Text="Sort Hand"
+                    Text="Sort Hand…"
                     Style="{StaticResource HudButton}"
                     IsVisible="False"
                     HorizontalOptions="Fill"
@@ -121,7 +123,7 @@
         <!-- Game-over overlay — covers entire screen including bottom bar -->
         <Grid
             x:Name="GameOverOverlay"
-            Grid.Row="0"
+            Grid.Row="1"
             Grid.RowSpan="2"
             BackgroundColor="#D9000000"
             IsVisible="False">
@@ -168,7 +170,7 @@
         <!-- Game log overlay -->
         <Grid
             x:Name="GameLogOverlay"
-            Grid.Row="0"
+            Grid.Row="1"
             Grid.RowSpan="2"
             BackgroundColor="#D9000000"
             IsVisible="False">

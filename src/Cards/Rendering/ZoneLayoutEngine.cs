@@ -119,8 +119,8 @@ public static class ZoneLayoutEngine
             oppH      = H * 0.20f;
             centerTop = H * 0.30f;
             centerH   = H * 0.38f;
-            handTop   = H * 0.76f;
-            handH     = H * 0.22f;
+            handTop   = H * 0.87f;
+            handH     = H * 0.11f;
         }
 
         float cardH = cardW * 1.4f;
@@ -150,7 +150,7 @@ public static class ZoneLayoutEngine
         var playerZone = GetPlayerZone(state, "hand", p0.Id);
         if (playerZone is not null)
         {
-            bool plyFaceUp = playerZone.Visibility is "all" or "top" or "owner";
+            bool plyFaceUp = playerZone.Visibility is "all" or "top" or "owner" or "mixed";
             layouts.Add(new ZoneLayout(playerZone,
                 new SKRect(W * 0.02f, handTop, W * 0.98f, handTop + handH),
                 cardW, cardH, ZoneHintFor(playerZone),
@@ -177,7 +177,7 @@ public static class ZoneLayoutEngine
         float sideW  = W * 0.15f;
         float sideH  = H * 0.42f;
         float topH   = H * 0.18f;
-        float handH  = H * 0.22f;
+        float handH  = H * 0.11f;
         float centerX = W * 0.18f;
         float centerW = W * 0.64f;
 
