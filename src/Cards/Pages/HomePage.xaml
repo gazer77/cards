@@ -152,7 +152,7 @@
                         Text="New Game"
                         Style="{StaticResource HudButton}"
                         IsVisible="{Binding SelectedGameHasSave}"
-                        HorizontalOptions="Center"
+                        HorizontalOptions="Fill"
                         Clicked="OnNewGameClicked"
                         Margin="0,0,0,4" />
 
@@ -160,7 +160,7 @@
                     <Button
                         Text="Host Multiplayer"
                         Style="{StaticResource HudButton}"
-                        HorizontalOptions="Center"
+                        HorizontalOptions="Fill"
                         Clicked="OnHostMultiplayerClicked"
                         Margin="0,0,0,4" />
 
@@ -169,7 +169,7 @@
                         Text="View Rules"
                         Style="{StaticResource HudButton}"
                         IsVisible="{Binding SelectedGameHasHelp}"
-                        HorizontalOptions="Center"
+                        HorizontalOptions="Fill"
                         Clicked="OnViewRulesClicked" />
 
                 </VerticalStackLayout>
