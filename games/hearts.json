@@ -13,7 +13,7 @@
   },
   "deal": {
     "cards_per_player": 13,
-    "face": "down",
+    "face": "owner",
     "order": "clockwise"
   },
   "zones": [
@@ -68,6 +68,10 @@
         "effect": "add_26_to_others"
       }
     ]
+  },
+  "ui": {
+    "default_sort": "suit_value",
+    "sort_modes": ["suit_value", "suit_stable", "rank_ace_high"]
   },
   "win_condition": { "type": "lowest_score", "threshold": 100 },
   "house_rules": [

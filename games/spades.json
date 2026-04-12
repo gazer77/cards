@@ -66,6 +66,10 @@
     "blind_nil": { "success": 200, "failure": -200 },
     "accumulate": true
   },
+  "ui": {
+    "default_sort": "suit_value",
+    "sort_modes": ["suit_value", "suit_stable", "rank_ace_high"]
+  },
   "win_condition": { "type": "target_score", "score": 500, "winner": "first" },
   "house_rules": [
     {

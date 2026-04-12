@@ -17,7 +17,7 @@
   },
   "deal": {
     "cards_per_player": 12,
-    "face": "down",
+    "face": "owner",
     "order": "clockwise"
   },
   "zones": [
@@ -99,5 +99,9 @@
       }
     }
   ],
+  "ui": {
+    "default_sort": "suit_value",
+    "sort_modes": ["suit_value", "suit_stable", "rank_ace_high"]
+  },
   "help": "pinochle.md"
 }

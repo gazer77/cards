@@ -16,9 +16,11 @@ public static class HandSorter
 
         var sorted = mode switch
         {
-            "rank"          => ByRank(zone.Cards, aceHigh: false),
-            "rank_ace_high" => ByRank(zone.Cards, aceHigh: true),
-            "suit"          => BySuit(zone.Cards),
+            "rank"          => ByRank(zone.Cards,       aceHigh: false),
+            "rank_ace_high" => ByRank(zone.Cards,       aceHigh: true),
+            "suit"          => BySuitValue(zone.Cards,  aceHigh: false),
+            "suit_value"    => BySuitValue(zone.Cards,  aceHigh: true),
+            "suit_stable"   => BySuitStable(zone.Cards),
             _               => null,
         };
 
@@ -41,13 +43,25 @@ public static class HandSorter
             .ToList();
 
     /// <summary>
-    /// Sort by suit (C D H S), then by rank within each suit (Ace low).
+    /// Sort by suit (C D H S), then by rank within each suit.
     /// </summary>
-    private static List<Card> BySuit(IEnumerable<Card> cards)
+    private static List<Card> BySuitValue(IEnumerable<Card> cards, bool aceHigh)
         => cards
             .OrderBy(c => (int)c.Suit)
-            .ThenBy(c => RankKey(c.Rank, aceHigh: false))
+            .ThenBy(c => RankKey(c.Rank, aceHigh))
             .ToList();
+
+    /// <summary>
+    /// Group cards by suit (C D H S) while preserving the original relative order
+    /// of cards within each suit (stable sort).  Useful when the player just wants
+    /// their suits together without disturbing existing rank order within each group.
+    /// </summary>
+    private static List<Card> BySuitStable(IEnumerable<Card> cards)
+    {
+        // OrderBy in .NET is stable, so cards within the same suit keep their
+        // original relative order.
+        return cards.OrderBy(c => (int)c.Suit).ToList();
+    }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

@@ -19,7 +19,7 @@
   "deal": {
     "stacks_per_player": 2,
     "cards_per_stack": 13,
-    "face": "down",
+    "face": "owner",
     "remainder_to": "deck",
     "then_flip_top_to": "discard"
   },

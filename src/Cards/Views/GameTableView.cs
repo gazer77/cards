@@ -217,6 +217,7 @@ public class GameTableView : SKCanvasView
             float dist = SKPoint.Distance(from, to);
             float dur  = MathF.Max(dist / FlyInSpeedPxMs, 80f);
             _flyInAnims[id] = (from, to, now + offset, dur);
+            _dealAnims.Remove(id);  // suppress slide-up when a proper fly-in is queued
             offset += delayBetweenMs;
         }
 
@@ -382,18 +383,16 @@ public class GameTableView : SKCanvasView
             return;
         }
 
-        // Remove fly-in entries for cards that are no longer in any hand zone
-        // (e.g. moved to a books/spread zone mid-animation).  Without this the
-        // entry would linger forever, the timer would never stop, and the card
-        // would appear frozen at its mid-flight position.
+        // Remove fly-in entries for cards that are no longer in ANY zone at all
+        // (e.g. card removed from game entirely).  We no longer restrict to hand
+        // zones here because DrawFlyingCards handles non-hand fly-ins as an overlay.
         if (_flyInAnims.Count > 0)
         {
-            var handCardIds = _state.Zones.Values
-                .Where(z => z.Type == "hand")
+            var allCardIds = _state.Zones.Values
                 .SelectMany(z => z.Cards)
                 .Select(c => c.Id)
                 .ToHashSet();
-            foreach (var orphanId in _flyInAnims.Keys.Where(id => !handCardIds.Contains(id)).ToList())
+            foreach (var orphanId in _flyInAnims.Keys.Where(id => !allCardIds.Contains(id)).ToList())
                 _flyInAnims.Remove(orphanId);
         }
 
@@ -433,6 +432,8 @@ public class GameTableView : SKCanvasView
             _flyInCompletion.TrySetResult();
             _flyInCompletion = null;
         }
+
+        DrawFlyingCards(canvas);
 
         if (_isDragging && _dragCardId is not null)
             DrawDragGhost(canvas);
@@ -694,6 +695,13 @@ public class GameTableView : SKCanvasView
                 startX + i * (cardW + gap), top,
                 startX + i * (cardW + gap) + cardW, top + cardH);
 
+            // Cards with an active fly-in are drawn by DrawFlyingCards overlay — skip here.
+            if (_flyInAnims.TryGetValue(card.Id, out var fia))
+            {
+                float ft = Math.Clamp((now - fia.Start) / fia.Duration, 0f, 1f);
+                if (ft < 1f) continue;
+            }
+
             // Deal animation (slide up)
             if (_dealAnims.TryGetValue(card.Id, out var da))
             {
@@ -711,6 +719,54 @@ public class GameTableView : SKCanvasView
                 DrawCardInteractiveHint(canvas, rect, card.Id);
             }
         }
+    }
+
+    // ── Flying cards overlay ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Draws all cards currently in flight to non-hand destinations (trick zones,
+    /// discard piles, won-tricks, etc.) at their interpolated screen positions.
+    /// Hand-zone fly-ins are handled by <see cref="DrawFan"/> instead.
+    /// </summary>
+    private void DrawFlyingCards(SKCanvas canvas)
+    {
+        if (_flyInAnims.Count == 0 || _state is null) return;
+
+        float cardW = _lastLayouts.Count > 0 ? _lastLayouts[0].CardWidth  : 50f;
+        float cardH = _lastLayouts.Count > 0 ? _lastLayouts[0].CardHeight : 70f;
+        long  now   = NowMs();
+
+        foreach (var (cardId, fia) in _flyInAnims)
+        {
+            // Hand-zone cards draw their own fly-ins inside DrawFan
+            if (IsCardInHandZone(cardId)) continue;
+
+            if (now < fia.Start) continue;  // not yet started
+
+            float t = Math.Clamp((now - fia.Start) / fia.Duration, 0f, 1f);
+            if (t >= 1f) { _finishedFlyInAnims.Add(cardId); continue; }
+
+            float ease = EaseOutCubic(t);
+            float cx   = fia.From.X + (fia.To.X - fia.From.X) * ease;
+            float cy   = fia.From.Y + (fia.To.Y - fia.From.Y) * ease;
+            var   rect = new SKRect(cx - cardW / 2f, cy - cardH / 2f,
+                                    cx + cardW / 2f, cy + cardH / 2f);
+
+            var card = FindCardById(cardId);
+            if (card is not null)
+                CardRenderer.DrawCard(canvas, rect, card, _skin);
+            else
+                CardRenderer.DrawCardBack(canvas, rect, _skin);
+        }
+    }
+
+    private bool IsCardInHandZone(string cardId)
+    {
+        if (_state is null) return false;
+        foreach (var zone in _state.Zones.Values)
+            if (zone.Type == "hand" && zone.Cards.Any(c => c.Id == cardId))
+                return true;
+        return false;
     }
 
     // ── Count-only ────────────────────────────────────────────────────────────
@@ -1059,25 +1115,24 @@ public class GameTableView : SKCanvasView
     // ── Trick direction indicator ─────────────────────────────────────────────
 
     /// <summary>
-    /// Draws a circular arrow (↻ or ↺) next to the trick leader's card zone to show
+    /// Draws a circular arrow (↻ or ↺) next to the current player's trick zone to show
     /// the direction of play.  Only active when per-player trick zones are in use and
-    /// trick_direction / trick_leader metadata are present.
+    /// trick_direction metadata is present.
     /// </summary>
     private void DrawTrickDirectionIndicator(SKCanvas canvas, IReadOnlyList<ZoneLayout> layouts)
     {
         if (_state is null) return;
         if (!_state.Metadata.TryGetValue("trick_direction", out var direction)) return;
-        if (!_state.Metadata.TryGetValue("trick_leader",    out var leaderId))  return;
+        if (_state.Players.Count == 0) return;
+        var currentPlayerId = _state.Players[_state.CurrentPlayerIndex].Id;
 
-        // Find the leader's per-player trick zone layout
+        // Find the current player's per-player trick zone layout
         var trickLayout = layouts.FirstOrDefault(l =>
-            l.Zone.Type == "trick" && l.Zone.OwnerId == leaderId);
+            l.Zone.Type == "trick" && l.Zone.OwnerId == currentPlayerId);
         if (trickLayout is null) return;
 
-        // Screen Y-axis is down, so the seating order P0(bottom)→P1(right)→P2(top)→P3(left)
-        // traces a counter-clockwise arc on screen even though it is "clockwise" by card-game
-        // convention.  Invert so the icon matches what the player sees visually.
-        bool clockwise = string.Equals(direction, "counter_clockwise", StringComparison.OrdinalIgnoreCase);
+        // Match the player's expectation: "clockwise" game direction shows a ↻ icon.
+        bool clockwise = string.Equals(direction, "clockwise", StringComparison.OrdinalIgnoreCase);
         float size = trickLayout.CardWidth * 0.42f;
 
         // Place icon at upper-right corner of the trick zone, slightly outside the bounds
@@ -1109,25 +1164,26 @@ public class GameTableView : SKCanvasView
             StrokeCap   = SKStrokeCap.Round,
         };
 
-        // CW:  arc from 30° (lower-right) sweeping +300° CW → ends at 330° (upper-right).
-        // CCW: arc from 150° (lower-left) sweeping -300° CCW → ends at 210° (upper-left).
-        // The two are mirror images around the vertical axis.
-        float startAngle = clockwise ? 30f  : 150f;
+        // Both icons have the arrowhead at the top (270° in SkiaSharp = 12 o'clock):
+        //   CW  (↻): arc from 330° (upper-right) sweeping +300° → tip at top pointing RIGHT.
+        //   CCW (↺): arc from 210° (upper-left)  sweeping −300° → tip at top pointing LEFT.
+        // Gap is ~60° wide and sits near the top in both cases, making the direction obvious.
+        float startAngle = clockwise ? 330f : 210f;
         float sweepAngle = clockwise ? 300f : -300f;
-        float endAngle   = startAngle + sweepAngle;   // 330° CW, 210° (= -150°) CCW
+        const float endAngle = 270f;  // always at 12 o'clock
 
         var oval = new SKRect(cx - arcR, cy - arcR, cx + arcR, cy + arcR);
         using var arcPath = new SKPath();
         arcPath.AddArc(oval, startAngle, sweepAngle);
         canvas.DrawPath(arcPath, arcPaint);
 
-        // Arrowhead at end of arc
+        // Arrowhead at top (270° = 12 o'clock position)
         float endRad = endAngle * MathF.PI / 180f;
-        float tipX   = cx + arcR * MathF.Cos(endRad);
-        float tipY   = cy + arcR * MathF.Sin(endRad);
+        float tipX   = cx + arcR * MathF.Cos(endRad);  // = cx
+        float tipY   = cy + arcR * MathF.Sin(endRad);  // = cy − arcR  (above centre)
 
-        // Tangent direction at tip (direction of travel along the arc)
-        float tangentDeg = clockwise ? endAngle + 90f : endAngle - 90f;
+        // Tangent at top: CW motion at 270° points RIGHT (0°); CCW points LEFT (180°)
+        float tangentDeg = clockwise ? 0f : 180f;
         float tangentRad = tangentDeg * MathF.PI / 180f;
 
         // Wing lines point backward from tip (±140° from tangent = 40° open V)
@@ -1187,7 +1243,7 @@ public class GameTableView : SKCanvasView
 
         string text     = card.DisplayName;
         float  cardW    = entry.Rect.Width;
-        float  fontSize = Math.Clamp(cardW * 0.26f, 13f, 22f);
+        float  fontSize = Math.Clamp(cardW * 0.52f, 26f, 44f);
 
         using var font  = new SKFont(SKTypeface.Default, fontSize);
         float textW     = font.MeasureText(text);

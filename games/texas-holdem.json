@@ -28,7 +28,7 @@
       "type": "deal",
       "to": "each_player",
       "count": 2,
-      "face": "down",
+      "face": "owner",
       "next": "bet_preflop"
     },
     {

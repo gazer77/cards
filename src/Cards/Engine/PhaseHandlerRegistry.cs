@@ -281,8 +281,10 @@ public static class PhaseHandlerRegistry
                 foreach (var seg in cardsEl.EnumerateArray())
                 {
                     int  cnt  = seg.TryGetProperty("count", out var cv) && cv.ValueKind == System.Text.Json.JsonValueKind.Number ? cv.GetInt32() : 1;
+                    // "owner" is treated as face-up here; the layout engine shows backs to
+                    // opponents via zone visibility, so dealing face-up is safe.
                     bool face = seg.TryGetProperty("face",  out var fv) && fv.ValueKind == System.Text.Json.JsonValueKind.String
-                                && string.Equals(fv.GetString(), "up", StringComparison.OrdinalIgnoreCase);
+                                && fv.GetString() is "up" or "owner";
                     _segments.Add((cnt, face));
                 }
                 _count = _segments.Sum(s => s.Count);
@@ -290,7 +292,9 @@ public static class PhaseHandlerRegistry
             }
             else
             {
-                _faceUp = string.Equals(GetExtra(def, "face"), "up", StringComparison.OrdinalIgnoreCase);
+                // "owner" is treated as face-up; the layout engine hides cards from opponents
+                // via zone visibility, so dealing cards face-up is safe for owner-visible zones.
+                _faceUp = GetExtra(def, "face") is "up" or "owner";
                 _count  = def.Extra?.TryGetValue("count", out var ce) == true
                           && ce.ValueKind == System.Text.Json.JsonValueKind.Number
                           ? ce.GetInt32() : 1;

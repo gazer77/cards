@@ -24,7 +24,7 @@
       "type": "deal",
       "to": "each_player",
       "cards": [
-        { "count": 2, "face": "down" },
+        { "count": 2, "face": "owner" },
         { "count": 1, "face": "up" }
       ],
       "next": "bet_third"

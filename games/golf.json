@@ -14,7 +14,7 @@
   "deal": {
     "cards_per_player": 6,
     "target_zone": "grid",
-    "face": "down",
+    "face": "owner",
     "remainder_to": "deck",
     "then_flip_top_to": "discard"
   },

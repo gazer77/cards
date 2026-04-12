@@ -14,7 +14,7 @@
   "deal": {
     "cards_per_player": 10,
     "remainder_to": "deck",
-    "face": "down",
+    "face": "owner",
     "then_flip_top_to": "discard"
   },
   "zones": [
@@ -52,6 +52,10 @@
     "gin_bonus": 25,
     "undercut_bonus": 25,
     "accumulate": true
+  },
+  "ui": {
+    "default_sort": "rank_ace_high",
+    "sort_modes": ["rank_ace_high", "suit_value", "suit_stable"]
   },
   "win_condition": { "type": "target_score", "score": 100, "winner": "first" },
   "house_rules": [

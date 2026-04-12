@@ -241,6 +241,22 @@ public class GameUiConfig
     public bool AllowSort { get; set; } = true;
 
     /// <summary>
+    /// Ordered list of sort modes offered to the player in the Sort Hand picker.
+    /// Allowed values: "suit_value", "rank_ace_high", "rank", "suit_stable", "suit".
+    /// Null / empty means all standard modes are shown.
+    /// The first entry is presented as the recommended default.
+    /// </summary>
+    [JsonPropertyName("sort_modes")]
+    public List<string>? SortModes { get; set; }
+
+    /// <summary>
+    /// The sort mode pre-selected in the picker (appears first in the list).
+    /// Falls back to the first entry of SortModes, or "rank_ace_high" if both are unset.
+    /// </summary>
+    [JsonPropertyName("default_sort")]
+    public string? DefaultSort { get; set; }
+
+    /// <summary>
     /// When true a Log button appears in the HUD so the player can review the
     /// full game event history.  Defaults to true.
     /// </summary>
