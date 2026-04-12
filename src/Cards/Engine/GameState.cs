@@ -75,4 +75,19 @@ public class GameState
     {
         CurrentPlayerIndex = (CurrentPlayerIndex + 1) % Players.Count;
     }
+
+    /// <summary>
+    /// Advances to the next player in the specified direction.
+    /// "clockwise" in card-game convention means play passes to the left on screen
+    /// (south→west→north→east = index−1).
+    /// "counter_clockwise" means play passes to the right (index+1).
+    /// </summary>
+    public void AdvancePlayer(string direction)
+    {
+        int n = Players.Count;
+        if (string.Equals(direction, "clockwise", StringComparison.OrdinalIgnoreCase))
+            CurrentPlayerIndex = (CurrentPlayerIndex - 1 + n) % n;
+        else
+            CurrentPlayerIndex = (CurrentPlayerIndex + 1) % n;
+    }
 }

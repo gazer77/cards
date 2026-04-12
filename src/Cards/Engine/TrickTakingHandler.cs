@@ -246,7 +246,7 @@ public sealed class TrickTakingHandler : IPhaseHandler
         if (playedCount < activePlayers)
         {
             // Advance to next player, skipping the loner's partner.
-            do { state.AdvancePlayer(); }
+            do { state.AdvancePlayer(_direction); }
             while (partnerToSkip is not null && state.CurrentPlayer.Id == partnerToSkip);
             UpdateStatus(state);
         }
@@ -323,7 +323,7 @@ public sealed class TrickTakingHandler : IPhaseHandler
         }
         else
         {
-            state.AdvancePlayer();
+            state.AdvancePlayer(_direction);
             state.Metadata["trick_leader"] = state.CurrentPlayer.Id;
         }
 
@@ -390,7 +390,11 @@ public sealed class TrickTakingHandler : IPhaseHandler
         if (state.DealerId is null) return state.Players[0].Id;
         int dealerIdx = state.Players.FindIndex(p => p.Id == state.DealerId);
         if (dealerIdx < 0) return state.Players[0].Id;
-        return state.Players[(dealerIdx + 1) % state.Players.Count].Id;
+        int n = state.Players.Count;
+        // "Left of dealer" in card-game convention = clockwise = the player at the dealer's left,
+        // which is index−1 in the screen layout (bottom→left→top→right).
+        int offset = string.Equals(_direction, "clockwise", StringComparison.OrdinalIgnoreCase) ? -1 : 1;
+        return state.Players[(dealerIdx + offset + n) % n].Id;
     }
 
     // ── Trick winner determination ────────────────────────────────────────────

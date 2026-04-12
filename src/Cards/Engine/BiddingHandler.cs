@@ -44,6 +44,7 @@ public sealed class BiddingHandler : IPhaseHandler
     private readonly string? _ifAllPassNext;        // phase to go to when all pass
     private readonly string? _dealerAction;         // "swap_turned_card": dealer picks up kitty on accept
     private readonly bool   _competitive;           // true: each bid must exceed current high bid (Pinochle)
+    private readonly string  _direction;            // "clockwise" | "counter_clockwise"
 
     private static readonly string[] AllSuits = ["clubs", "diamonds", "hearts", "spades"];
 
@@ -65,6 +66,7 @@ public sealed class BiddingHandler : IPhaseHandler
         _ifAllPassNext  = GetString(def, "if_all_pass");
         _dealerAction   = GetNestedString(def, "if_accepted", "dealer_action");
         _competitive    = GetBool(def, "competitive_bidding") ?? false;
+        _direction      = GetString(def, "direction") ?? "clockwise";
 
         // Safety: if max_bid wasn't specified and defaults below min_bid, derive a sensible ceiling.
         if (_maxBid < _minBid)
@@ -203,7 +205,7 @@ public sealed class BiddingHandler : IPhaseHandler
             FinishBidding(state);
         else
         {
-            state.AdvancePlayer();
+            state.AdvancePlayer(_direction);
             UpdateStatus(state);
         }
     }
@@ -265,7 +267,7 @@ public sealed class BiddingHandler : IPhaseHandler
             return;
         }
 
-        state.AdvancePlayer();
+        state.AdvancePlayer(_direction);
         UpdateStatus(state);
     }
 
@@ -341,7 +343,10 @@ public sealed class BiddingHandler : IPhaseHandler
     {
         if (state.DealerId is null) return state.Players[0].Id;
         int idx = state.Players.FindIndex(p => p.Id == state.DealerId);
-        return state.Players[(idx + 1) % state.Players.Count].Id;
+        int n = state.Players.Count;
+        // "Left of dealer" = the next player in play direction (clockwise = index−1 on screen).
+        int offset = string.Equals(_direction, "clockwise", StringComparison.OrdinalIgnoreCase) ? -1 : 1;
+        return state.Players[(idx + offset + n) % n].Id;
     }
 
     private void UpdateStatus(GameState state)

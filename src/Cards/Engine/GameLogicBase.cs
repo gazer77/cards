@@ -162,13 +162,15 @@ public abstract class GameLogicBase : IGameLogic
             : state.Players.FindIndex(p => p.Id == state.DealerId);
         if (current < 0) current = 0;
 
+        int n = state.Players.Count;
         int next = mode switch
         {
-            "rotates_right" => (current - 1 + state.Players.Count) % state.Players.Count,
-            "winner"        => FindPlayerIndex(state, "last_winner", current),
-            "loser"         => FindPlayerIndex(state, "last_loser",  current),
-            "alternates"    => (current + 1) % state.Players.Count,
-            _               => (current + 1) % state.Players.Count,  // rotates_left
+            // "left" = clockwise in card-game convention = index−1 (south→west→north→east)
+            "rotates_right"  => (current + 1) % n,
+            "winner"         => FindPlayerIndex(state, "last_winner", current),
+            "loser"          => FindPlayerIndex(state, "last_loser",  current),
+            "alternates"     => (current - 1 + n) % n,
+            _                => (current - 1 + n) % n,  // rotates_left
         };
 
         state.DealerId = state.Players[next].Id;

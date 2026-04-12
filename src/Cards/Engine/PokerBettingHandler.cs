@@ -176,11 +176,12 @@ public sealed class PokerBettingHandler : IPhaseHandler
         state.Metadata["bet_to_call"] = amount.ToString();
         state.Metadata["bet_leader"]  = bringInId;  // action completes back at bring-in player
 
-        // First to act is the player after the bring-in player (skip folded).
+        // First to act is the player after the bring-in player (skip folded), clockwise = index−1.
         int idx = state.Players.FindIndex(p => p.Id == bringInId);
-        for (int i = 1; i <= state.Players.Count; i++)
+        int nb  = state.Players.Count;
+        for (int i = 1; i <= nb; i++)
         {
-            int next = (idx + i) % state.Players.Count;
+            int next = (idx - i + nb * i) % nb;
             if (!IsFolded(state, state.Players[next].Id))
             { state.CurrentPlayerIndex = next; break; }
         }
@@ -209,14 +210,16 @@ public sealed class PokerBettingHandler : IPhaseHandler
     private static string ResolvePosition(GameState state, string position)
     {
         if (state.DealerId is null) return state.Players[0].Id;
+        int n  = state.Players.Count;
         int di = state.Players.FindIndex(p => p.Id == state.DealerId);
+        // Clockwise in card-game terms = to the left = index−offset
         int offset = position switch
         {
             "two_left_of_dealer"   => 2,
             "three_left_of_dealer" => 3,
             _                      => 1,
         };
-        return state.Players[(di + offset) % state.Players.Count].Id;
+        return state.Players[(di - offset + n * offset) % n].Id;
     }
 
     private string ResolveStartingPlayer(GameState state)
@@ -225,14 +228,16 @@ public sealed class PokerBettingHandler : IPhaseHandler
         if (_startingPlayer == "highest_up_cards") return FindHighestUpCards(state);
 
         if (state.DealerId is null) return state.Players[0].Id;
+        int n  = state.Players.Count;
         int di = state.Players.FindIndex(p => p.Id == state.DealerId);
+        // Clockwise in card-game terms = to the left = index−offset
         int offset = _startingPlayer switch
         {
             "two_left_of_dealer"   => 2,
             "three_left_of_dealer" => 3,
             _                      => 1,  // left_of_dealer
         };
-        return state.Players[(di + offset) % state.Players.Count].Id;
+        return state.Players[(di - offset + n * offset) % n].Id;
     }
 
     private string FindLowestUpCard(GameState state)
@@ -299,9 +304,10 @@ public sealed class PokerBettingHandler : IPhaseHandler
         int current = state.CurrentPlayerIndex;
         string leader = state.Metadata.GetValueOrDefault("bet_leader", state.Players[0].Id);
 
-        for (int i = 1; i <= state.Players.Count; i++)
+        int n = state.Players.Count;
+        for (int i = 1; i <= n; i++)
         {
-            int idx = (current + i) % state.Players.Count;
+            int idx = (current - i + n * i) % n;  // clockwise = left = index−1
             var next = state.Players[idx];
 
             if (IsFolded(state, next.Id)) continue;
