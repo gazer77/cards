@@ -107,6 +107,11 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 actions.Add(new GameAction("meld", Label: "Lay Meld"));
             if (_specialActions.Contains("add_to_meld"))
                 actions.Add(new GameAction("add_to_meld", Label: "Add to Meld"));
+
+            // Clear selection when cards are multi-selected for melding
+            string? sel = state.Metadata.GetValueOrDefault("selected_card");
+            if (!string.IsNullOrEmpty(sel) && sel.Contains(','))
+                actions.Add(new GameAction("clear_selection", Label: "Clear"));
         }
 
         return actions;
@@ -142,6 +147,12 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     {
         EnsureInitialized(state);
         string turnState = TurnState(state);
+
+        if (action.Type == "clear_selection")
+        {
+            state.Metadata.Remove("selected_card");
+            return;
+        }
 
         if (action.Type.StartsWith("draw_from_"))
         {

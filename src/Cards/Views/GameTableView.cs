@@ -618,7 +618,8 @@ public class GameTableView : SKCanvasView
                 if (_recordCardRects)
                 {
                     _cardRects.Add((card.Id, rect));
-                    DrawCardInteractiveHint(canvas, rect, card.Id);
+                    if (layout.FaceUp)
+                        DrawCardInteractiveHint(canvas, rect, card.Id);
                 }
                 if (t >= 1f) _finishedFlipAnims.Add(card.Id);
                 continue;
@@ -666,7 +667,8 @@ public class GameTableView : SKCanvasView
             if (_recordCardRects)
             {
                 _cardRects.Add((card.Id, rect));
-                DrawCardInteractiveHint(canvas, rect, card.Id);
+                if (layout.FaceUp)
+                    DrawCardInteractiveHint(canvas, rect, card.Id);
             }
         }
     }
@@ -905,7 +907,14 @@ public class GameTableView : SKCanvasView
             _dragCurrentPt.X + ghostW / 2f,
             _dragCurrentPt.Y + ghostH * 0.35f);
 
-        CardRenderer.DrawCard(canvas, ghostRect, card, _skin);
+        // Show the card the same way the source zone was rendering it —
+        // zone-level FaceUp overrides the per-card flag (e.g. hand zones
+        // show all cards face-up even when IsFaceUp is false).
+        bool faceUp = IsCardFaceUp(_dragCardId!);
+        if (faceUp)
+            CardRenderer.DrawCardFace(canvas, ghostRect, card, _skin);
+        else
+            CardRenderer.DrawCardBack(canvas, ghostRect, _skin);
     }
 
     private Card? FindCardById(string cardId)
