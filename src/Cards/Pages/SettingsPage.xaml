@@ -45,6 +45,17 @@
                         IsToggled="{Binding ShowGameMessages, Mode=TwoWay}"
                         OnColor="{StaticResource Gold}" />
                 </Grid>
+                <Grid ColumnDefinitions="*,Auto">
+                    <Label
+                        Grid.Column="0"
+                        Text="Auto-ready after showdown"
+                        TextColor="{StaticResource TextPrimary}"
+                        VerticalOptions="Center" />
+                    <Switch
+                        Grid.Column="1"
+                        IsToggled="{Binding AutoReady, Mode=TwoWay}"
+                        OnColor="{StaticResource Gold}" />
+                </Grid>
             </VerticalStackLayout>
 
             <!-- About -->

@@ -40,112 +40,195 @@ public sealed class ShowdownHandler : IPhaseHandler
         _useFromHandMax = GetNestedInt(def, "use_from_hand", "max") ?? int.MaxValue;
     }
 
-    public TimeSpan? GetAutoAdvanceDelay(GameState _) => TimeSpan.FromMilliseconds(3500);
-    public IReadOnlyList<GameAction> GetValidActions(GameState _) => [new GameAction("tap")];
+    public TimeSpan? GetAutoAdvanceDelay(GameState state)
+        // Phase 1: short delay then reveal.
+        // Phase 2: 5-second pause so players can see hands; UI intercepts "ready" before auto-advancing.
+        => state.Metadata.GetValueOrDefault("showdown_revealed") == "true"
+            ? TimeSpan.FromMilliseconds(5000)
+            : TimeSpan.FromMilliseconds(500);
+
+    public IReadOnlyList<GameAction> GetValidActions(GameState state)
+        => state.Metadata.GetValueOrDefault("showdown_revealed") == "true"
+            ? [new GameAction("ready", Label: "✓ Ready")]
+            : [new GameAction("tap")];
 
     public void Apply(GameState state, GameAction action)
     {
-        // Reveal all hands
-        foreach (var p in state.Players)
+        bool alreadyRevealed = state.Metadata.GetValueOrDefault("showdown_revealed") == "true";
+
+        if (!alreadyRevealed)
         {
-            var hand = state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand");
-            hand?.Cards.ForEach(c => c.IsFaceUp = true);
-        }
+            // ── Phase 1: reveal hands and evaluate winner ─────────────────────
 
-        // Build wild-card predicate from scoring.wilds definition.
-        var isWild = BuildWildPredicate(state);
+            // Reveal only non-folded players' hands
+            var active = state.Players
+                .Where(p => state.Metadata.GetValueOrDefault($"bet_folded:{p.Id}") != "true")
+                .ToList();
+            if (active.Count == 0) active = state.Players.ToList();
 
-        // Allow scoring.evaluator (set by house rules like Razz) to override the phase-level evaluator.
-        string effectiveEvaluator = _evaluator;
-        if (state.Definition.Scoring?.Extra?.TryGetValue("evaluator", out var evalEl) == true
-            && evalEl.ValueKind == JsonValueKind.String
-            && evalEl.GetString() is { } overrideEval)
-            effectiveEvaluator = overrideEval;
-
-        // Evaluate and find winner
-        var community = state.FindZone(_communityZone)?.Cards ?? [];
-        var active    = state.Players
-            .Where(p => state.Metadata.GetValueOrDefault($"bet_folded:{p.Id}") != "true")
-            .ToList();
-
-        if (active.Count == 0) active = state.Players.ToList();
-
-        Player? winner = null;
-        HandRank bestRank = default;
-
-        foreach (var p in active)
-        {
-            var handCards = (state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand"))?.Cards ?? [];
-            var commCards = community.ToList();
-            HandRank rank;
-
-            if (_useFromHandMax < int.MaxValue || _useFromHandMin > 0)
-                rank = EvaluateBestHandConstrained(handCards.ToList(), commCards, _handSize,
-                                                   _useFromHandMin, _useFromHandMax, isWild, effectiveEvaluator);
-            else
-                rank = EvaluateBestHand(handCards.Concat(commCards).ToList(), _handSize, isWild, effectiveEvaluator);
-
-            if (winner is null || rank.CompareTo(bestRank, effectiveEvaluator) > 0)
+            foreach (var p in active)
             {
-                winner   = p;
-                bestRank = rank;
+                var hand = state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand");
+                hand?.Cards.ForEach(c => c.IsFaceUp = true);
+            }
+
+            // Build wild-card predicate from scoring.wilds definition.
+            var isWild = BuildWildPredicate(state);
+
+            // Allow scoring.evaluator (set by house rules like Razz) to override the phase-level evaluator.
+            string effectiveEvaluator = _evaluator;
+            if (state.Definition.Scoring?.Extra?.TryGetValue("evaluator", out var evalEl) == true
+                && evalEl.ValueKind == JsonValueKind.String
+                && evalEl.GetString() is { } overrideEval)
+                effectiveEvaluator = overrideEval;
+
+            // Evaluate and find winner
+            var community = state.FindZone(_communityZone)?.Cards ?? [];
+
+            Player? winner = null;
+            HandRank bestRank = default;
+            List<Card> winningCards = [];
+
+            foreach (var p in active)
+            {
+                var handCards = (state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand"))?.Cards ?? [];
+                var commCards = community.ToList();
+                HandRank rank;
+                List<Card> bestCombo;
+
+                if (_useFromHandMax < int.MaxValue || _useFromHandMin > 0)
+                {
+                    (rank, bestCombo) = EvaluateBestHandConstrainedWithCards(
+                        handCards.ToList(), commCards, _handSize,
+                        _useFromHandMin, _useFromHandMax, isWild, effectiveEvaluator);
+                }
+                else
+                {
+                    (rank, bestCombo) = EvaluateBestHandWithCards(
+                        handCards.Concat(commCards).ToList(), _handSize, isWild, effectiveEvaluator);
+                }
+
+                if (winner is null || rank.CompareTo(bestRank, effectiveEvaluator) > 0)
+                {
+                    winner       = p;
+                    bestRank     = rank;
+                    winningCards = bestCombo;
+                }
+            }
+
+            // Award pot
+            int pot = int.TryParse(state.Metadata.GetValueOrDefault("pot", "0"), out int potVal) ? potVal : 0;
+            if (winner is not null && pot > 0)
+            {
+                state.AddScore(winner.Id, pot);
+                state.Metadata["pot"] = "0";
+            }
+
+            string winMsg = winner is null ? "No winner."
+                : winner == state.Players[0] ? $"You win! ({bestRank.Name})"
+                : $"{winner.Name} wins! ({bestRank.Name})";
+
+            state.Metadata["status"]      = winMsg;
+            state.Metadata["last_winner"] = winner?.Id ?? "";
+            state.Metadata["showdown_revealed"] = "true";
+
+            // Log the winning hand with cards
+            if (winner is not null && winningCards.Count > 0)
+            {
+                string cardList = string.Join(" ", winningCards.Select(CardLabel));
+                string logLine  = winner == state.Players[0]
+                    ? $"You win with {bestRank.Name}: {cardList}"
+                    : $"{winner.Name} wins with {bestRank.Name}: {cardList}";
+                state.GameLog.Add(logLine);
             }
         }
-
-        // Award pot
-        int pot = int.TryParse(state.Metadata.GetValueOrDefault("pot", "0"), out int p2) ? p2 : 0;
-        if (winner is not null && pot > 0)
+        else
         {
-            state.AddScore(winner.Id, pot);
-            state.Metadata["pot"] = "0";
+            // ── Phase 2: clean up and advance to next phase ───────────────────
+
+            state.Metadata.Remove("showdown_revealed");
+            state.Metadata.Remove("status");
+
+            // Reset face-up flag on all hands so cards return to face-down when
+            // shuffled back into the deck for the next round.
+            foreach (var p in state.Players)
+            {
+                var hand = state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand");
+                hand?.Cards.ForEach(c => c.IsFaceUp = false);
+            }
+
+            // Clear folded status
+            foreach (var p in state.Players)
+                state.Metadata.Remove($"bet_folded:{p.Id}");
+
+            state.CurrentPhaseId = _nextPhaseId;
         }
+    }
 
-        string winMsg = winner is null ? "No winner."
-            : winner == state.Players[0] ? $"You win! ({bestRank.Name})"
-            : $"{winner.Name} wins! ({bestRank.Name})";
-
-
-        state.Metadata["status"]      = winMsg;
-        state.Metadata["last_winner"] = winner?.Id ?? "";
-
-        // Clear folded status
-        foreach (var p in state.Players)
-            state.Metadata.Remove($"bet_folded:{p.Id}");
-
-        state.CurrentPhaseId = _nextPhaseId;
+    private static string CardLabel(Card c)
+    {
+        string rank = c.Rank switch
+        {
+            Rank.Ace   => "A",
+            Rank.King  => "K",
+            Rank.Queen => "Q",
+            Rank.Jack  => "J",
+            Rank.Ten   => "10",
+            _          => ((int)c.Rank).ToString(),
+        };
+        string suit = c.Suit switch
+        {
+            Suit.Spades   => "♠",
+            Suit.Hearts   => "♥",
+            Suit.Diamonds => "♦",
+            _             => "♣",
+        };
+        return rank + suit;
     }
 
     // ── Hand rank evaluation ──────────────────────────────────────────────────
 
     private static HandRank EvaluateBestHand(List<Card> pool, int size, Func<Card, bool> isWild,
         string evaluator = "high_hand")
+        => EvaluateBestHandWithCards(pool, size, isWild, evaluator).rank;
+
+    private static (HandRank rank, List<Card> cards) EvaluateBestHandWithCards(
+        List<Card> pool, int size, Func<Card, bool> isWild, string evaluator = "high_hand")
     {
         var wilds    = pool.Where(isWild).ToList();
         var naturals = pool.Where(c => !isWild(c)).ToList();
 
         if (wilds.Count == 0)
         {
-            if (pool.Count <= size) return EvaluateForMode(pool, evaluator);
+            if (pool.Count <= size) return (EvaluateForMode(pool, evaluator), pool);
             HandRank best = default;
+            List<Card> bestCombo = [];
             foreach (var combo in Combinations(pool, size))
             {
                 var r = EvaluateForMode(combo, evaluator);
-                if (r.CompareTo(best, evaluator) > 0) best = r;
+                if (r.CompareTo(best, evaluator) > 0) { best = r; bestCombo = combo; }
             }
-            return best;
+            return (best, bestCombo);
         }
 
         HandRank bestWild = default;
         SubstituteWilds(naturals, wilds.Count, size, [], evaluator, ref bestWild);
-        return bestWild;
+        // For wild hands, return naturals as the displayed cards
+        return (bestWild, naturals.Take(size).ToList());
     }
 
     /// <summary>Evaluate best hand with use_from_hand constraints (e.g., Omaha: exactly 2 from hand).</summary>
     private static HandRank EvaluateBestHandConstrained(
         List<Card> hand, List<Card> community, int size,
         int minFromHand, int maxFromHand, Func<Card, bool> isWild, string evaluator = "high_hand")
+        => EvaluateBestHandConstrainedWithCards(hand, community, size, minFromHand, maxFromHand, isWild, evaluator).rank;
+
+    private static (HandRank rank, List<Card> cards) EvaluateBestHandConstrainedWithCards(
+        List<Card> hand, List<Card> community, int size,
+        int minFromHand, int maxFromHand, Func<Card, bool> isWild, string evaluator = "high_hand")
     {
         HandRank best = default;
+        List<Card> bestCombo = [];
         int maxH = Math.Min(maxFromHand, Math.Min(hand.Count, size));
         int minH = Math.Max(minFromHand, size - community.Count);
 
@@ -165,10 +248,10 @@ public sealed class ShowdownHandler : IPhaseHandler
                     r = EvaluateForMode(pool, evaluator);
                 else
                 { r = default; SubstituteWilds(nats, wilds.Count, pool.Count, [], evaluator, ref r); }
-                if (r.CompareTo(best, evaluator) > 0) best = r;
+                if (r.CompareTo(best, evaluator) > 0) { best = r; bestCombo = pool; }
             }
         }
-        return best;
+        return (best, bestCombo);
     }
 
     private static HandRank EvaluateForMode(IEnumerable<Card> cards, string evaluator)

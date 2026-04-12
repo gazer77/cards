@@ -88,12 +88,15 @@ public static class ZoneLayoutEngine
             {
                 var oppZone = GetPlayerZone(state, "hand", p1.Id);
                 if (oppZone is not null)
+                {
+                    bool oppRevealed = IsShowdownRevealed(state, p1.Id);
                     layouts.Add(new ZoneLayout(oppZone,
                         new SKRect(W * 0.05f, oppTop, W * 0.95f, oppTop + oppH),
                         cardW, cardH_local, ZoneHintFor(oppZone),
-                        FaceUp: false, RotationDegrees: 180f,
+                        FaceUp: oppRevealed, RotationDegrees: oppRevealed ? 0f : 180f,
                         Label: p1.Name,
                         IsCurrentPlayer: state.CurrentPlayerIndex == 1));
+                }
             }
 
             // Center zones (pot, etc.)
@@ -131,7 +134,8 @@ public static class ZoneLayoutEngine
             var oppZone = GetPlayerZone(state, "hand", p1.Id);
             if (oppZone is not null)
             {
-                bool oppFaceUp = oppZone.Visibility is "all" or "top";
+                bool oppFaceUp = oppZone.Visibility is "all" or "top"
+                              || IsShowdownRevealed(state, p1.Id);
                 layouts.Add(new ZoneLayout(oppZone,
                     new SKRect(W * 0.05f, oppTop, W * 0.95f, oppTop + oppH),
                     cardW, cardH, ZoneHintFor(oppZone),
@@ -237,22 +241,35 @@ public static class ZoneLayoutEngine
 
         if (centerZones.Count == 0) return;
 
-        float spacing = centerBounds.Width / (centerZones.Count + 1);
         float cy = centerBounds.MidY;
 
-        // If each zone's slot is narrower than 2 card-widths there isn't enough
-        // room to spread individual cards legibly (happens on phone screens with
-        // several center zones).  Collapse spread zones to stacks in that case.
-        bool compact = spacing < cardW * 2.5f;
+        // Spread zones (e.g. community cards) need room for multiple cards side-by-side.
+        // Weight them by expected card slots so they get proportionally more width;
+        // deck/pile/pot zones each get weight 1.
+        const int spreadMinSlots = 5;
+        float[] weights = centerZones.Select(z =>
+            ZoneHintFor(z) == ZoneRenderHint.Spread
+                ? (float)Math.Max(z.Cards.Count, spreadMinSlots)
+                : 1f).ToArray();
+        float totalWeight = weights.Sum();
+        float unitW = centerBounds.Width / totalWeight;
 
+        // compact flag is used only for non-spread label decisions (e.g. books labels)
+        float stackSpacing = centerBounds.Width / (centerZones.Count + 1);
+        bool compact = stackSpacing < cardW * 2.5f;
+
+        float xLeft = centerBounds.Left;
         for (int i = 0; i < centerZones.Count; i++)
         {
-            var zone = centerZones[i];
-            float cx = centerBounds.Left + spacing * (i + 1);
-            var bounds = new SKRect(cx - cardW / 2f, cy - cardH / 2f, cx + cardW / 2f, cy + cardH / 2f);
+            var zone   = centerZones[i];
+            float zoneW = weights[i] * unitW;
+            var bounds  = new SKRect(xLeft, cy - cardH / 2f, xLeft + zoneW, cy + cardH / 2f);
+            xLeft += zoneW;
 
-            var hint  = ZoneHintFor(zone);
-            if (compact && hint == ZoneRenderHint.Spread)
+            // Spread zones always render as spread (they now have sufficient bounds width).
+            // Non-spread zones collapse to stack only when compact.
+            var hint = ZoneHintFor(zone);
+            if (compact && hint != ZoneRenderHint.Spread)
                 hint = ZoneRenderHint.Stack;
 
             bool faceUp = zone.Visibility is "top" or "all";
@@ -314,6 +331,14 @@ public static class ZoneLayoutEngine
         }
     }
 
+    /// <summary>
+    /// Returns true when a showdown has been revealed and the given player did not fold,
+    /// meaning their hand should be shown face-up to all players.
+    /// </summary>
+    private static bool IsShowdownRevealed(GameState state, string playerId)
+        => state.Metadata.GetValueOrDefault("showdown_revealed") == "true"
+        && state.Metadata.GetValueOrDefault($"bet_folded:{playerId}") != "true";
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static void AddHandLayout(GameState state, List<ZoneLayout> layouts,
@@ -325,8 +350,11 @@ public static class ZoneLayoutEngine
                 ?? GetPlayerZone(state, "foot", player.Id);
         if (zone is null) return;
 
+        // During showdown reveal, show non-folded opponents face-up (rotation cleared so cards read correctly).
+        bool revealed = !faceUp && IsShowdownRevealed(state, player.Id);
         layouts.Add(new ZoneLayout(zone, bounds, cardW, cardH, ZoneHintFor(zone),
-            FaceUp: faceUp, RotationDegrees: rotation,
+            FaceUp: faceUp || revealed,
+            RotationDegrees: revealed ? 0f : rotation,
             Label: player.Name,
             IsCurrentPlayer: state.CurrentPlayerIndex == playerIndex));
     }

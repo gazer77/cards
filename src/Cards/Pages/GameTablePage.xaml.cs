@@ -455,6 +455,15 @@ public partial class GameTablePage : ContentPage
                 var next = _logic.GetValidActions(_state!);
                 if (next.Count == 0) break;
 
+                // After the delay, if the only pending action is "ready", show the
+                // ready-up dialog instead of auto-applying (gives players time to see
+                // revealed hands before the next round starts).
+                if (next.Count == 1 && next[0].Type == "ready")
+                {
+                    ShowReadyUp();
+                    break;
+                }
+
                 var (moved, sourcePts) = ApplyWithSound(_logic.GetAutoAction(_state!));
                 MaybeSortHands();
                 TableCanvas.GameState = _state;
@@ -477,6 +486,20 @@ public partial class GameTablePage : ContentPage
         {
             _isAutoAdvancing = false;
         }
+    }
+
+    private void ShowReadyUp()
+    {
+        if (_state is null) return;
+
+        if (_settings.AutoReady)
+        {
+            _ = ApplyAndRefreshAsync(new GameAction("ready"));
+            return;
+        }
+
+        // Surface the "ready" action as a button in the action bar
+        RefreshActionButtons();
     }
 
     private async Task ApplyAndRefreshMultiplayerAsync(GameAction action)
@@ -513,6 +536,12 @@ public partial class GameTablePage : ContentPage
 
                     var next = _logic.GetValidActions(_state!);
                     if (next.Count == 0) break;
+
+                    if (next.Count == 1 && next[0].Type == "ready")
+                    {
+                        ShowReadyUp();
+                        break;
+                    }
 
                     faceDownBefore  = _state.Zones.Values
                         .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Id).ToHashSet();
@@ -957,16 +986,25 @@ public partial class GameTablePage : ContentPage
         if (_logic is null || _state is null) return;
 
         var actions = _logic.GetValidActions(_state);
-        if (actions.Count <= 1) return;
 
-        object? hudStyle = null;
-        Application.Current?.Resources.TryGetValue("HudButton", out hudStyle);
+        // Show buttons for multi-action choices, or for a single "ready" action.
+        // Single "tap" actions are handled by canvas tap, not a button.
+        bool showButtons = actions.Count > 1
+            || (actions.Count == 1 && actions[0].Type == "ready");
+        if (!showButtons) return;
+
+        object? primaryStyle = null;
+        object? hudStyle     = null;
+        Application.Current?.Resources.TryGetValue("PrimaryButton", out primaryStyle);
+        Application.Current?.Resources.TryGetValue("HudButton",     out hudStyle);
+
         foreach (var action in actions)
         {
+            bool isReady = action.Type == "ready";
             var btn = new Button
             {
                 Text  = action.Label ?? action.Type,
-                Style = hudStyle as Style,
+                Style = (isReady ? primaryStyle : hudStyle) as Style,
             };
             var captured = action;
             btn.Clicked += (_, _) => OnActionClicked(captured);

@@ -55,6 +55,16 @@ public class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
+    public bool AutoReady
+    {
+        get => _settings.AutoReady;
+        set
+        {
+            _settings.AutoReady = value;
+            OnPropertyChanged();
+        }
+    }
+
     public string AppVersion => AppInfo.VersionString;
 
     private static string IdToSkinName(string id) => id switch

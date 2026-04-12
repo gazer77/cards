@@ -6,6 +6,7 @@ public class SettingsService
     private const string KeyTableTheme     = "table_theme";
     private const string KeyPlayerName     = "player_name";
     private const string KeyShowMessages   = "show_game_messages";
+    private const string KeyAutoReady      = "auto_ready";
 
     public string CardSkinId
     {
@@ -29,5 +30,11 @@ public class SettingsService
     {
         get => Preferences.Get(KeyShowMessages, true);
         set => Preferences.Set(KeyShowMessages, value);
+    }
+
+    public bool AutoReady
+    {
+        get => Preferences.Get(KeyAutoReady, false);
+        set => Preferences.Set(KeyAutoReady, value);
     }
 }
