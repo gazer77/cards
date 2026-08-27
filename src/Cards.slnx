@@ -3,5 +3,6 @@
   <Project Path="Cards.Rendering/Cards.Rendering.csproj" />
   <Project Path="Cards.App/Cards.App.csproj" />
   <Project Path="Cards/Cards.csproj" />
+  <Project Path="Cards.Web/Cards.Web.csproj" />
   <Project Path="../tests/Cards.Tests/Cards.Tests.csproj" />
 </Solution>

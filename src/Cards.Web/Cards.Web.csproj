@@ -13,7 +13,7 @@
 
          This needs the wasm-tools workload:  dotnet workload install wasm-tools
          On this machine workloads are Visual-Studio-managed, so that command must be
-         run from an ELEVATED prompt -- without elevation it reports success and
+         run from an ELEVATED prompt. Without elevation it reports success and
          installs nothing. -->
     <WasmBuildNative>true</WasmBuildNative>
 
