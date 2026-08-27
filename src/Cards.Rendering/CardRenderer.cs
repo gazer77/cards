@@ -7,14 +7,8 @@ public static class CardRenderer
 {
     private static readonly SKColor ShadowColor = new(0x00, 0x00, 0x00, 0x55);
 
-    // Used only for Unicode suit glyphs (♠♥♦♣).
-    // SKTypeface.Default on Android lacks these characters; MatchCharacter
-    // finds a system font (e.g. Noto Sans Symbols) that covers them.
-    private static readonly SKTypeface SuitTypeface =
-        SKFontManager.Default.MatchCharacter('♠') ?? SKTypeface.Default;
-
-    // Rank text (A 2–10 J Q K) is plain ASCII — stick with the default typeface
-    // so letters and digits always render correctly.
+    // Rank text (A 2–10 J Q K) is plain ASCII — the default typeface always covers it.
+    // Suits are NOT text: see SuitShapes for why they are drawn as vector paths.
     private static readonly SKTypeface RankTypeface = SKTypeface.Default;
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -84,19 +78,18 @@ public static class CardRenderer
 
         var suitColor = card.IsRed ? skin.RedSuitColor : skin.BlackSuitColor;
         string rank = RankLabel(card.Rank);
-        string suit = SuitGlyph(card.Suit);
 
         float pad    = bounds.Width  * 0.09f;
         float rankSz = bounds.Height * 0.13f;
         float suitSz = bounds.Height * 0.11f;
 
         // Top-left corner
-        DrawCornerPair(canvas, rank, suit, bounds.Left + pad, bounds.Top + pad + rankSz, rankSz, suitSz, suitColor);
+        DrawCornerPair(canvas, rank, card.Suit, bounds.Left + pad, bounds.Top + pad + rankSz, rankSz, suitSz, suitColor);
 
         // Bottom-right corner (rotated 180°)
         canvas.Save();
         canvas.RotateDegrees(180f, bounds.MidX, bounds.MidY);
-        DrawCornerPair(canvas, rank, suit, bounds.Left + pad, bounds.Top + pad + rankSz, rankSz, suitSz, suitColor);
+        DrawCornerPair(canvas, rank, card.Suit, bounds.Left + pad, bounds.Top + pad + rankSz, rankSz, suitSz, suitColor);
         canvas.Restore();
 
         DrawCenter(canvas, card, bounds, suitColor, skin);
@@ -123,14 +116,14 @@ public static class CardRenderer
             canvas.DrawRoundRect(bounds, r, r, border);
 
         string rank = RankLabel(card.Rank);
-        string suit = SuitGlyph(card.Suit);
         float pad = bounds.Width * 0.07f;
 
-        // ── Small suit glyph — upper-left corner ──────────────────────────────
+        // ── Small suit — upper-left corner ────────────────────────────────────
         float suitSz = bounds.Height * 0.15f;
         using (var paint = new SKPaint { Color = suitColor, IsAntialias = true })
-        using (var font  = new SKFont(SuitTypeface, suitSz))
-            canvas.DrawText(suit, bounds.Left + pad, bounds.Top + pad + suitSz, font, paint);
+            SuitShapes.Draw(canvas, card.Suit,
+                SuitShapes.BoxFromBaseline(bounds.Left + pad, bounds.Top + pad + suitSz, suitSz),
+                paint);
 
         // ── Huge rank — centered on the card ─────────────────────────────────
         float rankSz  = bounds.Height * 0.75f;
@@ -157,7 +150,7 @@ public static class CardRenderer
 
     // ── Corner pair (rank stacked above suit) ─────────────────────────────────
 
-    private static void DrawCornerPair(SKCanvas canvas, string rank, string suit,
+    private static void DrawCornerPair(SKCanvas canvas, string rank, Suit suit,
         float x, float baselineY, float rankSz, float suitSz, SKColor color)
     {
         using var paint = new SKPaint { Color = color, IsAntialias = true };
@@ -165,22 +158,21 @@ public static class CardRenderer
         using (var font = new SKFont(RankTypeface, rankSz))
             canvas.DrawText(rank, x, baselineY, font, paint);
 
-        using (var font = new SKFont(SuitTypeface, suitSz))
-            canvas.DrawText(suit, x, baselineY + suitSz * 1.1f, font, paint);
+        SuitShapes.Draw(canvas, suit,
+            SuitShapes.BoxFromBaseline(x, baselineY + suitSz * 1.1f, suitSz), paint);
     }
 
     // ── Center symbol (classic) ───────────────────────────────────────────────
 
     private static void DrawCenter(SKCanvas canvas, Card card, SKRect bounds, SKColor suitColor, ICardSkin skin)
     {
-        string suit = SuitGlyph(card.Suit);
         float cx = bounds.MidX;
         float cy = bounds.MidY;
 
         if (card.Rank is Rank.Ace)
         {
             float sz = bounds.Width * 0.55f;
-            DrawCenteredGlyph(canvas, suit, cx, cy + sz * 0.38f, sz, suitColor);
+            DrawCenteredGlyph(canvas, card.Suit, cx, cy + sz * 0.38f, sz, suitColor);
         }
         else if (card.Rank is Rank.Jack or Rank.Queen or Rank.King)
         {
@@ -190,7 +182,7 @@ public static class CardRenderer
             var   color   = card.IsRed ? skin.RedSuitColor : skin.BlackSuitColor;
 
             DrawCenteredRank(canvas, label, cx, cy - labelSz * 0.1f,  labelSz, color);
-            DrawCenteredGlyph(canvas, suit,  cx, cy + labelSz * 0.6f, suitSz,  color);
+            DrawCenteredGlyph(canvas, card.Suit,  cx, cy + labelSz * 0.6f, suitSz,  color);
         }
         else
         {
@@ -221,17 +213,15 @@ public static class CardRenderer
         float originX = bounds.Left + insetX;
         float originY = bounds.Top  + insetY;
         float pipSz   = MathF.Min(bounds.Width * 0.2f, bounds.Height * 0.13f);
-        string glyph  = SuitGlyph(card.Suit);
 
         using var paint = new SKPaint { Color = color, IsAntialias = true };
-        using var font  = new SKFont(SuitTypeface, pipSz);
 
         foreach (var (colF, rowF) in positions)
         {
             float px = originX + colF * innerW;
             float py = originY + rowF * innerH;
-            float w  = font.MeasureText(glyph);
-            canvas.DrawText(glyph, px - w / 2f, py + pipSz * 0.38f, font, paint);
+            SuitShapes.Draw(canvas, card.Suit,
+                SuitShapes.BoxFromBaselineCentered(px, py + pipSz * 0.38f, pipSz), paint);
         }
     }
 
@@ -288,13 +278,12 @@ public static class CardRenderer
 
     // ── Text helpers ──────────────────────────────────────────────────────────
 
-    // Centered text using SuitTypeface (for suit glyphs)
-    private static void DrawCenteredGlyph(SKCanvas canvas, string glyph, float cx, float baselineY, float size, SKColor color)
+    // Centered suit shape
+    private static void DrawCenteredGlyph(SKCanvas canvas, Suit suit, float cx, float baselineY, float size, SKColor color)
     {
         using var paint = new SKPaint { Color = color, IsAntialias = true };
-        using var font  = new SKFont(SuitTypeface, size);
-        float w = font.MeasureText(glyph);
-        canvas.DrawText(glyph, cx - w / 2f, baselineY, font, paint);
+        SuitShapes.Draw(canvas, suit,
+            SuitShapes.BoxFromBaselineCentered(cx, baselineY, size), paint);
     }
 
     // Centered text using RankTypeface (for rank labels like J Q K)
@@ -326,12 +315,4 @@ public static class CardRenderer
         _          => ((int)rank).ToString(),
     };
 
-    private static string SuitGlyph(Suit suit) => suit switch
-    {
-        Suit.Spades   => "♠",
-        Suit.Hearts   => "♥",
-        Suit.Diamonds => "♦",
-        Suit.Clubs    => "♣",
-        _             => "?",
-    };
 }

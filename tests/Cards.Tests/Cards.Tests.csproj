@@ -10,6 +10,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Cards.Core\Cards.Core.csproj" />
+    <ProjectReference Include="..\..\src\Cards.Rendering\Cards.Rendering.csproj" />
+  </ItemGroup>
+
+  <!-- Skia needs its native library to run outside a platform head. -->
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="3.119.2" Condition="$([MSBuild]::IsOSPlatform('windows'))" />
   </ItemGroup>
 
   <ItemGroup>
