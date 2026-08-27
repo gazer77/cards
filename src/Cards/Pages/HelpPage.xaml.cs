@@ -8,11 +8,13 @@ namespace Cards.Pages;
 public partial class HelpPage : ContentPage
 {
     private readonly GameLoader _loader;
+    private readonly IGameAssetSource _assets;
 
-    public HelpPage(GameLoader loader)
+    public HelpPage(GameLoader loader, IGameAssetSource assets)
     {
         InitializeComponent();
         _loader = loader;
+        _assets = assets;
     }
 
     public string GameId   { get; set; } = string.Empty;
@@ -81,7 +83,7 @@ public partial class HelpPage : ContentPage
             {
                 try
                 {
-                    using var stream = await FileSystem.OpenAppPackageFileAsync($"games/help/{helpFile}");
+                    using var stream = await _assets.OpenAsync($"games/help/{helpFile}");
                     using var reader = new StreamReader(stream);
                     content = await reader.ReadToEndAsync();
                 }

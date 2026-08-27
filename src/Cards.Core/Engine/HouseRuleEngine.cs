@@ -25,6 +25,7 @@ public static class HouseRuleEngine
         PropertyNameCaseInsensitive = true,
         AllowTrailingCommas = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
+        Converters = { new SafeJsonElementConverter() },
     };
 
     // ── Public API ────────────────────────────────────────────────────────────

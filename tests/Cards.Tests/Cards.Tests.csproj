@@ -8,29 +8,8 @@
     <RootNamespace>Cards.Tests</RootNamespace>
   </PropertyGroup>
 
-  <!--
-    TEMPORARY (Phase 1 scaffold).
-
-    The engine currently lives inside the MAUI project, which targets
-    net10.0-android/ios/maccatalyst/windows and therefore cannot be referenced by a
-    plain net10.0 test project.  Linking the sources lets us capture golden-master
-    hashes against TODAY's code, before anything moves.
-
-    When Cards.Core exists, delete this whole ItemGroup and replace it with:
-      <ProjectReference Include="..\..\src\Cards.Core\Cards.Core.csproj" />
-    The hashes must not change when that swap happens — that is the entire point.
-
-    Engine/Multiplayer is excluded: GameServer/GameClient reach into
-    Cards.Services.GameSaveService, which is MAUI-coupled (FileSystem.AppDataDirectory).
-    Extracting that dependency is Phase 1 work.
-  -->
   <ItemGroup>
-    <Compile Include="..\..\src\Cards\Engine\**\*.cs"
-             Exclude="..\..\src\Cards\Engine\Multiplayer\**\*.cs"
-             LinkBase="Linked\Engine" />
-    <Compile Include="..\..\src\Cards\Models\**\*.cs"     LinkBase="Linked\Models" />
-    <Compile Include="..\..\src\Cards\Logic\**\*.cs"      LinkBase="Linked\Logic" />
-    <Compile Include="..\..\src\Cards\Extensions\**\*.cs" LinkBase="Linked\Extensions" />
+    <ProjectReference Include="..\..\src\Cards.Core\Cards.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

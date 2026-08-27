@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Cards.Engine;
-using Cards.Services;
+
 
 namespace Cards.Engine.Multiplayer;
 
@@ -107,7 +107,7 @@ public sealed class GameServer : IAsyncDisposable
                 new StateSyncMsg
                 {
                     SerializedState = System.Text.Json.JsonSerializer.Serialize(
-                        GameSaveService.Snapshot(state, _playerCount, _enabledRules),
+                        GameStateSerializer.Snapshot(state, _playerCount, _enabledRules),
                         new System.Text.Json.JsonSerializerOptions
                         {
                             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
@@ -317,7 +317,7 @@ public sealed class GameServer : IAsyncDisposable
     {
         if (_state is null) return;
 
-        var saved = GameSaveService.Snapshot(_state, _playerCount, _enabledRules);
+        var saved = GameStateSerializer.Snapshot(_state, _playerCount, _enabledRules);
         var json  = JsonSerializer.Serialize(saved, new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

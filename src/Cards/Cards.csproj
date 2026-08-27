@@ -64,14 +64,15 @@
 		<!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 
-		<!-- Game definitions (shared with docs/tooling via relative path) -->
-		<MauiAsset Include="..\..\games\*.json" LogicalName="games/%(Filename)%(Extension)" />
-
-		<!-- Help/rules files -->
-		<MauiAsset Include="..\..\games\help\*.md" LogicalName="games/help/%(Filename)%(Extension)" />
+		<!--
+		  Game definitions and help files are no longer packaged here — Cards.Core
+		  embeds them, so the phone, the server, the browser and the tests all read
+		  the same bytes and cannot drift. See Cards.Core/EmbeddedGameAssetSource.
+		-->
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\Cards.Core\Cards.Core.csproj" />
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
 		<PackageReference Include="SkiaSharp.Views.Maui.Controls" Version="3.119.2" />

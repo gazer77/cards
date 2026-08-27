@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Cards</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    The game engine, rules and protocol. No MAUI, no SkiaSharp, no UI.
+
+    Skia is deliberately NOT referenced here: the relay server must stay a
+    pure-managed program, and referencing SkiaSharp would drag
+    SkiaSharp.NativeAssets.Linux onto the server deployment for nothing.
+    Rendering lives in Cards.Rendering instead.
+
+    Game content is embedded rather than packaged per-host, so the MAUI app,
+    the server, the browser and the tests all load byte-identical definitions
+    from one place and cannot drift apart.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\games\*.json"      LogicalName="games/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\games\help\*.md"   LogicalName="games/help/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

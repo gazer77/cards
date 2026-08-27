@@ -37,10 +37,16 @@ public class GameLoader
         PropertyNameCaseInsensitive = true,
         AllowTrailingCommas = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
+        Converters = { new SafeJsonElementConverter() },
     };
 
     // Concurrent because GameLoader is a DI singleton and the server serves many rooms at once.
     private readonly ConcurrentDictionary<string, GameDefinition> _cache = new();
+
+    /// <summary>
+    /// Why a definition failed to load, keyed by game ID. Empty when all is well.
+    /// </summary>
+    public ConcurrentDictionary<string, string> LoadErrors { get; } = new();
 
     public async Task<List<GameDefinition>> LoadAllAsync()
     {
@@ -82,6 +88,10 @@ public class GameLoader
         }
         catch (Exception ex)
         {
+            // A definition that fails to load makes its game silently vanish from the
+            // picker, so record why. Two shipped games were broken this way for a long
+            // time with nothing to show for it but a Debug.WriteLine nobody sees.
+            LoadErrors[gameId] = $"{ex.GetType().Name}: {ex.Message}";
             System.Diagnostics.Debug.WriteLine($"[GameLoader] Failed to load {gameId}: {ex.Message}");
             return null;
         }

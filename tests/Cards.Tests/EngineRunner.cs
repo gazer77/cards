@@ -14,8 +14,23 @@ namespace Cards.Tests;
 /// </summary>
 public static class EngineRunner
 {
-    /// <summary>Upper bound on steps, so a rules bug becomes a failing test rather than a hung run.</summary>
+    /// <summary>
+    /// Upper bound on steps, so a rules bug becomes a failing test rather than a hung run.
+    /// Kept high because several games legitimately run past 3000 steps before ending.
+    /// </summary>
     public const int MaxSteps = 5000;
+
+    /// <summary>
+    /// Games that are both expensive per step and never reach game over under all-AI
+    /// play, so a lower budget truncates a run that was going to be truncated anyway.
+    ///
+    /// poker-wilds evaluates every wild substitution when ranking a hand, which is
+    /// combinatorial; at 9 seats and 5000 steps a single case took over four minutes.
+    /// </summary>
+    private static readonly Dictionary<string, int> StepBudget = new()
+    {
+        ["poker-wilds"] = 500,
+    };
 
     public sealed record Result(string Digest, int Steps, bool ReachedGameOver, string FinalPhase);
 
@@ -44,10 +59,11 @@ public static class EngineRunner
         using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         Fold(sha, state);
 
-        int steps = 0;
-        bool over = logic.IsGameOver(state);
+        int budget = StepBudget.GetValueOrDefault(gameId, MaxSteps);
+        int steps  = 0;
+        bool over  = logic.IsGameOver(state);
 
-        while (!over && steps < MaxSteps)
+        while (!over && steps < budget)
         {
             // GetAutoAdvanceDelay is the engine's way of saying "no human input needed
             // here". The duration itself is a pacing hint for the UI; we ignore it and
