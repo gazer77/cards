@@ -1,0 +1,104 @@
+@using SkiaSharp
+@using SkiaSharp.Views.Blazor
+@using Cards.Engine
+@using Cards.Rendering
+@using Cards.Web.Platform
+@using Microsoft.AspNetCore.Components.Web
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="table-canvas"
+     @onpointerdown="HandlePointerDown"
+     @onpointermove="HandlePointerMove"
+     @onpointerup="HandlePointerUp"
+     @onpointercancel="HandlePointerCancel">
+    <SKCanvasView @ref="_view" OnPaintSurface="OnPaint" />
+</div>
+
+@code {
+    private SKCanvasView? _view;
+    private CardTableRenderer? _renderer;
+    private BrowserAnimationDriver? _driver;
+
+    // Canvas pixels per CSS pixel. SKCanvasView sizes its backing store in device
+    // pixels while pointer events report CSS pixels, so every point must be scaled.
+    // Skipping this puts every tap 2-3x off on a phone or Retina display — the bug is
+    // invisible on a 1x desktop monitor, which is exactly why it is easy to ship.
+    private double _dpr = 1.0;
+
+    [Parameter] public EventCallback<string> CardTapped { get; set; }
+    [Parameter] public EventCallback<string> ZoneTapped { get; set; }
+    [Parameter] public EventCallback TableTapped { get; set; }
+    [Parameter] public EventCallback<(string CardId, string ZoneId)> CardDropped { get; set; }
+    [Parameter] public EventCallback<(string CardId, int NewIndex)> CardReordered { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _driver   = new BrowserAnimationDriver();
+        _renderer = new CardTableRenderer(_driver);
+
+        _renderer.RedrawRequested      += Redraw;
+        _renderer.CardTapped           += id     => _ = CardTapped.InvokeAsync(id);
+        _renderer.ZoneTapped           += id     => _ = ZoneTapped.InvokeAsync(id);
+        _renderer.CanvasTapped         += ()     => _ = TableTapped.InvokeAsync();
+        _renderer.CardDropped          += (c, z) => _ = CardDropped.InvokeAsync((c, z));
+        _renderer.CardReorderedInHand  += (c, i) => _ = CardReordered.InvokeAsync((c, i));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try
+        {
+            _dpr = await JS.InvokeAsync<double>("eval", "window.devicePixelRatio || 1");
+        }
+        catch
+        {
+            _dpr = 1.0;   // fall back to 1:1 rather than failing to start
+        }
+    }
+
+    /// <summary>
+    /// Pushes the current table state into the renderer and repaints.
+    ///
+    /// Deliberately a method rather than [Parameter]s: the view model mutates one
+    /// GameState instance in place, so Blazor's reference-equality parameter check
+    /// decides nothing has changed and never re-renders this component. The symptom is
+    /// a table that paints its felt once and then never draws a card.
+    /// </summary>
+    public void Sync(
+        GameState? state,
+        IReadOnlyList<string> selectableCardIds,
+        string? selectedCardId,
+        IReadOnlyList<string> dropZoneIds)
+    {
+        if (_renderer is null) return;
+
+        _renderer.GameState         = state;
+        _renderer.SelectableCardIds = selectableCardIds;
+        _renderer.SelectedCardId    = selectedCardId;
+        _renderer.DropZoneIds       = dropZoneIds;
+
+        Redraw();
+    }
+
+    private void OnPaint(SKPaintSurfaceEventArgs e)
+        => _renderer?.Paint(e.Surface.Canvas, e.Info);
+
+    private SKPoint ToCanvas(PointerEventArgs e)
+        => new((float)(e.OffsetX * _dpr), (float)(e.OffsetY * _dpr));
+
+    private void HandlePointerDown(PointerEventArgs e)   => _renderer?.OnPointerDown(ToCanvas(e));
+    private void HandlePointerMove(PointerEventArgs e)   => _renderer?.OnPointerMove(ToCanvas(e));
+    private void HandlePointerUp(PointerEventArgs e)     => _renderer?.OnPointerUp(ToCanvas(e));
+    private void HandlePointerCancel(PointerEventArgs e) => _renderer?.OnPointerCancel();
+
+    public void Redraw() => _ = InvokeAsync(() => _view?.Invalidate());
+
+    public void Dispose()
+    {
+        if (_renderer is not null) _renderer.RedrawRequested -= Redraw;
+        _driver?.Dispose();
+    }
+}

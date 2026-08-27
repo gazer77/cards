@@ -1,0 +1,101 @@
+@page "/play/{GameId}/{Seats:int}"
+@inject GameTableViewModel Vm
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>@(_title)</PageTitle>
+
+<div class="table-page">
+    <header class="table-bar">
+        <button class="link" @onclick="GoHome">&larr; Games</button>
+        <span class="table-title">@_title</span>
+        <button class="link" @onclick="NewGame">New</button>
+    </header>
+
+    @if (_failed)
+    {
+        <p class="error">Could not load &ldquo;@GameId&rdquo;.</p>
+    }
+    else
+    {
+        <GameTableCanvas @ref="_canvas"
+                         CardTapped="OnCardTapped"
+                         ZoneTapped="OnZoneTapped"
+                         TableTapped="OnTableTapped"
+                         CardDropped="OnCardDropped"
+                         CardReordered="OnCardReordered" />
+
+        <div class="status">@Vm.StatusText</div>
+
+        <div class="action-bar">
+            @if (Vm.ShowActionButtons)
+            {
+                @foreach (var action in Vm.Actions)
+                {
+                    var captured = action;
+                    <button class="@(action.Type == "ready" ? "action primary" : "action")"
+                            @onclick="() => Vm.Invoke(captured)">
+                        @(action.Label ?? action.Type)
+                    </button>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string GameId { get; set; } = string.Empty;
+    [Parameter] public int Seats { get; set; }
+
+    private GameTableCanvas? _canvas;
+    private bool _failed;
+    private string _title = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Vm.Changed += OnVmChanged;
+        _failed = !await Vm.StartAsync(GameId, Seats);
+        _title  = Vm.State?.Definition.Name ?? GameId;
+    }
+
+    // The view model raises Changed from its turn loop, which is not on a render path,
+    // so the re-render has to be marshalled explicitly.
+    private void OnVmChanged()
+        => _ = InvokeAsync(() =>
+        {
+            StateHasChanged();
+            PushToCanvas();
+        });
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // The canvas ref only exists after the first render, and StartAsync may well
+        // have finished before then, so the first push has to happen here.
+        if (firstRender) PushToCanvas();
+    }
+
+    private void PushToCanvas()
+        => _canvas?.Sync(Vm.State, Vm.SelectableCardIds, Vm.SelectedCardId, Vm.DropZoneIds);
+
+    private Task OnCardTapped(string cardId)   => Vm.TapCard(cardId);
+    private Task OnZoneTapped(string zoneId)   => Vm.TapZone(zoneId);
+    private Task OnTableTapped()               => Vm.TapTable();
+    private Task OnCardDropped((string CardId, string ZoneId) e) => Vm.DropCard(e.CardId, e.ZoneId);
+
+    private void OnCardReordered((string CardId, int NewIndex) e)
+        => Vm.ReorderInHand(e.CardId, e.NewIndex);
+
+    private async Task NewGame()
+    {
+        Vm.DeleteSave();
+        await Vm.StartAsync(GameId, Seats, resume: false);
+    }
+
+    private async Task GoHome()
+    {
+        await Vm.SaveAsync();
+        Nav.NavigateTo("/");
+    }
+
+    public void Dispose() => Vm.Changed -= OnVmChanged;
+}

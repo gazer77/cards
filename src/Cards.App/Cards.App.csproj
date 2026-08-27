@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Cards.App</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    Presentation logic shared by every client: what the table is showing, which
+    actions are offered, and who drives the turn loop. No UI framework, so the
+    MAUI page and the Blazor page can both bind to it instead of each keeping
+    their own copy of the rules for when a button appears.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Cards.Core\Cards.Core.csproj" />
+  </ItemGroup>
+
+</Project>

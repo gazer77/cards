@@ -1,0 +1,177 @@
+:root {
+    --felt:        #184a2c;
+    --felt-deep:   #10321e;
+    --surface:     #1b2620;
+    --surface-mid: #24332b;
+    --ink:         #f0ebe0;
+    --ink-dim:     #f0ebe0a0;
+    --gold:        #c8a96e;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--felt-deep);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+}
+
+#app { height: 100%; }
+
+/* ── Game picker ─────────────────────────────────────────────────────────── */
+
+.picker {
+    max-width: 62rem;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 4rem;
+}
+
+.picker h1 {
+    margin: 0;
+    font-size: 2.25rem;
+    letter-spacing: -0.02em;
+}
+
+.tagline {
+    margin: 0.35rem 0 2rem;
+    color: var(--ink-dim);
+}
+
+.game-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 0.75rem;
+}
+
+.game-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 1rem;
+    text-align: left;
+    background: var(--surface-mid);
+    color: var(--ink);
+    border: 1px solid #ffffff1a;
+    border-radius: 0.6rem;
+    cursor: pointer;
+    font: inherit;
+    transition: background 120ms ease, transform 120ms ease;
+}
+
+.game-card:hover  { background: #2d3f35; transform: translateY(-1px); }
+.game-card:active { transform: translateY(0); }
+
+.game-name    { font-size: 1.05rem; font-weight: 600; }
+.game-players { font-size: 0.8rem; color: var(--ink-dim); }
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+
+.table-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.table-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.9rem;
+    background: #0d1512;
+    border-bottom: 1px solid #ffffff14;
+    flex: 0 0 auto;
+}
+
+.table-title {
+    flex: 1;
+    text-align: center;
+    font-weight: 600;
+}
+
+.link {
+    background: none;
+    border: none;
+    color: var(--ink-dim);
+    font: inherit;
+    cursor: pointer;
+    padding: 0.25rem 0.4rem;
+}
+
+.link:hover { color: var(--ink); }
+
+/* The canvas fills whatever is left. min-height:0 is required or the flex item
+   refuses to shrink and the canvas ends up taller than the viewport. */
+.table-canvas {
+    flex: 1 1 auto;
+    min-height: 0;
+    position: relative;
+    touch-action: none;   /* stop the browser panning while dragging a card */
+}
+
+.table-canvas canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.status {
+    flex: 0 0 auto;
+    padding: 0.5rem 0.9rem;
+    text-align: center;
+    color: var(--ink-dim);
+    min-height: 2.1rem;
+    white-space: pre-line;
+}
+
+.action-bar {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    padding: 0 0.9rem 0.9rem;
+    min-height: 1rem;
+}
+
+.action {
+    padding: 0.55rem 1.1rem;
+    background: var(--surface-mid);
+    color: var(--ink);
+    border: 1px solid #ffffff24;
+    border-radius: 0.45rem;
+    font: inherit;
+    cursor: pointer;
+}
+
+.action:hover { background: #2d3f35; }
+
+.action.primary {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: #1a1206;
+    font-weight: 600;
+}
+
+.error { padding: 2rem; color: #ff9d9d; }
+.muted { color: var(--ink-dim); }
+
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    padding: 0.6rem 1.25rem;
+    background: #ffe9a8;
+    color: #2b2b2b;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    float: right;
+}

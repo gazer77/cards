@@ -417,3 +417,6 @@ FodyWeavers.xsd
 *.msm
 *.msp
 /.claude/settings.local.json
+
+# Blazor publish output
+src/Cards.Web/out/
