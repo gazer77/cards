@@ -15,11 +15,15 @@ namespace Cards.Engine;
 /// </summary>
 public sealed class SmartDefaultAiAgent : IPlayerAgent
 {
-    private readonly Random _rng = new();
+    private readonly IRandomSource _rng;
 
     public string PlayerId { get; }
 
-    public SmartDefaultAiAgent(string playerId) => PlayerId = playerId;
+    public SmartDefaultAiAgent(string playerId, IRandomSource rng)
+    {
+        PlayerId = playerId;
+        _rng     = rng;
+    }
 
     // ── IPlayerAgent ──────────────────────────────────────────────────────────
 

@@ -220,7 +220,7 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
         {
             deck.Clear();
             var cards = DeckBuilder.Build(state.Definition.DeckType);
-            DeckBuilder.Shuffle(cards);
+            DeckBuilder.Shuffle(cards, state.Rng);
             foreach (var c in cards) deck.Add(c);
         }
 

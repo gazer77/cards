@@ -23,6 +23,7 @@ public static class MauiProgram
             });
 
         // Engine
+        builder.Services.AddSingleton<IGameAssetSource, MauiGameAssetSource>();
         builder.Services.AddSingleton<GameLoader>();
 
         // Services

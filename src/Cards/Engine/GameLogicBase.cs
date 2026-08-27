@@ -143,7 +143,7 @@ public abstract class GameLogicBase : IGameLogic
         if (state.Players.Count == 0) return;
         var firstDealer = state.Definition.Rounds?.FirstDealer ?? "random";
         int idx = firstDealer == "random"
-            ? new Random().Next(state.Players.Count)
+            ? state.Rng.Next(state.Players.Count)
             : 0;
         state.DealerId = state.Players[idx].Id;
     }

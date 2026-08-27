@@ -57,7 +57,7 @@ public sealed class StandardDealEngine : IDealStrategy
 
         // Build and shuffle into the deck zone.
         var cards = DeckBuilder.Build(state.Definition.DeckType);
-        DeckBuilder.Shuffle(cards);
+        DeckBuilder.Shuffle(cards, state.Rng);
         foreach (var c in cards) deckZone.Add(c);
 
         int animDelayMs = def?.AnimDelayMs ?? 130;

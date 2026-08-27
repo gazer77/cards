@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Cards.Models;
 
@@ -5,6 +6,10 @@ namespace Cards.Engine;
 
 public class GameLoader
 {
+    private readonly IGameAssetSource _assets;
+
+    public GameLoader(IGameAssetSource assets) => _assets = assets;
+
     // Games listed here correspond to JSON files bundled as raw assets under games/.
     // When a new game JSON is added, add its id here.
     private static readonly string[] GameIds =
@@ -34,7 +39,8 @@ public class GameLoader
         ReadCommentHandling = JsonCommentHandling.Skip,
     };
 
-    private readonly Dictionary<string, GameDefinition> _cache = [];
+    // Concurrent because GameLoader is a DI singleton and the server serves many rooms at once.
+    private readonly ConcurrentDictionary<string, GameDefinition> _cache = new();
 
     public async Task<List<GameDefinition>> LoadAllAsync()
     {
@@ -55,7 +61,7 @@ public class GameLoader
 
         try
         {
-            using var stream = await FileSystem.OpenAppPackageFileAsync($"games/{gameId}.json");
+            using var stream = await _assets.OpenAsync($"games/{gameId}.json");
             var def = await JsonSerializer.DeserializeAsync<GameDefinition>(stream, JsonOptions);
             if (def is null) return null;
 

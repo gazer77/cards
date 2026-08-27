@@ -33,6 +33,14 @@ public static class DeckBuilder
     public static void Shuffle(List<Card> cards, IShuffleStrategy? strategy = null)
         => (strategy ?? RandomShuffleStrategy.Instance).Shuffle(cards);
 
+    /// <summary>
+    /// Shuffles using the supplied randomness source, so a seeded game reshuffles
+    /// reproducibly.  Engine callers that have a <see cref="GameState"/> should use
+    /// this and pass <c>state.Rng</c>.
+    /// </summary>
+    public static void Shuffle(List<Card> cards, IRandomSource rng)
+        => new RandomShuffleStrategy(rng).Shuffle(cards);
+
     private static List<Card> BuildWith(Rank[] ranks, int copies)
     {
         var cards = new List<Card>(ranks.Length * AllSuits.Length * copies);

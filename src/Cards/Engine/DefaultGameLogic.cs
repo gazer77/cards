@@ -49,7 +49,7 @@ public sealed class DefaultGameLogic : GameLogicBase
         {
             var pid = state.Players[i].Id;
             if (!state.PlayerAgents.ContainsKey(pid))
-                state.PlayerAgents[pid] = new SmartDefaultAiAgent(pid);
+                state.PlayerAgents[pid] = new SmartDefaultAiAgent(pid, state.Rng);
         }
 
         CallOnGameStart(_firstPhaseId, state);

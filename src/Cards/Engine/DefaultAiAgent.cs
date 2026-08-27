@@ -6,11 +6,15 @@ namespace Cards.Engine;
 /// </summary>
 public sealed class DefaultAiAgent : IPlayerAgent
 {
-    private readonly Random _rng = new();
+    private readonly IRandomSource _rng;
 
     public string PlayerId { get; }
 
-    public DefaultAiAgent(string playerId) => PlayerId = playerId;
+    public DefaultAiAgent(string playerId, IRandomSource rng)
+    {
+        PlayerId = playerId;
+        _rng     = rng;
+    }
 
     public GameAction ChooseAction(GameState visibleState, IReadOnlyList<GameAction> validActions)
     {

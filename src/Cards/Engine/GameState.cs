@@ -66,6 +66,22 @@ public class GameState
     [System.Text.Json.Serialization.JsonIgnore]
     public Dictionary<string, IPlayerAgent> PlayerAgents { get; } = new();
 
+    /// <summary>
+    /// Randomness for shuffles, dealer selection and AI tie-breaking.
+    /// Defaults to a non-deterministic shared source; assign a
+    /// <see cref="SeededRandomSource"/> to make a game reproducible.
+    /// The source itself is not serialized — <see cref="Seed"/> is what gets saved.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IRandomSource Rng { get; set; } = SharedRandomSource.Instance;
+
+    /// <summary>
+    /// Seed behind <see cref="Rng"/> when it is a <see cref="SeededRandomSource"/>, else 0.
+    /// Host-side and save-file state only — never send this to a client, it leaks
+    /// every future shuffle.
+    /// </summary>
+    public ulong Seed { get; set; }
+
     public void AddScore(string playerId, int points)
     {
         Scores[playerId] = GetScore(playerId) + points;
