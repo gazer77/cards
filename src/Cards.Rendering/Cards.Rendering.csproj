@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Cards.Rendering</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    Table layout and painting. Depends on SkiaSharp but on no UI framework, so the
+    same renderer drives the MAUI canvas and the Blazor canvas. The host supplies a
+    surface and pointer events; everything else lives here.
+  -->
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="3.119.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cards.Core\Cards.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="Cards.Core/Cards.Core.csproj" />
+  <Project Path="Cards.Rendering/Cards.Rendering.csproj" />
   <Project Path="Cards/Cards.csproj" />
   <Project Path="../tests/Cards.Tests/Cards.Tests.csproj" />
 </Solution>
