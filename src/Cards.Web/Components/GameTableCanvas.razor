@@ -51,7 +51,7 @@
 
     protected override void OnInitialized()
     {
-        _driver   = new BrowserAnimationDriver();
+        _driver   = new BrowserAnimationDriver(JS);
         _renderer = new CardTableRenderer(_driver);
 
         _renderer.RedrawRequested      += Redraw;
@@ -111,7 +111,17 @@
     private void HandlePointerUp(PointerEventArgs e)     => _renderer?.OnPointerUp(ToCanvas(e));
     private void HandlePointerCancel(PointerEventArgs e) => _renderer?.OnPointerCancel();
 
-    public void Redraw() => _ = InvokeAsync(() => _view?.Invalidate());
+    /// <summary>
+    /// Repaints the table.
+    ///
+    /// Invalidates directly rather than through InvokeAsync: this is called once per
+    /// animation frame, and queueing each one onto the dispatcher pushes the repaint
+    /// into a later turn — so the paint lands out of step with the frame that asked
+    /// for it. WebAssembly is single-threaded and every caller (the frame callback,
+    /// the turn loop, Sync) is already on that one thread, so there is nothing to
+    /// marshal.
+    /// </summary>
+    public void Redraw() => _view?.Invalidate();
 
     public void Dispose()
     {
