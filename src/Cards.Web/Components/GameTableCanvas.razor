@@ -51,7 +51,7 @@
 
     protected override void OnInitialized()
     {
-        _driver   = new BrowserAnimationDriver(JS);
+        _driver   = new BrowserAnimationDriver();
         _renderer = new CardTableRenderer(_driver);
 
         _renderer.RedrawRequested      += Redraw;
@@ -111,19 +111,6 @@
     private void HandlePointerUp(PointerEventArgs e)     => _renderer?.OnPointerUp(ToCanvas(e));
     private void HandlePointerCancel(PointerEventArgs e) => _renderer?.OnPointerCancel();
 
-    /// <summary>
-    /// Repaints the table.
-    ///
-    /// Goes through the dispatcher, and must. Invalidate ultimately calls
-    /// StateHasChanged, and the frame callback arrives synchronously from JavaScript —
-    /// so invalidating directly renders the component from inside a JS interop call
-    /// stack, re-entrantly with whatever render is already in progress. That flickers
-    /// the whole table at frame rate.
-    ///
-    /// Being single-threaded is not the same as having nothing to marshal: the
-    /// dispatcher is what orders work on that one thread, not what moves it between
-    /// threads.
-    /// </summary>
     public void Redraw() => _ = InvokeAsync(() => _view?.Invalidate());
 
     public void Dispose()
