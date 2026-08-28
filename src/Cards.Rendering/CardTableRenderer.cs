@@ -65,6 +65,22 @@ public sealed class CardTableRenderer
 
     private TaskCompletionSource? _nextPaintCompletion;
 
+    // ── Diagnostics ───────────────────────────────────────────────────────────
+
+    private readonly RenderDiagnostics        _diagnostics = new();
+    private readonly System.Diagnostics.Stopwatch _paintClock  = new();
+
+    /// <summary>
+    /// Draws a frame-timing overlay on the table. Off by default.
+    ///
+    /// While on, the frame loop is held open so the numbers keep updating — which
+    /// itself costs frames. It is a diagnostic, not a status bar.
+    /// </summary>
+    public bool ShowDiagnostics { get; set; }
+
+    /// <summary>Live frame timings. Only meaningful while <see cref="ShowDiagnostics"/> is on.</summary>
+    public RenderDiagnostics Diagnostics => _diagnostics;
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     public event Action<string>?         CardTapped;
@@ -377,6 +393,35 @@ public sealed class CardTableRenderer
     /// </summary>
     public void Paint(SKCanvas canvas, SKImageInfo info)
     {
+        if (ShowDiagnostics)
+        {
+            _diagnostics.BeginFrame(NowMs());
+            _paintClock.Restart();
+        }
+
+        PaintTable(canvas, info);
+
+        if (!ShowDiagnostics) return;
+
+        _paintClock.Stop();
+        _diagnostics.EndFrame(_paintClock.Elapsed.TotalMilliseconds);
+        _diagnostics.Info     = info;
+        _diagnostics.FlyIns   = _flyInAnims.Count;
+        _diagnostics.Deals    = _dealAnims.Count;
+        _diagnostics.Flips    = _flipAnims.Count;
+        _diagnostics.Receives = _receiveAnims.Count;
+        _diagnostics.Shuffles = _shuffleAnims.Count;
+
+        DrawDiagnosticsOverlay(canvas, info);
+
+        // The overlay is only truthful if it keeps updating, so hold the frame loop
+        // open while it is showing — otherwise it freezes at the last animated frame
+        // and reports a frame rate that stopped being real.
+        _driver.RequestFrames();
+    }
+
+    private void PaintTable(SKCanvas canvas, SKImageInfo info)
+    {
         _lastInfo = info;
         canvas.Clear();
         DrawFelt(canvas, info);
@@ -500,13 +545,13 @@ public sealed class CardTableRenderer
         int depth    = Math.Min(layout.Zone.Count, 3);
 
         for (int i = depth - 1; i >= 1; i--)
-            CardRenderer.DrawCardBack(canvas, OffsetRect(baseRect, i * 2f, i * -1.5f), _skin);
+            DrawCardBackCounted(canvas, OffsetRect(baseRect, i * 2f, i * -1.5f), _skin);
 
         var topCard = layout.Zone.TopCard;
         if (topCard is not null && layout.FaceUp)
             CardRenderer.DrawCardFace(canvas, baseRect, topCard, _skin);
         else
-            CardRenderer.DrawCardBack(canvas, baseRect, _skin);
+            DrawCardBackCounted(canvas, baseRect, _skin);
 
         if (topCard is not null && _recordCardRects)
             _cardRects.Add((topCard.Id, baseRect));
@@ -547,8 +592,8 @@ public sealed class CardTableRenderer
             var   settled  = OffsetRect(baseRect, 0f, bounceY);
             int   depth    = Math.Min(layout.Zone.Count, 3);
             for (int i = depth - 1; i >= 1; i--)
-                CardRenderer.DrawCardBack(canvas, OffsetRect(settled, i * 2f, i * -1.5f), _skin);
-            CardRenderer.DrawCardBack(canvas, settled, _skin);
+                DrawCardBackCounted(canvas, OffsetRect(settled, i * 2f, i * -1.5f), _skin);
+            DrawCardBackCounted(canvas, settled, _skin);
         }
 
         if (t >= 1f)
@@ -565,8 +610,8 @@ public sealed class CardTableRenderer
         var rect  = OffsetRect(baseRect, offsetX, 0f);
         int depth = Math.Min(count, 3);
         for (int i = depth - 1; i >= 1; i--)
-            CardRenderer.DrawCardBack(canvas, OffsetRect(rect, i * 2f, i * -1.5f), _skin);
-        CardRenderer.DrawCardBack(canvas, rect, _skin);
+            DrawCardBackCounted(canvas, OffsetRect(rect, i * 2f, i * -1.5f), _skin);
+        DrawCardBackCounted(canvas, rect, _skin);
     }
 
     // ── Fan (hand) ────────────────────────────────────────────────────────────
@@ -590,7 +635,7 @@ public sealed class CardTableRenderer
             {
                 var deckRect = new SKRect(pending.From.X - cardW / 2f, pending.From.Y - cardH / 2f,
                                           pending.From.X + cardW / 2f, pending.From.Y + cardH / 2f);
-                CardRenderer.DrawCardBack(canvas, deckRect, _skin);
+                DrawCardBackCounted(canvas, deckRect, _skin);
             }
         }
 
@@ -665,9 +710,9 @@ public sealed class CardTableRenderer
 
             // ── Normal draw ───────────────────────────────────────────────────
             if (layout.FaceUp)
-                CardRenderer.DrawCard(canvas, rect, card, _skin);
+                DrawCardCounted(canvas, rect, card, _skin);
             else
-                CardRenderer.DrawCardBack(canvas, rect, _skin);
+                DrawCardBackCounted(canvas, rect, _skin);
 
             if (_recordCardRects)
             {
@@ -718,7 +763,7 @@ public sealed class CardTableRenderer
                 if (t >= 1f) _finishedDealAnims.Add(card.Id);
             }
 
-            CardRenderer.DrawCard(canvas, rect, card, _skin);
+            DrawCardCounted(canvas, rect, card, _skin);
 
             if (_recordCardRects)
             {
@@ -761,9 +806,9 @@ public sealed class CardTableRenderer
 
             var card = FindCardById(cardId);
             if (card is not null)
-                CardRenderer.DrawCard(canvas, rect, card, _skin);
+                DrawCardCounted(canvas, rect, card, _skin);
             else
-                CardRenderer.DrawCardBack(canvas, rect, _skin);
+                DrawCardBackCounted(canvas, rect, _skin);
         }
     }
 
@@ -784,10 +829,10 @@ public sealed class CardTableRenderer
         int depth    = Math.Min(layout.Zone.Count / 4, 5);
 
         for (int i = Math.Max(depth - 1, 0); i >= 1; i--)
-            CardRenderer.DrawCardBack(canvas, OffsetRect(baseRect, i * 2f, i * -1.5f), _skin);
+            DrawCardBackCounted(canvas, OffsetRect(baseRect, i * 2f, i * -1.5f), _skin);
 
         if (layout.Zone.Count > 0)
-            CardRenderer.DrawCardBack(canvas, baseRect, _skin);
+            DrawCardBackCounted(canvas, baseRect, _skin);
 
         DrawCountBadge(canvas, baseRect, layout.Zone.Count);
     }
@@ -823,7 +868,7 @@ public sealed class CardTableRenderer
         if (face)
             CardRenderer.DrawCardFace(canvas, rect, card, _skin);
         else
-            CardRenderer.DrawCardBack(canvas, rect, _skin);
+            DrawCardBackCounted(canvas, rect, _skin);
         canvas.Restore();
     }
 
@@ -919,7 +964,7 @@ public sealed class CardTableRenderer
         if (faceUp)
             CardRenderer.DrawCardFace(canvas, ghostRect, card, _skin);
         else
-            CardRenderer.DrawCardBack(canvas, ghostRect, _skin);
+            DrawCardBackCounted(canvas, ghostRect, _skin);
     }
 
     private Card? FindCardById(string cardId)
@@ -1383,6 +1428,51 @@ public sealed class CardTableRenderer
 
     private static SKRect OffsetRect(SKRect r, float dx, float dy)
         => new(r.Left + dx, r.Top + dy, r.Right + dx, r.Bottom + dy);
+
+    // Card draws go through these so the overlay can report how many cards a frame
+    // actually painted — the renderer's dominant cost, and the number that says
+    // whether a fly-in is redrawing a whole stationary table to move one card.
+    private void DrawCardCounted(SKCanvas canvas, SKRect rect, Card card, ICardSkin skin)
+    {
+        _diagnostics.CardsDrawn++;
+        CardRenderer.DrawCard(canvas, rect, card, skin);
+    }
+
+    private void DrawCardBackCounted(SKCanvas canvas, SKRect rect, ICardSkin skin)
+    {
+        _diagnostics.CardsDrawn++;
+        CardRenderer.DrawCardBack(canvas, rect, skin);
+    }
+
+    /// <summary>
+    /// Draws the frame-timing overlay. Plain ASCII in the default typeface, so it
+    /// renders on every platform without depending on a font being present.
+    /// </summary>
+    private void DrawDiagnosticsOverlay(SKCanvas canvas, SKImageInfo info)
+    {
+        var lines = _diagnostics.Lines();
+
+        const float pad = 8f;
+        float size   = MathF.Max(11f, info.Width * 0.011f);
+        float lineH  = size * 1.35f;
+        float boxH   = lines.Count * lineH + pad * 2;
+        float boxW   = MathF.Min(info.Width - 16f, size * 26f);
+
+        var box = new SKRect(8f, 8f, 8f + boxW, 8f + boxH);
+
+        using var bg = new SKPaint { Color = new SKColor(0, 0, 0, 190), IsAntialias = true };
+        canvas.DrawRoundRect(box, 6f, 6f, bg);
+
+        using var font = new SKFont(SKTypeface.Default, size);
+        using var ink  = new SKPaint { Color = new SKColor(0x7C, 0xFF, 0xB2), IsAntialias = true };
+
+        float y = box.Top + pad + size;
+        foreach (var line in lines)
+        {
+            canvas.DrawText(line, box.Left + pad, y, SKTextAlign.Left, font, ink);
+            y += lineH;
+        }
+    }
 
     private static long NowMs() => Environment.TickCount64;
 

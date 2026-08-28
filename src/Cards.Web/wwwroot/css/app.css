@@ -256,3 +256,9 @@ html, body {
     cursor: pointer;
 }
 .start:hover { background: #35915b; }
+
+/* Diagnostics toggle in the table bar — lit while the overlay is showing. */
+.link.on {
+    color: #7cffb2;
+    font-weight: 600;
+}

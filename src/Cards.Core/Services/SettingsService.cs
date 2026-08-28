@@ -16,6 +16,7 @@ public class SettingsService
     private const string KeyShowMessages   = "show_game_messages";
     private const string KeyAutoReady      = "auto_ready";
     private const string KeyClientId       = "client_id";
+    private const string KeyShowDiagnostics = "show_diagnostics";
 
     private readonly ISettingsStore _store;
 
@@ -49,6 +50,19 @@ public class SettingsService
     {
         get => _store.Get(KeyAutoReady, false);
         set => _store.Set(KeyAutoReady, value);
+    }
+
+    /// <summary>
+    /// Shows the frame-timing overlay on the table. Off by default.
+    ///
+    /// Persisted rather than a launch flag so it survives the reload it takes to
+    /// reproduce a rendering problem, and so it can be turned on from a device where
+    /// setting a command-line switch is not an option — which is most of them.
+    /// </summary>
+    public bool ShowDiagnostics
+    {
+        get => _store.Get(KeyShowDiagnostics, false);
+        set => _store.Set(KeyShowDiagnostics, value);
     }
 
     /// <summary>

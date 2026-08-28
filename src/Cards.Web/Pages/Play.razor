@@ -1,6 +1,7 @@
 @page "/play/{GameId}/{Seats:int}"
 @inject GameTableViewModel Vm
 @inject NavigationManager Nav
+@inject Cards.Services.SettingsService Settings
 @implements IDisposable
 
 <PageTitle>@(_title)</PageTitle>
@@ -9,6 +10,9 @@
     <header class="table-bar">
         <button class="link" @onclick="GoHome">&larr; Games</button>
         <span class="table-title">@_title</span>
+        <button class="link @(_diagnostics ? "on" : "")"
+                title="Frame timings"
+                @onclick="ToggleDiagnostics">fps</button>
         <button class="link" @onclick="NewGame">New</button>
     </header>
 
@@ -53,6 +57,7 @@
 
     private GameTableCanvas? _canvas;
     private bool _failed;
+    private bool _diagnostics;
     private string _title = "";
 
     private IReadOnlyList<string> EnabledRules =>
@@ -85,7 +90,12 @@
         // deal, and every AI turn before the player's first, played out against no
         // table at all and was over before anything was ever drawn.
         if (_canvas?.Renderer is not null)
+        {
             Vm.Animator = new RendererTableAnimator(_canvas.Renderer);
+
+            _diagnostics = Settings.ShowDiagnostics;
+            _canvas.Renderer.ShowDiagnostics = _diagnostics;
+        }
 
         // Slower than the engine's own timing, which was tuned against a phone where a
         // turn also costs a touch and a glance. Watching AI seats play needs longer:
@@ -111,6 +121,18 @@
 
     private void OnCardReordered((string CardId, int NewIndex) e)
         => Vm.ReorderInHand(e.CardId, e.NewIndex);
+
+    private void ToggleDiagnostics()
+    {
+        _diagnostics = !_diagnostics;
+        Settings.ShowDiagnostics = _diagnostics;
+
+        if (_canvas?.Renderer is not null)
+        {
+            _canvas.Renderer.ShowDiagnostics = _diagnostics;
+            _canvas.Redraw();
+        }
+    }
 
     private async Task NewGame()
     {
