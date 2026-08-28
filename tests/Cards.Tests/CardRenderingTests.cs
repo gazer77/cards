@@ -12,6 +12,7 @@ namespace Cards.Tests;
 /// resolving to nothing and every suit rendering as a tofu box, which no compile-time
 /// check could catch.
 /// </summary>
+[Collection(CardCacheCollection.Name)]
 public sealed class CardRenderingTests
 {
     private static SKBitmap RenderCard(Card card, ICardSkin skin, int w = 120, int h = 168)

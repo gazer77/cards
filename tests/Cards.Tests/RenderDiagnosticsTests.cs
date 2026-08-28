@@ -10,6 +10,7 @@ namespace Cards.Tests;
 /// wrong cause. These check the arithmetic that separates "frames are slow" from
 /// "frames are not being asked for" — the distinction the overlay exists to make.
 /// </summary>
+[Collection(CardCacheCollection.Name)]
 public sealed class RenderDiagnosticsTests
 {
     private sealed class StubDriver : IAnimationDriver

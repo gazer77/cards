@@ -423,7 +423,8 @@ public sealed class CardTableRenderer
     private void PaintTable(SKCanvas canvas, SKImageInfo info)
     {
         _lastInfo = info;
-        canvas.Clear();
+        // No Clear: the felt is opaque and covers the whole canvas, so clearing first
+        // is a full-canvas write that every following pixel overwrites.
         DrawFelt(canvas, info);
 
         if (_state is null)
@@ -1391,19 +1392,55 @@ public sealed class CardTableRenderer
 
     // ── Felt background ───────────────────────────────────────────────────────
 
+    // The felt is a full-canvas radial gradient. It only changes when the theme or the
+    // canvas size changes, but it was being evaluated per pixel on every frame — on a
+    // 1920x766 table that is 1.5 million shaded pixels per frame, twice over, before a
+    // single card is drawn. Cached as an image and blitted instead.
+    private SKImage?    _feltCache;
+    private int         _feltWidth;
+    private int         _feltHeight;
+    private string?     _feltThemeId;
+
     private void DrawFelt(SKCanvas canvas, SKImageInfo info)
     {
-        using var feltPaint = new SKPaint { Color = _theme.FeltColor, IsAntialias = true };
-        canvas.DrawRect(0, 0, info.Width, info.Height, feltPaint);
+        if (_feltCache is null || _feltWidth != info.Width || _feltHeight != info.Height
+                               || _feltThemeId != _theme.Id)
+        {
+            _feltCache?.Dispose();
+            _feltCache   = RenderFelt(info);
+            _feltWidth   = info.Width;
+            _feltHeight  = info.Height;
+            _feltThemeId = _theme.Id;
+        }
 
+        if (_feltCache is not null) canvas.DrawImage(_feltCache, 0, 0);
+        else                        PaintFelt(canvas, info.Width, info.Height);
+    }
+
+    private SKImage? RenderFelt(SKImageInfo info)
+    {
+        if (info.Width <= 0 || info.Height <= 0) return null;
+
+        using var surface = SKSurface.Create(new SKImageInfo(
+            info.Width, info.Height, SKColorType.Rgba8888, SKAlphaType.Premul));
+        if (surface is null) return null;
+
+        PaintFelt(surface.Canvas, info.Width, info.Height);
+        return surface.Snapshot();
+    }
+
+    private void PaintFelt(SKCanvas canvas, int width, int height)
+    {
+        // The gradient is opaque and covers everything, so the flat base fill it used
+        // to be painted over was a second full-canvas write for no visible effect.
         using var shader = SKShader.CreateRadialGradient(
-            new SKPoint(info.Width / 2f, info.Height / 2f),
-            MathF.Max(info.Width, info.Height) * 0.7f,
+            new SKPoint(width / 2f, height / 2f),
+            MathF.Max(width, height) * 0.7f,
             [_theme.FeltColor, _theme.FeltEdgeColor],
             null,
             SKShaderTileMode.Clamp);
-        using var vignette = new SKPaint { Shader = shader, IsAntialias = true };
-        canvas.DrawRect(0, 0, info.Width, info.Height, vignette);
+        using var vignette = new SKPaint { Shader = shader };
+        canvas.DrawRect(0, 0, width, height, vignette);
     }
 
     // ── Placeholder ───────────────────────────────────────────────────────────

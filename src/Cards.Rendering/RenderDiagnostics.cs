@@ -95,7 +95,7 @@ public sealed class RenderDiagnostics
     [
         $"{Fps,5:F1} fps   frame {IntervalMs,5:F1} ms",
         $"paint {PaintMs,5:F1} ms  (ceiling {PaintCeilingFps,4:F0} fps)",
-        $"cards drawn {CardsDrawn}",
+        $"cards drawn {CardsDrawn}   cached {CardRenderer.CacheSize}",
         $"anim  fly {FlyIns}  deal {Deals}  flip {Flips}  recv {Receives}  shuf {Shuffles}",
         $"canvas {Info.Width}x{Info.Height}",
     ];

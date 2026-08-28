@@ -12,6 +12,7 @@ namespace Cards.Tests;
 /// whether it looks like a spade. Opt in with:
 ///     RENDER_SHEET=1 dotnet test --filter VisualSheet
 /// </summary>
+[Collection(CardCacheCollection.Name)]
 public sealed class VisualSheet
 {
     [Fact]
