@@ -33,13 +33,5 @@
         => _games = await Loader.LoadAllAsync();
 
     private void Play(Cards.Models.GameDefinition game)
-        => Nav.NavigateTo($"/play/{game.Id}/{DefaultSeats(game)}");
-
-    /// <summary>
-    /// Seats to open with. Most games are best at their minimum for a first look,
-    /// but a two-seat minimum on a partnership game gives a misleading table, so
-    /// four is preferred where the game allows it.
-    /// </summary>
-    private static int DefaultSeats(Cards.Models.GameDefinition game)
-        => game.MinPlayers <= 4 && game.MaxPlayers >= 4 ? 4 : game.MinPlayers;
+        => Nav.NavigateTo($"/setup/{game.Id}");
 }

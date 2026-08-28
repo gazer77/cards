@@ -1,0 +1,95 @@
+@page "/setup/{GameId}"
+@inject GameLoader Loader
+@inject NavigationManager Nav
+
+@*
+    Table setup: seat count and house rules, matching what the mobile app offers before
+    a game starts. The browser client previously jumped straight from the game list to a
+    table with a guessed number of seats, so half of what each game definition offers —
+    every house rule, and every player count but one — was unreachable.
+*@
+
+<PageTitle>@(_game?.Name ?? "Setup")</PageTitle>
+
+@if (_game is null)
+{
+    <p class="muted">@(_failed ? $"Could not load “{GameId}”." : "Loading…")</p>
+}
+else
+{
+    <div class="setup">
+        <button class="link" @onclick="@(() => Nav.NavigateTo("/"))">&larr; Games</button>
+
+        <h1>@_game.Name</h1>
+        <p class="tagline">@_game.PlayerRangeText</p>
+
+        <section class="setup-block">
+            <h2>Players</h2>
+            <div class="stepper">
+                <button class="step" disabled="@(_players <= _game.MinPlayers)"
+                        @onclick="@(() => _players--)">&minus;</button>
+                <span class="step-value">@_players</span>
+                <button class="step" disabled="@(_players >= _game.MaxPlayers)"
+                        @onclick="@(() => _players++)">+</button>
+            </div>
+            <p class="muted">You take the first seat; the rest are AI.</p>
+        </section>
+
+        @if (_rules.Count > 0)
+        {
+            <section class="setup-block">
+                <h2>House rules</h2>
+                @foreach (var rule in _rules)
+                {
+                    var captured = rule;
+                    <label class="rule">
+                        <input type="checkbox"
+                               checked="@captured.IsEnabled"
+                               @onchange="e => captured.IsEnabled = (bool)(e.Value ?? false)" />
+                        <span>
+                            <span class="rule-name">@captured.Name</span>
+                            @if (!string.IsNullOrWhiteSpace(captured.Description))
+                            {
+                                <span class="rule-desc">@captured.Description</span>
+                            }
+                        </span>
+                    </label>
+                }
+            </section>
+        }
+
+        <button class="start" @onclick="Start">Start game</button>
+    </div>
+}
+
+@code {
+    [Parameter] public string GameId { get; set; } = string.Empty;
+
+    private Cards.Models.GameDefinition? _game;
+    private List<Cards.Models.HouseRule> _rules = [];
+    private int  _players;
+    private bool _failed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _game = await Loader.LoadAsync(GameId);
+        if (_game is null) { _failed = true; return; }
+
+        _players = _game.MinPlayers;
+        _rules   = _game.HouseRules;
+
+        // A rule marked default-on in the definition starts checked, as on mobile.
+        foreach (var rule in _rules)
+            rule.IsEnabled = rule.Default;
+    }
+
+    private void Start()
+    {
+        var enabled = _rules.Where(r => r.IsEnabled).Select(r => r.Id).ToList();
+        string query = enabled.Count > 0
+            ? "?rules=" + Uri.EscapeDataString(string.Join(",", enabled))
+            : string.Empty;
+
+        Nav.NavigateTo($"/play/{GameId}/{_players}{query}");
+    }
+}

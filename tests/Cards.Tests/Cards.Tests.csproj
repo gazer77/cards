@@ -11,6 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Cards.Core\Cards.Core.csproj" />
     <ProjectReference Include="..\..\src\Cards.Rendering\Cards.Rendering.csproj" />
+    <ProjectReference Include="..\..\src\Cards.App\Cards.App.csproj" />
   </ItemGroup>
 
   <!-- Skia needs its native library to run outside a platform head. -->

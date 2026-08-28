@@ -47,16 +47,20 @@
     [Parameter] public string GameId { get; set; } = string.Empty;
     [Parameter] public int Seats { get; set; }
 
+    /// <summary>Comma-separated house rule ids, as chosen on the setup page.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "rules")]
+    public string? Rules { get; set; }
+
     private GameTableCanvas? _canvas;
     private bool _failed;
     private string _title = "";
 
-    protected override async Task OnInitializedAsync()
-    {
-        Vm.Changed += OnVmChanged;
-        _failed = !await Vm.StartAsync(GameId, Seats);
-        _title  = Vm.State?.Definition.Name ?? GameId;
-    }
+    private IReadOnlyList<string> EnabledRules =>
+        string.IsNullOrWhiteSpace(Rules)
+            ? []
+            : Rules.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    protected override void OnInitialized() => Vm.Changed += OnVmChanged;
 
     // The view model raises Changed from its turn loop, which is not on a render path,
     // so the re-render has to be marshalled explicitly.
@@ -67,11 +71,23 @@
             PushToCanvas();
         });
 
-    protected override void OnAfterRender(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // The canvas ref only exists after the first render, and StartAsync may well
-        // have finished before then, so the first push has to happen here.
-        if (firstRender) PushToCanvas();
+        if (!firstRender) return;
+
+        // The game cannot start until the canvas exists. Dealing is choreographed
+        // against the table's real geometry — where the deck sits, where each hand
+        // fans out — so starting from OnInitializedAsync meant the entire opening
+        // deal, and every AI turn before the player's first, played out against no
+        // table at all and was over before anything was ever drawn.
+        if (_canvas?.Renderer is not null)
+            Vm.Animator = new RendererTableAnimator(_canvas.Renderer);
+
+        PushToCanvas();
+
+        _failed = !await Vm.StartAsync(GameId, Seats, EnabledRules);
+        _title  = Vm.State?.Definition.Name ?? GameId;
+        StateHasChanged();
     }
 
     private void PushToCanvas()
@@ -88,7 +104,7 @@
     private async Task NewGame()
     {
         Vm.DeleteSave();
-        await Vm.StartAsync(GameId, Seats, resume: false);
+        await Vm.StartAsync(GameId, Seats, EnabledRules, resume: false);
     }
 
     private async Task GoHome()

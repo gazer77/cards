@@ -18,6 +18,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Cards.Core\Cards.Core.csproj" />
+    <!--
+      For ITableAnimator only. Cards.App is presentation logic with no renderer
+      dependency of its own, so this stays one-directional: the turn loop asks for
+      animation through an interface and never learns that Skia exists.
+    -->
+    <ProjectReference Include="..\Cards.App\Cards.App.csproj" />
   </ItemGroup>
 
 </Project>

@@ -26,6 +26,12 @@
     // invisible on a 1x desktop monitor, which is exactly why it is easy to ship.
     private double _dpr = 1.0;
 
+    /// <summary>
+    /// The renderer behind this canvas, so the page can hand it to the turn loop as an
+    /// animator. Null until the component has initialised.
+    /// </summary>
+    public CardTableRenderer? Renderer => _renderer;
+
     [Parameter] public EventCallback<string> CardTapped { get; set; }
     [Parameter] public EventCallback<string> ZoneTapped { get; set; }
     [Parameter] public EventCallback TableTapped { get; set; }

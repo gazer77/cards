@@ -17,6 +17,8 @@ public sealed class GameTableViewModel
     private readonly GameLoader      _loader;
     private readonly GameSaveService _saves;
 
+    private ITableAnimator _animator = NullTableAnimator.Instance;
+
     private GameState?  _state;
     private IGameLogic? _logic;
     private bool        _isAutoAdvancing;
@@ -28,6 +30,18 @@ public sealed class GameTableViewModel
     {
         _loader = loader;
         _saves  = saves;
+    }
+
+    /// <summary>
+    /// Plays card movement between turns. Defaults to doing nothing, so a host with no
+    /// table attached still works; a client assigns its own once its canvas exists.
+    /// Animation timing is not decoration here — it is most of what keeps the turn loop
+    /// at a pace a person can follow.
+    /// </summary>
+    public ITableAnimator Animator
+    {
+        get => _animator;
+        set => _animator = value ?? NullTableAnimator.Instance;
     }
 
     // ── Observable surface ────────────────────────────────────────────────────
@@ -126,6 +140,11 @@ public sealed class GameTableViewModel
         _logic = logic;
 
         Changed?.Invoke();
+
+        // A fresh deal is choreographed — full deck, shuffle, cards dealt one at a
+        // time. A resumed game is already mid-hand, so it simply appears.
+        if (!restored) await _animator.PlayDealAsync(state);
+
         await RunAutoAdvanceLoopAsync();
         return true;
     }
@@ -208,9 +227,24 @@ public sealed class GameTableViewModel
 
     private async Task ApplyAsync(GameAction action)
     {
+        await ApplyAnimatedAsync(action);
+        await RunAutoAdvanceLoopAsync();
+    }
+
+    /// <summary>
+    /// Applies one action and lets the resulting card movement finish before returning.
+    ///
+    /// Origins must be captured before Apply and destinations resolved after the view
+    /// has the new state, so this is deliberately one indivisible step rather than
+    /// something each caller assembles — the turn loop got that ordering wrong once
+    /// already by simply not animating at all.
+    /// </summary>
+    private async Task ApplyAnimatedAsync(GameAction action)
+    {
+        _animator.CaptureBeforeMove(_state!);
         _logic!.Apply(_state!, action);
         Changed?.Invoke();
-        await RunAutoAdvanceLoopAsync();
+        await _animator.PlayMoveAsync(_state!);
     }
 
     /// <summary>
@@ -243,8 +277,7 @@ public sealed class GameTableViewModel
                 if (actions.Count == 1 && cards.Count == 0 && actions[0].Type == "ready")
                     break;
 
-                _logic.Apply(_state, _logic.GetAutoAction(_state));
-                Changed?.Invoke();
+                await ApplyAnimatedAsync(_logic.GetAutoAction(_state));
 
                 if (_logic.IsGameOver(_state)) break;
             }
