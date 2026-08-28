@@ -112,10 +112,26 @@ html, body {
     touch-action: none;   /* stop the browser panning while dragging a card */
 }
 
+/*
+   The canvas element is laid out at --rs of the table's size and then scaled back up
+   to fill it. Its backing store is (element size x devicePixelRatio), so shrinking the
+   element is the only way to ask for fewer pixels than the display's density implies.
+
+   Skia in the browser rasterises on the CPU, so cost is per pixel: a dense phone
+   screen asks for several times the pixels of a desktop with a fraction of the power
+   to draw them. --rs is 1 where no capping is needed, making this a no-op.
+
+   See GameTableCanvas.MaxPixelRatio.
+*/
 .table-canvas canvas {
     display: block;
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: calc(100% * var(--rs, 1));
+    height: calc(100% * var(--rs, 1));
+    transform: scale(calc(1 / var(--rs, 1)));
+    transform-origin: 0 0;
 }
 
 /*

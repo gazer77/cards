@@ -7,7 +7,9 @@
 @inject IJSRuntime JS
 @implements IDisposable
 
+@* --rs scales the canvas element down and CSS scales it back up; see RenderScale. *@
 <div class="table-canvas"
+     style="--rs: @_renderScale.ToString(System.Globalization.CultureInfo.InvariantCulture)"
      @onpointerdown="HandlePointerDown"
      @onpointermove="HandlePointerMove"
      @onpointerup="HandlePointerUp"
@@ -20,11 +22,34 @@
     private CardTableRenderer? _renderer;
     private BrowserAnimationDriver? _driver;
 
-    // Canvas pixels per CSS pixel. SKCanvasView sizes its backing store in device
-    // pixels while pointer events report CSS pixels, so every point must be scaled.
-    // Skipping this puts every tap 2-3x off on a phone or Retina display — the bug is
-    // invisible on a 1x desktop monitor, which is exactly why it is easy to ship.
-    private double _dpr = 1.0;
+    /// <summary>
+    /// Most canvas pixels we will render per CSS pixel, regardless of how dense the
+    /// display is.
+    ///
+    /// Skia under WebAssembly rasterises on the CPU, so cost scales with pixel count —
+    /// and a phone has more pixels than a desktop while having far less CPU to spend on
+    /// them. A 390x844 phone at devicePixelRatio 3 is 2.96 million pixels, twice a
+    /// 1920x766 desktop table. Rendering that honestly is what makes the browser client
+    /// unusable on the devices most likely to run it.
+    ///
+    /// Capping costs sharpness, but cards are large flat high-contrast shapes rather
+    /// than fine text, so the loss is slight while the saving is quadratic: capping a
+    /// DPR-3 phone at 1.5 renders a quarter of the pixels.
+    /// </summary>
+    private const double MaxPixelRatio = 1.5;
+
+    // Canvas pixels per CSS pixel, after the cap. Pointer events report CSS pixels
+    // while the canvas backing store is in device pixels, so every point must be
+    // scaled by this. Getting it wrong puts every tap 2-3x off on a phone or Retina
+    // display — invisible on a 1x desktop monitor, which is what makes it easy to ship.
+    private double _pixelRatio = 1.0;
+
+    // How far the canvas element is shrunk before CSS scales it back up to fill the
+    // table. 1.0 means no capping was needed.
+    private double _renderScale = 1.0;
+
+    // ShouldRender is off, so a render has to be asked for explicitly.
+    private bool _needsRender;
 
     /// <summary>
     /// The renderer behind this canvas, so the page can hand it to the turn loop as an
@@ -47,7 +72,13 @@
     /// equality check never short-circuits — and re-rendering the canvas host makes
     /// the whole table flash.
     /// </summary>
-    protected override bool ShouldRender() => false;
+    protected override bool ShouldRender()
+    {
+        if (!_needsRender) return false;
+
+        _needsRender = false;
+        return true;
+    }
 
     protected override void OnInitialized()
     {
@@ -66,13 +97,28 @@
     {
         if (!firstRender) return;
 
+        double dpr;
         try
         {
-            _dpr = await JS.InvokeAsync<double>("eval", "window.devicePixelRatio || 1");
+            dpr = await JS.InvokeAsync<double>("eval", "window.devicePixelRatio || 1");
         }
         catch
         {
-            _dpr = 1.0;   // fall back to 1:1 rather than failing to start
+            dpr = 1.0;   // fall back to 1:1 rather than failing to start
+        }
+
+        // SKCanvasView sizes its backing store as (element CSS size x devicePixelRatio),
+        // with no way to ask for a fraction of that. So the element is laid out smaller
+        // and CSS scales it back up to fill the table: the backing store lands on the
+        // capped ratio while the table still occupies the same space on screen.
+        var scaling = DisplayScaling.For(dpr, MaxPixelRatio);
+        _pixelRatio  = scaling.PixelRatio;
+        _renderScale = scaling.RenderScale;
+
+        if (_renderScale < 1.0)
+        {
+            _needsRender = true;
+            StateHasChanged();
         }
     }
 
@@ -103,8 +149,10 @@
     private void OnPaint(SKPaintSurfaceEventArgs e)
         => _renderer?.Paint(e.Surface.Canvas, e.Info);
 
+    // Offsets are relative to the wrapper, which keeps its full CSS size, so the
+    // element's own shrink-and-scale-up is invisible here.
     private SKPoint ToCanvas(PointerEventArgs e)
-        => new((float)(e.OffsetX * _dpr), (float)(e.OffsetY * _dpr));
+        => new((float)(e.OffsetX * _pixelRatio), (float)(e.OffsetY * _pixelRatio));
 
     private void HandlePointerDown(PointerEventArgs e)   => _renderer?.OnPointerDown(ToCanvas(e));
     private void HandlePointerMove(PointerEventArgs e)   => _renderer?.OnPointerMove(ToCanvas(e));
