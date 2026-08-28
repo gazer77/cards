@@ -114,14 +114,17 @@
     /// <summary>
     /// Repaints the table.
     ///
-    /// Invalidates directly rather than through InvokeAsync: this is called once per
-    /// animation frame, and queueing each one onto the dispatcher pushes the repaint
-    /// into a later turn — so the paint lands out of step with the frame that asked
-    /// for it. WebAssembly is single-threaded and every caller (the frame callback,
-    /// the turn loop, Sync) is already on that one thread, so there is nothing to
-    /// marshal.
+    /// Goes through the dispatcher, and must. Invalidate ultimately calls
+    /// StateHasChanged, and the frame callback arrives synchronously from JavaScript —
+    /// so invalidating directly renders the component from inside a JS interop call
+    /// stack, re-entrantly with whatever render is already in progress. That flickers
+    /// the whole table at frame rate.
+    ///
+    /// Being single-threaded is not the same as having nothing to marshal: the
+    /// dispatcher is what orders work on that one thread, not what moves it between
+    /// threads.
     /// </summary>
-    public void Redraw() => _view?.Invalidate();
+    public void Redraw() => _ = InvokeAsync(() => _view?.Invalidate());
 
     public void Dispose()
     {
