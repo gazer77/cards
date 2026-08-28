@@ -62,14 +62,18 @@
 
     protected override void OnInitialized() => Vm.Changed += OnVmChanged;
 
-    // The view model raises Changed from its turn loop, which is not on a render path,
-    // so the re-render has to be marshalled explicitly.
     private void OnVmChanged()
-        => _ = InvokeAsync(() =>
-        {
-            StateHasChanged();
-            PushToCanvas();
-        });
+    {
+        // Push to the canvas synchronously. The turn loop applies an action, raises
+        // this, and then immediately asks the animator to fly the moved cards — so the
+        // renderer must already hold the new state when that happens. Deferring the
+        // push meant fly-ins were queued against the previous position.
+        PushToCanvas();
+
+        // The surrounding Blazor markup (status line, action buttons) is not on a
+        // render path here, so that part does have to be marshalled.
+        _ = InvokeAsync(StateHasChanged);
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -82,6 +86,13 @@
         // table at all and was over before anything was ever drawn.
         if (_canvas?.Renderer is not null)
             Vm.Animator = new RendererTableAnimator(_canvas.Renderer);
+
+        // Slower than the engine's own timing, which was tuned against a phone where a
+        // turn also costs a touch and a glance. Watching AI seats play needs longer:
+        // nothing signals that a turn happened except the cards moving.
+        // Provisional until this is a user setting — see GameTableViewModel.TurnPace.
+        Vm.TurnPace         = 1.8;
+        Vm.MinimumTurnPause = TimeSpan.FromMilliseconds(650);
 
         PushToCanvas();
 

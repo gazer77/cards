@@ -151,6 +151,31 @@ public sealed class TurnLoopAnimationTests
         Assert.NotNull(vm.State);
     }
 
+    /// <summary>
+    /// Slowing the turn loop must not slow the steps the engine marks as instant.
+    /// Those are internal bookkeeping — scoring, phase transitions — and several chain
+    /// together, so giving each a visible pause turns the end of a hand into a
+    /// slideshow. Only steps the engine already wanted a pause for are stretched.
+    /// </summary>
+    [Fact]
+    public async Task Pacing_slows_real_turns_without_stalling_instant_ones()
+    {
+        var slow = BuildViewModel(out _);
+        slow.TurnPace         = 4.0;
+        slow.MinimumTurnPause = TimeSpan.FromMilliseconds(200);
+
+        // war's scoring and phase-transition steps report a zero delay. If the floor
+        // were applied to those too, this would take many seconds rather than a few
+        // hundred milliseconds.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        await slow.StartAsync("war", 2, resume: false, seed: 7);
+        clock.Stop();
+
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10),
+            $"Startup took {clock.Elapsed.TotalSeconds:F1}s, which suggests the pause " +
+            "floor is being applied to steps the engine reports as instant.");
+    }
+
     [Fact]
     public void A_null_animator_falls_back_rather_than_throwing()
     {

@@ -38,6 +38,17 @@
     [Parameter] public EventCallback<(string CardId, string ZoneId)> CardDropped { get; set; }
     [Parameter] public EventCallback<(string CardId, int NewIndex)> CardReordered { get; set; }
 
+    /// <summary>
+    /// Never re-renders from Blazor's side. The markup is a single fixed element and
+    /// every visual change goes through <see cref="Sync"/> and <see cref="Redraw"/>.
+    ///
+    /// Without this the parent's StateHasChanged re-renders this component on every
+    /// turn — the event-callback parameters are new delegates each time, so the
+    /// equality check never short-circuits — and re-rendering the canvas host makes
+    /// the whole table flash.
+    /// </summary>
+    protected override bool ShouldRender() => false;
+
     protected override void OnInitialized()
     {
         _driver   = new BrowserAnimationDriver();

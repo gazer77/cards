@@ -44,6 +44,31 @@ public sealed class GameTableViewModel
         set => _animator = value ?? NullTableAnimator.Instance;
     }
 
+    /// <summary>
+    /// Stretches the pause the engine asks for between automatic turns. 1.0 is the
+    /// engine's own timing; 2.0 is half speed.
+    ///
+    /// The engine reports a delay per step and those steps chain, so a run of AI turns
+    /// resolves faster than a person can follow what happened. This is the single knob
+    /// for that, kept here rather than in a client so every client paces alike.
+    ///
+    /// TODO: surface this as a user setting (a speed slider on the settings screen),
+    /// persisted through ISettingsStore alongside the other preferences. Hard-coded
+    /// defaults are a starting point, not the answer — how fast is "followable"
+    /// depends on the game and the player.
+    /// </summary>
+    public double TurnPace { get; set; } = 1.0;
+
+    /// <summary>
+    /// Floor for an automatic turn's pause, so a step the engine considers instant is
+    /// still visible when it changes the table.
+    ///
+    /// Applied only to steps that already ask for a non-zero delay. A zero delay is the
+    /// engine saying "this is internal bookkeeping, not a move" — several phases chain
+    /// those deliberately, and holding each one would turn scoring into a slideshow.
+    /// </summary>
+    public TimeSpan MinimumTurnPause { get; set; } = TimeSpan.Zero;
+
     // ── Observable surface ────────────────────────────────────────────────────
 
     /// <summary>Raised whenever anything a view renders has changed.</summary>
@@ -222,6 +247,19 @@ public sealed class GameTableViewModel
 
     // ── Turn loop ─────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Applies <see cref="TurnPace"/> and <see cref="MinimumTurnPause"/> to one step's
+    /// delay. A zero delay is passed through untouched — see
+    /// <see cref="MinimumTurnPause"/> for why.
+    /// </summary>
+    private TimeSpan Pace(TimeSpan delay)
+    {
+        if (delay <= TimeSpan.Zero) return delay;
+
+        var scaled = TurnPace > 0 ? delay * TurnPace : delay;
+        return scaled < MinimumTurnPause ? MinimumTurnPause : scaled;
+    }
+
     private bool CanAcceptInput()
         => _state is not null && _logic is not null && !_isAutoAdvancing && !IsGameOver;
 
@@ -266,7 +304,7 @@ public sealed class GameTableViewModel
                 var delay = _logic.GetAutoAdvanceDelay(_state);
                 if (delay is null) break;
 
-                await Task.Delay(delay.Value);
+                await Task.Delay(Pace(delay.Value));
 
                 var actions = _logic.GetValidActions(_state);
                 var cards   = _logic.GetSelectableCardIds(_state);
