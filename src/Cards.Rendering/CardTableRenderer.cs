@@ -92,6 +92,34 @@ public sealed class CardTableRenderer
     }
 
     /// <summary>
+    /// Counts every card on the table and how many ranks are short of a full four.
+    ///
+    /// A hand is drawn as overlapping slices once it grows, so counting cards from the
+    /// screen is guesswork — a 28-card hand and a 16-card one look far more alike than
+    /// they are. This settles "have cards gone missing?" without anyone having to
+    /// squint at a screenshot.
+    /// </summary>
+    private string BuildCardCensus()
+    {
+        if (_state is null) return "cards —";
+
+        var all = _state.Zones.Values.SelectMany(z => z.Cards).ToList();
+
+        int deck  = _state.Zones.Values.Where(z => z.Type == "deck").Sum(z => z.Count);
+        int hands = _state.Zones.Values.Where(z => z.Type == "hand").Sum(z => z.Count);
+        int rest  = all.Count - deck - hands;
+
+        // Jokers are deliberately excluded: they have no rank group to be short of.
+        int shortRanks = all
+            .Where(c => c.Rank != Rank.Joker)
+            .GroupBy(c => c.Rank)
+            .Count(g => g.Count() % 4 != 0);
+
+        string ranks = shortRanks > 0 ? $"  ranks!={shortRanks}" : "";
+        return $"cards {all.Count} (deck {deck}, hands {hands}, other {rest}){ranks}";
+    }
+
+    /// <summary>
     /// Where a player's bubble should point. Prefers the seat's hand, which is where
     /// a player "is" on the table; falls back to any zone they own.
     /// </summary>
@@ -457,6 +485,7 @@ public sealed class CardTableRenderer
         _diagnostics.Flips    = _flipAnims.Count;
         _diagnostics.Receives = _receiveAnims.Count;
         _diagnostics.Shuffles = _shuffleAnims.Count;
+        _diagnostics.CardCensus = BuildCardCensus();
 
         DrawDiagnosticsOverlay(canvas, info);
 

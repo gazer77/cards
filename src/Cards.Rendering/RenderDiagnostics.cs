@@ -46,6 +46,16 @@ public sealed class RenderDiagnostics
 
     public SKImageInfo Info { get; set; }
 
+    /// <summary>
+    /// Total cards on the table, and where they are.
+    ///
+    /// Counting cards by eye is unreliable: a large hand is drawn as overlapping
+    /// slices, so a 28-card hand and a 16-card one look more alike than they are. If a
+    /// game appears to have lost cards, this answers it outright rather than by
+    /// inference from the picture.
+    /// </summary>
+    public string CardCensus { get; set; } = "";
+
     /// <summary>Mean milliseconds spent painting, over the last <see cref="Window"/> frames.</summary>
     public double PaintMs => Mean(_paintMs, _count);
 
@@ -98,5 +108,6 @@ public sealed class RenderDiagnostics
         $"cards drawn {CardsDrawn}   cached {CardRenderer.CacheSize}",
         $"anim  fly {FlyIns}  deal {Deals}  flip {Flips}  recv {Receives}  shuf {Shuffles}",
         $"canvas {Info.Width}x{Info.Height}",
+        CardCensus,
     ];
 }
