@@ -148,6 +148,16 @@ public sealed class CardTableRenderer
     /// <summary>Live frame timings. Only meaningful while <see cref="ShowDiagnostics"/> is on.</summary>
     public RenderDiagnostics Diagnostics => _diagnostics;
 
+    /// <summary>
+    /// Draws every card face-up, including opponents' hands and face-down piles.
+    ///
+    /// A debugging aid: most card-game bugs are about which cards are where, and that
+    /// is exactly what the game is designed to hide. Off by default and gated behind a
+    /// configuration flag, because it removes the point of the game — a player who
+    /// turned this on by accident would see their opponent's hand.
+    /// </summary>
+    public bool RevealAllCards { get; set; }
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     public event Action<string>?         CardTapped;
@@ -433,9 +443,49 @@ public sealed class CardTableRenderer
 
     private void EnsureAnimTimer() => _driver.RequestFrames();
 
+    /// <summary>
+    /// Drops animations whose time has passed.
+    ///
+    /// Each animation is normally retired by the code that draws it, on the frame it
+    /// finishes — which only happens if that card is drawn at all. A card that lands
+    /// somewhere its zone type does not process (or that is not drawn for any other
+    /// reason) leaves an entry behind forever, and a single stale entry keeps the frame
+    /// loop running for the rest of the session: the table never goes idle, repainting
+    /// at full cost over a game where nothing is moving.
+    ///
+    /// Animations are driven by wall-clock time, so an entry past its duration has no
+    /// effect on what is drawn. Removing it is free, and makes the loop's exit
+    /// condition depend on elapsed time rather than on every card being reached.
+    /// </summary>
+    private void SweepExpiredAnimations()
+    {
+        long now = NowMs();
+
+        Sweep(_dealAnims);
+        Sweep(_flipAnims);
+        Sweep(_receiveAnims);
+        Sweep(_shuffleAnims);
+
+        // Fly-ins are excluded: they are awaited by the turn loop, which is told they
+        // are done through WaitForFlyInsAsync. Dropping one here would leave that wait
+        // hanging until its safety timeout.
+
+        void Sweep(Dictionary<string, (long Start, float Duration)> anims)
+        {
+            if (anims.Count == 0) return;
+
+            foreach (var key in anims
+                         .Where(kv => now - kv.Value.Start > kv.Value.Duration + 250)
+                         .Select(kv => kv.Key)
+                         .ToList())
+                anims.Remove(key);
+        }
+    }
+
     private void OnAnimTimerTick()
     {
         RequestRedraw();
+        SweepExpiredAnimations();
 
         // Bubbles fade on the same clock as the animations, so they have to hold the
         // loop open too — otherwise a message posted on a quiet table paints once and
@@ -629,8 +679,8 @@ public sealed class CardTableRenderer
             DrawCardBackCounted(canvas, OffsetRect(baseRect, i * 2f, i * -1.5f), _skin);
 
         var topCard = layout.Zone.TopCard;
-        if (topCard is not null && layout.FaceUp)
-            CardRenderer.DrawCardFace(canvas, baseRect, topCard, _skin);
+        if (topCard is not null)
+            DrawCardForZone(canvas, baseRect, topCard, layout.FaceUp);
         else
             DrawCardBackCounted(canvas, baseRect, _skin);
 
@@ -790,10 +840,7 @@ public sealed class CardTableRenderer
             }
 
             // ── Normal draw ───────────────────────────────────────────────────
-            if (layout.FaceUp)
-                DrawCardCounted(canvas, rect, card, _skin);
-            else
-                DrawCardBackCounted(canvas, rect, _skin);
+            DrawCardForZone(canvas, rect, card, layout.FaceUp);
 
             if (_recordCardRects)
             {
@@ -1559,6 +1606,26 @@ public sealed class CardTableRenderer
     {
         _diagnostics.CardsDrawn++;
         CardRenderer.DrawCardBack(canvas, rect, skin);
+    }
+
+    /// <summary>
+    /// Draws a card the way its zone says it should be seen, unless
+    /// <see cref="RevealAllCards"/> overrides that.
+    /// </summary>
+    private void DrawCardForZone(SKCanvas canvas, SKRect rect, Card card, bool zoneFaceUp)
+    {
+        if (RevealAllCards)
+        {
+            // Forced, not merely permitted: an opponent's card is face-down on the card
+            // itself as well as hidden by its zone, so honouring IsFaceUp here would
+            // reveal nothing.
+            _diagnostics.CardsDrawn++;
+            CardRenderer.DrawCardFace(canvas, rect, card, _skin);
+            return;
+        }
+
+        if (zoneFaceUp) DrawCardCounted(canvas, rect, card, _skin);
+        else            DrawCardBackCounted(canvas, rect, _skin);
     }
 
     /// <summary>

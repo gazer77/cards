@@ -3,6 +3,7 @@
 @inject NavigationManager Nav
 @inject Cards.Services.SettingsService Settings
 @inject Cards.Services.HelpService Help
+@inject IConfiguration Config
 @implements IDisposable
 
 <PageTitle>@(_title)</PageTitle>
@@ -165,6 +166,13 @@
 
             _diagnostics = Settings.ShowDiagnostics;
             _canvas.Renderer.ShowDiagnostics = _diagnostics;
+
+            // Debug:RevealAllCards turns every hand face-up. Configuration only, with
+            // no way to reach it from the UI: it is for finding bugs about which cards
+            // are where, and it destroys the game for anyone who enables it by mistake.
+            // Only appsettings.Development.json sets it, so a published build cannot.
+            _canvas.Renderer.RevealAllCards =
+                Config.GetValue<bool>("Debug:RevealAllCards");
         }
 
         // Slower than the engine's own timing, which was tuned against a phone where a
@@ -215,10 +223,9 @@
         _sort = mode;
         Settings.SetHandSort(GameId, mode);
 
-        // "Free" means the player arranges the hand by dragging, so there is
-        // deliberately nothing to sort — but the choice is still remembered, so their
-        // arrangement is not undone next deal.
-        if (mode != GameTableViewModel.CustomSortMode) Vm.SortHand(mode);
+        // Sorting also stays in effect, so cards won later land in place. "Free" is a
+        // real choice — it stops the sorting rather than doing nothing.
+        Vm.SortHand(mode);
     }
 
     /// <summary>
@@ -227,10 +234,12 @@
     /// </summary>
     private void ApplyRememberedSort()
     {
-        _sort = Settings.GetHandSort(GameId);
+        // Fall back to the game's own preference when the player has not chosen: a
+        // definition that names a default_sort expects hands kept that way.
+        _sort = Settings.GetHandSort(GameId)
+             ?? Vm.State?.Definition.Ui?.DefaultSort;
 
-        if (_sort is not null && _sort != GameTableViewModel.CustomSortMode)
-            Vm.SortHand(_sort);
+        if (_sort is not null) Vm.SortHand(_sort);
     }
 
     private void ShowLog()

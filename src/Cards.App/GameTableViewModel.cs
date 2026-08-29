@@ -279,6 +279,26 @@ public sealed class GameTableViewModel
     }
 
     /// <summary>
+    /// The sort kept in effect as cards arrive, or null to leave the hand alone.
+    ///
+    /// Sorting once on request is not what a player means by choosing a sort: a card
+    /// won from an opponent lands on the end of the hand, so an ordered hand comes
+    /// apart over a game unless new cards are placed where they belong. Setting this
+    /// keeps the order rather than restoring it on demand.
+    ///
+    /// <see cref="CustomSortMode"/> is a real choice, not the absence of one — it means
+    /// "I arrange this myself", so it must not be re-sorted.
+    /// </summary>
+    public string? ActiveSortMode { get; set; }
+
+    /// <summary>Re-applies <see cref="ActiveSortMode"/>, if one is in effect.</summary>
+    private void MaintainSort()
+    {
+        if (ActiveSortMode is null || ActiveSortMode == CustomSortMode) return;
+        SortHandInternal(ActiveSortMode);
+    }
+
+    /// <summary>
     /// Whether this game has a hand the player can see and therefore sort. Games whose
     /// hands are all face-down piles offer nothing to arrange.
     /// </summary>
@@ -293,13 +313,23 @@ public sealed class GameTableViewModel
     /// </summary>
     public void SortHand(string mode)
     {
-        if (_state is null || string.IsNullOrEmpty(mode) || mode == CustomSortMode) return;
+        // Choosing a sort also keeps it: the player is setting how their hand is
+        // arranged, not asking for it to be tidied once.
+        ActiveSortMode = mode;
+
+        if (SortHandInternal(mode)) Changed?.Invoke();
+    }
+
+    /// <summary>Sorts without raising Changed. Returns whether anything was sorted.</summary>
+    private bool SortHandInternal(string mode)
+    {
+        if (_state is null || string.IsNullOrEmpty(mode) || mode == CustomSortMode) return false;
 
         foreach (var zone in _state.Zones.Values)
             if (zone.Type == "hand" && zone.Visibility is "owner" or "all")
                 HandSorter.Sort(zone, mode);
 
-        Changed?.Invoke();
+        return true;
     }
 
     // ── Input ─────────────────────────────────────────────────────────────────
@@ -404,6 +434,12 @@ public sealed class GameTableViewModel
 
         _animator.CaptureBeforeMove(_state);
         _logic!.Apply(_state, action);
+
+        // Sort before the view is told, so a newly won card is animated into the slot
+        // it will actually occupy rather than flying to the end of the hand and then
+        // jumping into place.
+        MaintainSort();
+
         CaptureStatusChange(actingPlayerId);
         Changed?.Invoke();
         await _animator.PlayMoveAsync(_state!);

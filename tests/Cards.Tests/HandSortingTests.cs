@@ -119,4 +119,60 @@ public sealed class HandSortingTests
 
         Assert.False(vm.CanSortHand);
     }
+
+    /// <summary>
+    /// A chosen sort stays in effect as cards arrive.
+    ///
+    /// Sorting once on request is not what choosing a sort means to a player: a card
+    /// won from an opponent is appended to the hand, so an ordered hand comes apart
+    /// over a game unless new cards land where they belong.
+    /// </summary>
+    [Fact]
+    public async Task A_chosen_sort_keeps_new_cards_in_order()
+    {
+        var vm = await Start("go-fish", 2);
+        vm.SortHand("rank_ace_high");
+
+        var hand = vm.State!.Zones.Values.First(z => z.Type == "hand" && z.Visibility == "owner");
+
+        for (int i = 0; i < 30 && !vm.IsGameOver; i++)
+        {
+            var selectable = vm.SelectableCardIds;
+            var ask = vm.Actions.FirstOrDefault(a => a.Type == "ask");
+
+            if (ask is not null)                                    await vm.Invoke(ask);
+            else if (vm.SelectedCardId is null && selectable.Count > 0) await vm.TapCard(selectable[0]);
+            else if (vm.Actions.Count > 0)                          await vm.Invoke(vm.Actions[0]);
+            else break;
+
+            var ranks = hand.Cards.Select(c => c.Rank == Rank.Ace ? 14 : (int)c.Rank).ToList();
+            Assert.True(ranks.SequenceEqual(ranks.OrderBy(r => r)),
+                $"Hand fell out of order after {i + 1} moves: " +
+                string.Join(" ", hand.Cards.Select(c => c.Id)));
+        }
+    }
+
+    /// <summary>
+    /// Free must stop the sorting, not merely skip one pass — otherwise a hand the
+    /// player arranged by dragging is quietly reordered on their next turn.
+    /// </summary>
+    [Fact]
+    public async Task Free_stops_the_hand_being_reordered()
+    {
+        var vm = await Start("go-fish", 2);
+        vm.SortHand("rank_ace_high");
+        vm.SortHand(GameTableViewModel.CustomSortMode);
+
+        var hand = vm.State!.Zones.Values.First(z => z.Type == "hand" && z.Visibility == "owner");
+
+        // Shuffle the hand into a deliberately wrong order and confirm it survives play.
+        var scrambled = hand.Cards.OrderBy(c => c.Suit).ThenByDescending(c => c.Rank).ToList();
+        hand.Reorder(scrambled);
+        var expected = scrambled.Select(c => c.Id).ToList();
+
+        var selectable = vm.SelectableCardIds;
+        if (selectable.Count > 0) await vm.TapCard(selectable[0]);
+
+        Assert.Equal(expected, hand.Cards.Select(c => c.Id).ToList());
+    }
 }
