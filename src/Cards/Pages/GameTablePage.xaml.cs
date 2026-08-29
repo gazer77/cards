@@ -65,7 +65,7 @@ public partial class GameTablePage : ContentPage
         else if (_state is not null && _logic is not null && !_logic.IsGameOver(_state))
         {
             var rules = (IReadOnlyList<string>)(HouseRules ?? []);
-            _ = _saves.SaveAsync(_state, PlayerCount, rules);
+            _ = _saves.SaveAsync(_state, PlayerCount, rules, _saveSlotId);
         }
     }
 
@@ -102,8 +102,15 @@ public partial class GameTablePage : ContentPage
         _logic     = LogicRegistry.Create(definition);
 
         bool restored = false;
-        if (_logic is not null && _saves.HasSave(definition.Id))
-            restored = await _saves.RestoreAsync(state, _logic, PlayerCount, rules);
+        await _saves.EnsureLoadedAsync();
+
+        // MAUI has one table at a time, so it resumes the most recent save for this
+        // game at this size. The resume list is a web-client feature for now.
+        _saveSlotId = _saves.SavesFor(definition.Id)
+            .FirstOrDefault(s => s.PlayerCount == PlayerCount)?.Id;
+
+        if (_logic is not null && _saveSlotId is not null)
+            restored = await _saves.RestoreAsync(state, _logic, _saveSlotId);
 
         if (!restored)
         {
@@ -334,6 +341,12 @@ public partial class GameTablePage : ContentPage
     // ── Touch / interaction handlers ──────────────────────────────────────────
 
     private bool _isAutoAdvancing;
+
+    /// <summary>
+    /// The save this table is writing to, so repeated autosaves update one entry rather
+    /// than adding a row per departure. Null until the game has been saved once.
+    /// </summary>
+    private string? _saveSlotId;
 
     private void OnCardTapped(string cardId)
     {
@@ -807,7 +820,8 @@ public partial class GameTablePage : ContentPage
 
     private async void OnPlayAgainClicked(object? sender, EventArgs e)
     {
-        _saves.DeleteSave(GameId);
+        await _saves.DeleteAllForAsync(GameId);
+        _saveSlotId = null;
         _state = null;
         await InitializeGameAsync();
     }
@@ -951,8 +965,9 @@ public partial class GameTablePage : ContentPage
         if (!confirm) return;
 
         if (_state is not null)
-            _saves.DeleteSave(_state.GameId);
+            await _saves.DeleteAllForAsync(_state.GameId);
 
+        _saveSlotId = null;
         _state = null;
         await InitializeGameAsync();
     }

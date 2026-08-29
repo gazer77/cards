@@ -74,11 +74,17 @@ public class HomeViewModel : INotifyPropertyChanged
     public string SelectedGameName        => _selectedGame?.Name           ?? string.Empty;
     public string SelectedGamePlayerRange => _selectedGame?.PlayerRangeText ?? string.Empty;
 
-    /// <summary>Deletes the save for the selected game so the next start is fresh.</summary>
-    public void DeleteSelectedSave()
+    /// <summary>
+    /// Deletes every save for the selected game so the next start is fresh.
+    ///
+    /// Saves now live in their own slots, so a game can have more than one. MAUI has no
+    /// resume list yet and plays one table at a time, so "start over" means all of them
+    /// — see the web client for the per-save version.
+    /// </summary>
+    public async Task DeleteSelectedSaveAsync()
     {
         if (_selectedGame is not null)
-            _saves.DeleteSave(_selectedGame.Id);
+            await _saves.DeleteAllForAsync(_selectedGame.Id);
     }
 
     // ── Load ──────────────────────────────────────────────────────────────────
@@ -90,6 +96,11 @@ public class HomeViewModel : INotifyPropertyChanged
         try
         {
             _allGames = await _loader.LoadAllAsync();
+
+            // SelectedGameHasSave is read while binding, so the save index has to be in
+            // memory before the list is shown or every game claims to have no save.
+            await _saves.EnsureLoadedAsync();
+
             _hasLoaded = true;
             ApplyFilter();
         }

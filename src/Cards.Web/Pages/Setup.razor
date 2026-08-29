@@ -1,6 +1,7 @@
 @page "/setup/{GameId}"
 @inject GameLoader Loader
 @inject NavigationManager Nav
+@inject Cards.Services.GameSaveService Saves
 
 @*
     Table setup: seat count and house rules, matching what the mobile app offers before
@@ -23,8 +24,30 @@ else
         <h1>@_game.Name</h1>
         <p class="tagline">@_game.PlayerRangeText</p>
 
+        @if (_saved.Count > 0)
+        {
+            <section class="setup-block">
+                <h2>Resume</h2>
+                @foreach (var slot in _saved)
+                {
+                    var captured = slot;
+                    <div class="save-row">
+                        <button class="save" @onclick="() => Resume(captured)">
+                            <span class="save-line">@captured.PlayerCount players · @captured.Summary</span>
+                            <span class="save-when">
+                                @captured.SavedAt.LocalDateTime.ToString("d MMM HH:mm")
+                                @if (captured.RulesText.Length > 0) { <text> · @captured.RulesText</text> }
+                            </span>
+                        </button>
+                        <button class="save-delete" title="Delete this save"
+                                @onclick="() => Delete(captured)">&times;</button>
+                    </div>
+                }
+            </section>
+        }
+
         <section class="setup-block">
-            <h2>Players</h2>
+            <h2>@(_saved.Count > 0 ? "Or start a new game" : "Players")</h2>
             <div class="stepper">
                 <button class="step" disabled="@(_players <= _game.MinPlayers)"
                         @onclick="@(() => _players--)">&minus;</button>
@@ -70,10 +93,15 @@ else
     private int  _players;
     private bool _failed;
 
+    private List<Cards.Engine.SaveSlot> _saved = [];
+
     protected override async Task OnInitializedAsync()
     {
         _game = await Loader.LoadAsync(GameId);
         if (_game is null) { _failed = true; return; }
+
+        await Saves.EnsureLoadedAsync();
+        _saved = Saves.SavesFor(GameId).ToList();
 
         _players = _game.MinPlayers;
         _rules   = _game.HouseRules;
@@ -81,6 +109,19 @@ else
         // A rule marked default-on in the definition starts checked, as on mobile.
         foreach (var rule in _rules)
             rule.IsEnabled = rule.Default;
+    }
+
+    /// <summary>
+    /// Resumes a save. Its seat count and rules come from the save itself, so nothing
+    /// chosen on this page is carried across — the position defines its own table.
+    /// </summary>
+    private void Resume(Cards.Engine.SaveSlot slot)
+        => Nav.NavigateTo($"/play/{GameId}/{slot.PlayerCount}?slot={slot.Id}");
+
+    private async Task Delete(Cards.Engine.SaveSlot slot)
+    {
+        await Saves.DeleteAsync(slot.Id);
+        _saved = Saves.SavesFor(GameId).ToList();
     }
 
     private void Start()

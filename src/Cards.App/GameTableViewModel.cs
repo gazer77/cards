@@ -167,14 +167,18 @@ public sealed class GameTableViewModel
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Loads a game and begins play. When <paramref name="resume"/> is set and a save
-    /// exists, the saved position is restored instead of dealing a fresh hand.
+    /// Loads a game and begins play.
+    ///
+    /// With <paramref name="resumeSlotId"/> the named save is restored, and its own seat
+    /// count and house rules take precedence over the arguments — a saved position
+    /// carries its own table. Without one, a fresh game is dealt.
     /// </summary>
     public async Task<bool> StartAsync(
         string gameId,
         int playerCount,
         IReadOnlyList<string>? enabledRules = null,
         bool resume = true,
+        string? resumeSlotId = null,
         ulong? seed = null)
     {
         var definition = await _loader.LoadAsync(gameId);
@@ -192,12 +196,30 @@ public sealed class GameTableViewModel
 
         var logic = LogicRegistry.Create(definition);
 
-        bool restored = resume
-                     && _saves.HasSave(definition.Id)
-                     && await _saves.RestoreAsync(state, logic, playerCount, _enabledRules);
+        await _saves.EnsureLoadedAsync();
+
+        bool restored = false;
+        if (resume && resumeSlotId is not null)
+        {
+            restored = await _saves.RestoreAsync(state, logic, resumeSlotId);
+
+            // A resumed game keeps the seat count and house rules it was saved with,
+            // whatever the caller asked for — those are properties of the position, not
+            // of the request, and disagreeing about them is what strands cards in the
+            // hands of players that no longer exist.
+            if (restored && _saves.FindSlot(resumeSlotId) is { } slot)
+            {
+                _playerCount  = slot.PlayerCount;
+                _enabledRules = slot.EnabledRules;
+                SlotId        = resumeSlotId;
+            }
+        }
 
         if (!restored)
+        {
             logic.Initialize(state, playerCount, _enabledRules);
+            SlotId = null;   // a fresh game gets its own slot on first save
+        }
 
         _state = state;
         _logic = logic;
@@ -218,13 +240,27 @@ public sealed class GameTableViewModel
         return true;
     }
 
-    public Task SaveAsync()
-        => _state is null ? Task.CompletedTask
-                          : _saves.SaveAsync(_state, _playerCount, _enabledRules);
+    /// <summary>
+    /// The save this game occupies, or null until it has been saved once.
+    ///
+    /// Held so repeated saves update one entry rather than filling the resume list with
+    /// a row per turn.
+    /// </summary>
+    public string? SlotId { get; private set; }
 
-    public void DeleteSave()
+    public async Task SaveAsync()
     {
-        if (_state is not null) _saves.DeleteSave(_state.GameId);
+        if (_state is null) return;
+        SlotId = await _saves.SaveAsync(_state, _playerCount, _enabledRules, SlotId);
+    }
+
+    /// <summary>Discards this game's save, if it has one.</summary>
+    public async Task DeleteSaveAsync()
+    {
+        if (SlotId is null) return;
+
+        await _saves.DeleteAsync(SlotId);
+        SlotId = null;
     }
 
     // ── Hand sorting ──────────────────────────────────────────────────────────

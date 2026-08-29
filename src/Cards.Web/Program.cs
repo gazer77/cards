@@ -36,8 +36,7 @@ var host = builder.Build();
 var settingsStore = host.Services.GetRequiredService<BrowserSettingsStore>();
 await settingsStore.LoadAsync();
 
-var loader    = host.Services.GetRequiredService<GameLoader>();
-var saveStore = host.Services.GetRequiredService<BrowserSaveStore>();
-await saveStore.LoadAsync((await loader.LoadAllAsync()).Select(g => g.Id));
+// The list of saved games is read once here so screens can show it without awaiting.
+await host.Services.GetRequiredService<GameSaveService>().EnsureLoadedAsync();
 
 await host.RunAsync();

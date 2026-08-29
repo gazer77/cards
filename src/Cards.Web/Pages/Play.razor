@@ -124,6 +124,10 @@
     [Parameter, SupplyParameterFromQuery(Name = "rules")]
     public string? Rules { get; set; }
 
+    /// <summary>Save slot to resume, when arriving from the resume list.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "slot")]
+    public string? Slot { get; set; }
+
     private GameTableCanvas? _canvas;
     private bool _failed;
     private bool _diagnostics;
@@ -193,7 +197,7 @@
 
         PushToCanvas();
 
-        _failed = !await Vm.StartAsync(GameId, Seats, EnabledRules);
+        _failed = !await Vm.StartAsync(GameId, Seats, EnabledRules, resume: Slot is not null, resumeSlotId: Slot);
         _title      = Vm.State?.Definition.Name ?? GameId;
         _sortModes  = Vm.SortModes;
         ApplyRememberedSort();
@@ -367,14 +371,18 @@
 
     private async Task NewGame()
     {
-        Vm.DeleteSave();
+        await Vm.DeleteSaveAsync();
         _canvas?.Renderer?.ClearMessages();   // last game's bubbles are not this game's
         await Vm.StartAsync(GameId, Seats, EnabledRules, resume: false);
     }
 
     private async Task GoHome()
     {
-        await Vm.SaveAsync();
+        // A finished game has nothing worth resuming, and saving it would leave a dead
+        // row in the resume list that the player has to clear themselves.
+        if (!Vm.IsGameOver) await Vm.SaveAsync();
+        else                await Vm.DeleteSaveAsync();
+
         Nav.NavigateTo("/");
     }
 

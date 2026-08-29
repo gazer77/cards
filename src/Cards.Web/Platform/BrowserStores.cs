@@ -73,21 +73,15 @@ public sealed class BrowserSaveStore : ISaveStore
 
     public BrowserSaveStore(IJSRuntime js) => _js = js;
 
-    /// <summary>Populates the known-saves set. Must run before the first Exists call.</summary>
-    public async Task LoadAsync(IEnumerable<string> gameIds)
-    {
-        foreach (var id in gameIds)
-        {
-            var key = $"save_{id}";
-            try
-            {
-                var raw = await _js.InvokeAsync<string?>("localStorage.getItem", Prefix + key);
-                if (!string.IsNullOrEmpty(raw)) _known.Add(key);
-            }
-            catch { /* storage unavailable — treat as "no saves" */ }
-        }
-    }
-
+    /// <summary>
+    /// Whether a key was written or read in this session.
+    ///
+    /// Deliberately not a storage probe: localStorage is async here and this is not.
+    /// Which saves exist is answered by <c>GameSaveService</c>'s index, which is loaded
+    /// once at startup, so nothing needs this to be authoritative — it used to be
+    /// pre-populated by guessing one key per game, which stopped being true when saves
+    /// gained their own slots.
+    /// </summary>
     public bool Exists(string key) => _known.Contains(key);
 
     public void Delete(string key)

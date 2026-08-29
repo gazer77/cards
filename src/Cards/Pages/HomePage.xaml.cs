@@ -58,7 +58,7 @@ public partial class HomePage : ContentPage
         var game = _viewModel.SelectedGame;
         if (game is null) return;
 
-        _viewModel.DeleteSelectedSave();
+        await _viewModel.DeleteSelectedSaveAsync();
         _viewModel.SelectedGame = null;
 
         await Shell.Current.GoToAsync("gametable", new Dictionary<string, object>

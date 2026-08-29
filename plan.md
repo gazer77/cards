@@ -107,6 +107,17 @@ heuristics, and conservative poker betting; everything else falls through to ran
       (casino green) is the only implementation, and nothing constructs another
 - [ ] Player-uploaded custom backgrounds — no file/media picker in the app
 - [x] Custom house rules (per-game toggles) — 15 of 16 games define house rules
+- [x] Save and resume any number of games — each save gets its own slot carrying the
+      seat count and house rules it was written at, listed for resuming on the setup
+      screen. Replaces one-slot-per-game, which let a four-player save load into a
+      two-player game and strand cards in hands nobody could reach
+- [ ] **Save and resume multiplayer games** — deliberately not attempted yet. Saving is
+      only the visible part: a resumed multiplayer game has to re-establish who was in
+      which seat, agree with peers on which save is authoritative, and handle players
+      who do not come back. That needs stable seat identity and reconnect, which are
+      Phase 3 of the web plan and do not exist yet. `SaveSlot` and `GameSaveService`
+      are shaped so a multiplayer save is another slot with roster and room information
+      attached, not a second mechanism. **Blocked on Phase 3.**
 - [x] Hand sort remembered per game — the web client stores the player's choice under
       `sort:{gameId}` and reapplies it each deal; "Free" is remembered too, so a
       hand arranged by hand is not re-sorted underneath the player
