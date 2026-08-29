@@ -123,7 +123,18 @@
             ? []
             : Rules.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    protected override void OnInitialized() => Vm.Changed += OnVmChanged;
+    protected override void OnInitialized()
+    {
+        Vm.Changed       += OnVmChanged;
+        Vm.MessagePosted += OnMessagePosted;
+    }
+
+    private void OnMessagePosted(string playerId, string text)
+    {
+        // The log always records the line; the bubble is what the setting governs.
+        if (Settings.ShowGameMessages)
+            _canvas?.Renderer?.PostMessage(playerId, text);
+    }
 
     private void OnVmChanged()
     {
@@ -269,6 +280,7 @@
     private async Task NewGame()
     {
         Vm.DeleteSave();
+        _canvas?.Renderer?.ClearMessages();   // last game's bubbles are not this game's
         await Vm.StartAsync(GameId, Seats, EnabledRules, resume: false);
     }
 
@@ -278,5 +290,9 @@
         Nav.NavigateTo("/");
     }
 
-    public void Dispose() => Vm.Changed -= OnVmChanged;
+    public void Dispose()
+    {
+        Vm.Changed       -= OnVmChanged;
+        Vm.MessagePosted -= OnMessagePosted;
+    }
 }

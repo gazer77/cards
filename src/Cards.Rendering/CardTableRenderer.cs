@@ -65,6 +65,45 @@ public sealed class CardTableRenderer
 
     private TaskCompletionSource? _nextPaintCompletion;
 
+    // ── Speech bubbles ────────────────────────────────────────────────────────
+
+    private readonly SpeechBubbles _bubbles = new();
+
+    /// <summary>
+    /// Shows a message beside a player's seat for a few seconds.
+    ///
+    /// Anchored to the seat rather than shown in a bar, because the status line
+    /// describes one player's action and a shared bar leaves the reader working out
+    /// whose. A seat that acts again before its bubble fades replaces it.
+    /// </summary>
+    public void PostMessage(string playerId, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        _bubbles.Post(playerId, text, NowMs());
+        _driver.RequestFrames();   // bubbles fade, so they need frames to fade in
+    }
+
+    /// <summary>Removes every bubble — used when a new game replaces the table.</summary>
+    public void ClearMessages()
+    {
+        _bubbles.Clear();
+        RequestRedraw();
+    }
+
+    /// <summary>
+    /// Where a player's bubble should point. Prefers the seat's hand, which is where
+    /// a player "is" on the table; falls back to any zone they own.
+    /// </summary>
+    private SKRect? AnchorForPlayer(string playerId)
+    {
+        var hand = _lastLayouts.FirstOrDefault(
+            l => l.Zone.OwnerId == playerId && l.Zone.Type == "hand");
+
+        var zone = hand ?? _lastLayouts.FirstOrDefault(l => l.Zone.OwnerId == playerId);
+        return zone?.Bounds;
+    }
+
     // ── Diagnostics ───────────────────────────────────────────────────────────
 
     private readonly RenderDiagnostics        _diagnostics = new();
@@ -369,13 +408,20 @@ public sealed class CardTableRenderer
     private void OnAnimTimerTick()
     {
         RequestRedraw();
+
+        // Bubbles fade on the same clock as the animations, so they have to hold the
+        // loop open too — otherwise a message posted on a quiet table paints once and
+        // then sits there forever, never fading.
+        _bubbles.Expire(NowMs());
+
         if
         (
             !_dealAnims.Any() &&
             !_flipAnims.Any() &&
             !_receiveAnims.Any() &&
             !_flyInAnims.Any() &&
-            !_shuffleAnims.Any()
+            !_shuffleAnims.Any() &&
+            !_bubbles.Any
         )
         {
             _driver.StopFrames();
@@ -488,6 +534,11 @@ public sealed class CardTableRenderer
 
         if (_isDragging && _dragCardId is not null)
             DrawDragGhost(canvas);
+
+        // Bubbles sit above the table but below the tooltip, which is a direct response
+        // to a touch and must never be covered by an incidental message.
+        if (_bubbles.Any)
+            _bubbles.Draw(canvas, info, NowMs(), AnchorForPlayer);
 
         DrawCardTooltip(canvas, info);
     }

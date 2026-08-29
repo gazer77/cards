@@ -126,6 +126,42 @@ public sealed class GameTableViewModel
 
     public IReadOnlyList<string> GameLog => _state?.GameLog ?? [];
 
+    /// <summary>
+    /// Raised when something new happens, with the seat it concerns.
+    ///
+    /// The engine has no notion of events — it exposes a status line describing the
+    /// position. Watching that line for changes is what turns it into a history, and
+    /// it is also the only producer the game log has ever had: nothing in the engine
+    /// writes to <see cref="GameState.GameLog"/>, so a client that does not do this
+    /// has an empty log rather than a missing view.
+    /// </summary>
+    public event Action<string, string>? MessagePosted;
+
+    /// <summary>Last status text turned into a log entry, so a steady state is not repeated.</summary>
+    private string _lastLoggedStatus = string.Empty;
+
+    /// <summary>
+    /// Records the status line if it has changed since the last check.
+    ///
+    /// Attributed to whoever is on turn, which is right for a line describing what a
+    /// player is being asked to do and approximate for one describing what just
+    /// happened. The engine does not say which it is, so this is the best attribution
+    /// available without extending it.
+    /// </summary>
+    private void CaptureStatusChange()
+    {
+        if (_logic is null || _state is null) return;
+
+        string text = _logic.GetStatusText(_state);
+        if (string.IsNullOrEmpty(text) || text == _lastLoggedStatus) return;
+
+        _lastLoggedStatus = text;
+        _state.GameLog.Add(text);
+
+        if (_state.Players.Count > 0)
+            MessagePosted?.Invoke(_state.CurrentPlayer.Id, text);
+    }
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -163,6 +199,12 @@ public sealed class GameTableViewModel
 
         _state = state;
         _logic = logic;
+
+        // A restored game keeps the log it was saved with; only the opening line of a
+        // fresh game is new. Either way the baseline is set here so resuming does not
+        // replay the whole history as bubbles.
+        _lastLoggedStatus = string.Empty;
+        CaptureStatusChange();
 
         Changed?.Invoke();
 
@@ -356,6 +398,7 @@ public sealed class GameTableViewModel
     {
         _animator.CaptureBeforeMove(_state!);
         _logic!.Apply(_state!, action);
+        CaptureStatusChange();
         Changed?.Invoke();
         await _animator.PlayMoveAsync(_state!);
     }
