@@ -121,6 +121,23 @@ heuristics, and conservative poker betting; everything else falls through to ran
 - [x] Hand sort remembered per game — the web client stores the player's choice under
       `sort:{gameId}` and reapplies it each deal; "Free" is remembered too, so a
       hand arranged by hand is not re-sorted underneath the player
+### Decks
+- [x] Declared deck composition — a game states its ranks, suits, copies and jokers
+      rather than picking from a fixed list of names in C#. Copies and jokers scale
+      with the table, in the same shape `cards_per_player` uses. The old names remain
+      as shorthand, and an unknown deck now fails instead of silently dealing 52
+- [ ] **Expressions for deck composition** — Hand and Foot's rule is "one pack per
+      player, plus one", which today takes five `max_players` tiers for copies and
+      five more for jokers. An expression (`"copies": "players + 1"`) would say it
+      once. Wants a small, safe evaluator — no arbitrary code — and the same form
+      would suit `cards_per_player` and house-rule overrides
+- [ ] **Custom suits** — `Suit` is an enum with four values, and the renderer draws
+      each one as a hand-authored vector path (`SuitShapes`). A fifth suit needs
+      artwork, a sort order, and a way for scoring rules that name suits to refer to
+      it; `DeckSpec` already parses a suit list, so the parsing is the small part
+- [ ] **Custom card graphics** — card faces are drawn procedurally, which is why they
+      cost nothing to ship and cache well. Player-supplied art means an image
+      pipeline, per-card assets, and a fallback when one is missing
 - [ ] **Choosable default hand sort** — a settings-screen preference applied to games
       the player has not set individually. Today the fallback is whatever the game
       definition names in `ui.default_sort`, which cannot be overridden globally.

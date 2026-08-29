@@ -219,7 +219,7 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
         if (deck.Count < state.Players.Count * 2 + 4)
         {
             deck.Clear();
-            var cards = DeckBuilder.Build(state.Definition.DeckType);
+            var cards = DeckBuilder.Build(state.Definition, state.Players.Count);
             DeckBuilder.Shuffle(cards, state.Rng);
             foreach (var c in cards) deck.Add(c);
         }

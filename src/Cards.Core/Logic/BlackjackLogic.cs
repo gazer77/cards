@@ -28,7 +28,7 @@ public sealed class BlackjackLogic : GameLogicBase
         // Always create playerCount human players + 1 dealer (the extra player).
         SetupEngine.Instance.Setup(state, playerCount + 1, enabledHouseRules);
 
-        var deck = DeckBuilder.Build(state.Definition.DeckType);
+        var deck = DeckBuilder.Build(state.Definition, state.Players.Count);
         DeckBuilder.Shuffle(deck);
         foreach (var c in deck) state.Zones["deck"].Add(c);
 

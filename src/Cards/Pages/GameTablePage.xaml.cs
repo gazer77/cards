@@ -248,7 +248,7 @@ public partial class GameTablePage : ContentPage
 
         if (state.Zones.TryGetValue("deck", out var deck))
         {
-            var cards = DeckBuilder.Build(definition.DeckType);
+            var cards = DeckBuilder.Build(definition, PlayerCount);
             DeckBuilder.Shuffle(cards);
             deck.AddRange(cards);
         }

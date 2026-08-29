@@ -35,12 +35,14 @@ public sealed class PlayableConfigurationTests
     /// Real Hand and Foot uses five or six decks — fixing this needs a larger deck type
     /// in DeckBuilder, which today tops out at standard-104.
     /// </summary>
-    private static readonly HashSet<(string Game, int Players)> KnownBroken =
-    [
-        ("hand-and-foot", 4),
-        ("hand-and-foot", 5),
-        ("hand-and-foot", 6),
-    ];
+    /// <summary>
+    /// Configurations known not to work, asserted to be still broken so that whoever
+    /// fixes one is told to remove the exemption.
+    ///
+    /// Empty: Hand and Foot at 4-6 players was the only entry, and it now deals from a
+    /// deck that scales with the table rather than a fixed 104 cards.
+    /// </summary>
+    private static readonly HashSet<(string Game, int Players)> KnownBroken = [];
 
     [Theory]
     [MemberData(nameof(EverySupportedSeatCount))]

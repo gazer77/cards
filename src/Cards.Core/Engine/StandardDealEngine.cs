@@ -56,7 +56,7 @@ public sealed class StandardDealEngine : IDealStrategy
                 $"Game '{state.GameId}' requires a 'deck' zone before calling StandardDealEngine.");
 
         // Build and shuffle into the deck zone.
-        var cards = DeckBuilder.Build(state.Definition.DeckType);
+        var cards = DeckBuilder.Build(state.Definition, state.Players.Count);
         DeckBuilder.Shuffle(cards, state.Rng);
         foreach (var c in cards) deckZone.Add(c);
 
