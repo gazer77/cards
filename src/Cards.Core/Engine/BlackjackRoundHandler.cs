@@ -192,11 +192,24 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
             return;
         }
 
-        // Clear hands and re-deal for next round
+        // Spent hands go to the discard tray, not out of existence. Clearing them
+        // destroyed several cards a round, which the deck rebuild below then quietly
+        // replaced — so the shoe stayed plausible while the pack was being consumed.
+        var discard = state.FindZone("discard");
+
         foreach (var p in state.Players)
         {
-            if (state.Zones.TryGetValue($"hand:{p.Id}", out var hand))
-                hand.Clear();
+            if (!state.Zones.TryGetValue($"hand:{p.Id}", out var hand)) continue;
+
+            foreach (var card in hand.Cards.ToList())
+            {
+                hand.Remove(card);
+                card.IsFaceUp = true;
+
+                // Without a discard zone the cards go back to the bottom of the deck.
+                // Less like a real table, but a game that loses cards is worse.
+                (discard ?? state.Zones["deck"]).Add(card);
+            }
         }
 
         state.Metadata.Remove("bj_state");
@@ -215,8 +228,24 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
     {
         var deck = state.Zones["deck"];
 
-        // Rebuild deck when depleted (new round, or first call if engine left it empty)
-        if (deck.Count < state.Players.Count * 2 + 4)
+        int needed = state.Players.Count * 2 + 4;
+
+        // Running low: reshuffle the discard tray back in, the way a real shoe is
+        // recycled. Rebuilding from scratch instead was what hid the cards being
+        // destroyed at the end of every round.
+        if (deck.Count < needed && state.FindZone("discard") is { Count: > 0 } discard)
+        {
+            foreach (var card in discard.Cards.ToList())
+            {
+                discard.Remove(card);
+                card.IsFaceUp = false;
+                deck.Add(card);
+            }
+            DeckBuilder.Shuffle(deck.Cards, state.Rng);
+        }
+
+        // Still short — the first deal, where the engine leaves the deck empty.
+        if (deck.Count < needed)
         {
             deck.Clear();
             var cards = DeckBuilder.Build(state.Definition, state.Players.Count);

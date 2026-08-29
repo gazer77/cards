@@ -52,6 +52,8 @@ public sealed class StuckGameProbe
                 $"actions=[{string.Join(",", actions.Select(a => a.Type))}] " +
                 $"selectable={selectable.Count} selected={(selected.Length == 0 ? "-" : selected)} " +
                 $"drops=[{string.Join(",", drops)}] " +
+                $"cards={state.Zones.Values.Sum(z => z.Count)} " +
+                $"[{string.Join(" ", state.Zones.Where(z => z.Value.Count > 0).Select(z => $"{z.Key}:{z.Value.Count}"))}] " +
                 $"auto={logic.GetAutoAdvanceDelay(state)?.TotalMilliseconds.ToString() ?? "null"}");
 
             if (TableDriver.Step(state, logic, ref tap) == TableDriver.StepResult.Stuck)

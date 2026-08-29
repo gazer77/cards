@@ -19,7 +19,13 @@ namespace Cards.Tests;
 /// </summary>
 public sealed class PlayabilitySweep
 {
-    private const int MaxSteps = 4000;
+    /// <summary>
+    /// Step budget. Raise it with SWEEP_STEPS to tell a long game from a stuck one --
+    /// War legitimately takes hundreds of steps, and a game played to a target score
+    /// takes many hands.
+    /// </summary>
+    private static int MaxSteps =>
+        int.TryParse(Environment.GetEnvironmentVariable("SWEEP_STEPS"), out var n) ? n : 4000;
 
     private sealed record Outcome(
         string GameId, int Seats, bool Finished, int Steps, string Phase, string Reason);
@@ -79,6 +85,9 @@ public sealed class PlayabilitySweep
             string.Join(',', state.Zones.OrderBy(z => z.Key, StringComparer.Ordinal)
                                         .Select(z => $"{z.Key}:{z.Value.Count}")));
 
+    private static int CountCards(GameState state)
+        => state.Zones.Values.Sum(z => z.Count);
+
     private static Outcome Run(GameLoader loader, string gameId, int seats)
     {
         var definition = loader.LoadAsync(gameId).GetAwaiter().GetResult();
@@ -104,6 +113,7 @@ public sealed class PlayabilitySweep
         int steps = 0;
         int tap = 0;
         string reason = "";
+        int cardCount = CountCards(state);
 
         // A rolling window of recent positions. A game making progress keeps producing
         // new ones; a livelocked game revisits a handful forever.
@@ -123,6 +133,17 @@ public sealed class PlayabilitySweep
                 if (result == TableDriver.StepResult.Finished) break;
 
                 steps++;
+
+                // Cards must not leave the game. Golf drew into a hand zone it never
+                // declared, so every draw removed a card from the deck and dropped it
+                // nowhere — the null-conditional that added it silently did nothing.
+                // The symptom was a livelock; the cause was a leak.
+                int now = CountCards(state);
+                if (now != cardCount)
+                {
+                    reason = $"CARDS LOST — {cardCount} became {now} at step {steps}";
+                    break;
+                }
 
                 recent.Enqueue(Signature(state));
                 if (recent.Count > 400) recent.Dequeue();

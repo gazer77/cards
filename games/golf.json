@@ -21,7 +21,8 @@
   "zones": [
     { "id": "deck",    "type": "deck",   "visibility": "none" },
     { "id": "discard", "type": "pile",   "visibility": "top" },
-    { "id": "grid",    "type": "grid",   "owner": "each_player", "rows": 2, "cols": 3, "initial_face": "down", "peek_count": 2 }
+    { "id": "grid",    "type": "grid",   "owner": "each_player", "rows": 2, "cols": 3, "initial_face": "down", "peek_count": 2 },
+    { "id": "hand",    "type": "hand",   "owner": "each_player", "visibility": "owner" }
   ],
   "phases": [
     {
