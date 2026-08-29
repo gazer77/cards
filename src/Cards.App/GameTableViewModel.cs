@@ -273,7 +273,7 @@ public sealed class GameTableViewModel
                 }
             }
 
-            modes.Add((CustomSortMode, "Custom (Drag to Arrange)"));
+            modes.Add((CustomSortMode, "Free"));
             return modes;
         }
     }

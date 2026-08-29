@@ -107,6 +107,16 @@ heuristics, and conservative poker betting; everything else falls through to ran
       (casino green) is the only implementation, and nothing constructs another
 - [ ] Player-uploaded custom backgrounds — no file/media picker in the app
 - [x] Custom house rules (per-game toggles) — 15 of 16 games define house rules
+- [x] Hand sort remembered per game — the web client stores the player's choice under
+      `sort:{gameId}` and reapplies it each deal; "Free" is remembered too, so a
+      hand arranged by hand is not re-sorted underneath the player
+- [ ] **Choosable default hand sort** — a settings-screen preference applied to games
+      the player has not set individually. Today the fallback is whatever the game
+      definition names in `ui.default_sort`, which cannot be overridden globally.
+      Wants the same settings screen as animation speed (see Phase 6 in the web plan);
+      worth doing as one screen rather than piecemeal. MAUI stores nothing per game
+      at all and should adopt `SettingsService.GetHandSort` when it moves onto
+      `GameTableViewModel`.
 
 ### Learning & Rules
 - [x] Rules reference for every game — `HelpPage` + `games/help/*.md`

@@ -375,3 +375,7 @@ html, body {
 
 .confirm p { margin: 0; color: var(--ink-dim); }
 .confirm-buttons { display: flex; gap: 0.6rem; justify-content: flex-end; }
+
+/* The sort currently in effect for this game. */
+.menu-item.chosen { color: #7cffb2; }
+.menu-item.chosen::after { content: " ✓"; }

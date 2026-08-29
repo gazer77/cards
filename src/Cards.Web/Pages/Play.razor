@@ -28,7 +28,8 @@
                 @foreach (var (mode, label) in _sortModes)
                 {
                     var captured = mode;
-                    <button class="menu-item indent" @onclick="() => SortHand(captured)">@label</button>
+                    <button class="menu-item indent @(_sort == captured ? "chosen" : "")"
+                            @onclick="() => SortHand(captured)">@label</button>
                 }
                 <hr />
             }
@@ -178,6 +179,7 @@
         _failed = !await Vm.StartAsync(GameId, Seats, EnabledRules);
         _title      = Vm.State?.Definition.Name ?? GameId;
         _sortModes  = Vm.SortModes;
+        ApplyRememberedSort();
         StateHasChanged();
     }
 
@@ -196,6 +198,7 @@
 
     private bool _menu;
     private IReadOnlyList<(string Mode, string Label)> _sortModes = [];
+    private string? _sort;
 
     private string? _overlay;
     private string  _overlayTitle = "";
@@ -209,10 +212,25 @@
     private void SortHand(string mode)
     {
         _menu = false;
+        _sort = mode;
+        Settings.SetHandSort(GameId, mode);
 
-        // "Custom" means the player arranges the hand by dragging, so there is
-        // deliberately nothing to do but close the menu.
+        // "Free" means the player arranges the hand by dragging, so there is
+        // deliberately nothing to sort — but the choice is still remembered, so their
+        // arrangement is not undone next deal.
         if (mode != GameTableViewModel.CustomSortMode) Vm.SortHand(mode);
+    }
+
+    /// <summary>
+    /// Applies the player's remembered sort for this game, if they have chosen one.
+    /// A game's own default_sort applies when they have not.
+    /// </summary>
+    private void ApplyRememberedSort()
+    {
+        _sort = Settings.GetHandSort(GameId);
+
+        if (_sort is not null && _sort != GameTableViewModel.CustomSortMode)
+            Vm.SortHand(_sort);
     }
 
     private void ShowLog()

@@ -53,6 +53,25 @@ public class SettingsService
     }
 
     /// <summary>
+    /// The hand sort the player last chose for a game, or null if they never have.
+    ///
+    /// Stored per game because the right answer differs by game — grouping by suit
+    /// helps in a trick-taking game and gets in the way in a rummy game — and a player
+    /// who sets it once should not have to set it again every deal.
+    ///
+    /// Null means "use the game's own default_sort", which is deliberately different
+    /// from the player having explicitly chosen Free.
+    /// </summary>
+    public string? GetHandSort(string gameId)
+    {
+        var value = _store.Get($"sort:{gameId}", "");
+        return string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    public void SetHandSort(string gameId, string mode)
+        => _store.Set($"sort:{gameId}", mode);
+
+    /// <summary>
     /// Shows the frame-timing overlay on the table. Off by default.
     ///
     /// Persisted rather than a launch flag so it survives the reload it takes to
