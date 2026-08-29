@@ -2,6 +2,7 @@
 @inject GameTableViewModel Vm
 @inject NavigationManager Nav
 @inject Cards.Services.SettingsService Settings
+@inject Cards.Services.HelpService Help
 @implements IDisposable
 
 <PageTitle>@(_title)</PageTitle>
@@ -13,8 +14,65 @@
         <button class="link @(_diagnostics ? "on" : "")"
                 title="Frame timings"
                 @onclick="ToggleDiagnostics">fps</button>
-        <button class="link" @onclick="NewGame">New</button>
+        <button class="link gear" title="Menu" @onclick="() => _menu = !_menu">&#9881;</button>
     </header>
+
+    @if (_menu)
+    {
+        @* Click-catcher: tapping anywhere off the menu closes it. *@
+        <div class="scrim" @onclick="() => _menu = false"></div>
+        <nav class="menu">
+            @if (Vm.CanSortHand)
+            {
+                <div class="menu-heading">Sort hand</div>
+                @foreach (var (mode, label) in _sortModes)
+                {
+                    var captured = mode;
+                    <button class="menu-item indent" @onclick="() => SortHand(captured)">@label</button>
+                }
+                <hr />
+            }
+            <button class="menu-item" @onclick="ShowLog">Game log</button>
+            <button class="menu-item" @onclick="ShowRules">Rules</button>
+            <button class="menu-item" @onclick="ConfirmNewGame">New game</button>
+            <button class="menu-item" @onclick="ConfirmLeave">Leave game</button>
+        </nav>
+    }
+
+    @if (_overlay is not null)
+    {
+        <div class="scrim" @onclick="() => _overlay = null"></div>
+        <section class="overlay">
+            <h2>@_overlayTitle</h2>
+            <div class="overlay-body">
+                @if (_overlayLines is not null)
+                {
+                    @foreach (var line in _overlayLines)
+                    {
+                        <p class="log-line">@line</p>
+                    }
+                }
+                else
+                {
+                    <pre class="rules">@_overlay</pre>
+                }
+            </div>
+            <button class="action" @onclick="() => _overlay = null">Close</button>
+        </section>
+    }
+
+    @if (_confirm is not null)
+    {
+        <div class="scrim"></div>
+        <section class="overlay confirm">
+            <h2>@_confirmTitle</h2>
+            <p>@_confirmMessage</p>
+            <div class="confirm-buttons">
+                <button class="action" @onclick="() => _confirm = null">Cancel</button>
+                <button class="action primary" @onclick="RunConfirmed">@_confirmVerb</button>
+            </div>
+        </section>
+    }
 
     @if (_failed)
     {
@@ -107,7 +165,8 @@
         PushToCanvas();
 
         _failed = !await Vm.StartAsync(GameId, Seats, EnabledRules);
-        _title  = Vm.State?.Definition.Name ?? GameId;
+        _title      = Vm.State?.Definition.Name ?? GameId;
+        _sortModes  = Vm.SortModes;
         StateHasChanged();
     }
 
@@ -121,6 +180,79 @@
 
     private void OnCardReordered((string CardId, int NewIndex) e)
         => Vm.ReorderInHand(e.CardId, e.NewIndex);
+
+    // ── Gear menu ─────────────────────────────────────────────────────────────
+
+    private bool _menu;
+    private IReadOnlyList<(string Mode, string Label)> _sortModes = [];
+
+    private string? _overlay;
+    private string  _overlayTitle = "";
+    private IReadOnlyList<string>? _overlayLines;
+
+    private Func<Task>? _confirm;
+    private string _confirmTitle   = "";
+    private string _confirmMessage = "";
+    private string _confirmVerb    = "";
+
+    private void SortHand(string mode)
+    {
+        _menu = false;
+
+        // "Custom" means the player arranges the hand by dragging, so there is
+        // deliberately nothing to do but close the menu.
+        if (mode != GameTableViewModel.CustomSortMode) Vm.SortHand(mode);
+    }
+
+    private void ShowLog()
+    {
+        _menu         = false;
+        _overlayTitle = "Game log";
+        _overlayLines = Vm.GameLog.Count > 0 ? Vm.GameLog : ["Nothing has happened yet."];
+        _overlay      = "";
+    }
+
+    private async Task ShowRules()
+    {
+        _menu         = false;
+        _overlayTitle = "Rules";
+        _overlayLines = null;
+        _overlay      = "Loading…";
+        StateHasChanged();
+
+        _overlay = await Help.LoadAsync(GameId);
+    }
+
+    private void ConfirmNewGame()
+    {
+        _menu           = false;
+        _confirmTitle   = "New game";
+        _confirmMessage = "Start a new game? Your current progress will be lost.";
+        _confirmVerb    = "New game";
+        _confirm        = NewGame;
+    }
+
+    private void ConfirmLeave()
+    {
+        _menu = false;
+
+        // A finished game has nothing left to lose, so leaving it needs no warning.
+        if (Vm.IsGameOver) { LeaveGame(); return; }
+
+        _confirmTitle   = "Leave game";
+        _confirmMessage = "Leave this game? Your progress is saved and you can resume it later.";
+        _confirmVerb    = "Leave";
+        _confirm        = () => { LeaveGame(); return Task.CompletedTask; };
+    }
+
+    private async Task RunConfirmed()
+    {
+        var action = _confirm;
+        _confirm = null;
+        if (action is not null) await action();
+    }
+
+    private void LeaveGame() => _ = GoHome();
 
     private void ToggleDiagnostics()
     {

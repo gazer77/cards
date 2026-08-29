@@ -183,6 +183,81 @@ public sealed class GameTableViewModel
         if (_state is not null) _saves.DeleteSave(_state.GameId);
     }
 
+    // ── Hand sorting ──────────────────────────────────────────────────────────
+
+    /// <summary>Every sort a game may offer, in the order they are shown by default.</summary>
+    private static readonly (string Mode, string Label)[] AllSortModes =
+    [
+        ("suit_value",    "By Suit & Value"),
+        ("suit_stable",   "By Suit"),
+        ("rank_ace_high", "By Value (Ace High)"),
+        ("rank",          "By Value (Ace Low)"),
+    ];
+
+    /// <summary>The mode meaning "leave my hand alone, I arrange it myself".</summary>
+    public const string CustomSortMode = "none";
+
+    /// <summary>
+    /// Sorts this game offers, most useful first.
+    ///
+    /// A definition may name its own modes (a trick-taking game wants suits grouped;
+    /// a rummy game usually does not), in which case only those are offered, in the
+    /// order given. Its default_sort is promoted to the top, and manual arrangement
+    /// is always available last.
+    /// </summary>
+    public IReadOnlyList<(string Mode, string Label)> SortModes
+    {
+        get
+        {
+            var ui = _state?.Definition.Ui;
+
+            var modes = ui?.SortModes is { Count: > 0 } configured
+                ? configured
+                    .Select(m => AllSortModes.FirstOrDefault(o => o.Mode == m))
+                    .Where(o => o.Mode is not null)
+                    .ToList()
+                : AllSortModes.ToList();
+
+            if (!string.IsNullOrEmpty(ui?.DefaultSort))
+            {
+                int i = modes.FindIndex(o => o.Mode == ui.DefaultSort);
+                if (i > 0)
+                {
+                    var promoted = modes[i];
+                    modes.RemoveAt(i);
+                    modes.Insert(0, promoted);
+                }
+            }
+
+            modes.Add((CustomSortMode, "Custom (Drag to Arrange)"));
+            return modes;
+        }
+    }
+
+    /// <summary>
+    /// Whether this game has a hand the player can see and therefore sort. Games whose
+    /// hands are all face-down piles offer nothing to arrange.
+    /// </summary>
+    public bool CanSortHand =>
+        _state is not null &&
+        _state.Zones.Values.Any(z => z.Type == "hand" && z.Visibility is "owner" or "all");
+
+    /// <summary>
+    /// Reorders the player's own hands. Purely cosmetic — it never advances the game.
+    /// Only zones the player can actually see are touched; sorting a hidden hand would
+    /// do nothing visible and reorder an opponent's cards.
+    /// </summary>
+    public void SortHand(string mode)
+    {
+        if (_state is null || string.IsNullOrEmpty(mode) || mode == CustomSortMode) return;
+
+        foreach (var zone in _state.Zones.Values)
+            if (zone.Type == "hand" && zone.Visibility is "owner" or "all")
+                HandSorter.Sort(zone, mode);
+
+        Changed?.Invoke();
+    }
+
     // ── Input ─────────────────────────────────────────────────────────────────
 
     public Task TapCard(string cardId)

@@ -26,6 +26,7 @@ builder.Services.AddSingleton<ISaveStore>(sp => sp.GetRequiredService<BrowserSav
 
 builder.Services.AddSingleton<SettingsService>();
 builder.Services.AddSingleton<GameSaveService>();
+builder.Services.AddSingleton<HelpService>();
 builder.Services.AddTransient<GameTableViewModel>();
 
 var host = builder.Build();
