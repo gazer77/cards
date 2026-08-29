@@ -379,3 +379,18 @@ html, body {
 /* The sort currently in effect for this game. */
 .menu-item.chosen { color: #7cffb2; }
 .menu-item.chosen::after { content: " ✓"; }
+
+/* Overlay footer: export actions on the left, Close on the right. */
+.overlay-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.overlay-buttons .action:last-child { margin-left: auto; }
+
+.export-note {
+    font-size: 0.85rem;
+    color: var(--ink-dim);
+}

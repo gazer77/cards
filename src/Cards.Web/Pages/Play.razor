@@ -4,6 +4,7 @@
 @inject Cards.Services.SettingsService Settings
 @inject Cards.Services.HelpService Help
 @inject IConfiguration Config
+@inject IJSRuntime JS
 @implements IDisposable
 
 <PageTitle>@(_title)</PageTitle>
@@ -59,7 +60,15 @@
                     <pre class="rules">@_overlay</pre>
                 }
             </div>
-            <button class="action" @onclick="() => _overlay = null">Close</button>
+            <div class="overlay-buttons">
+                @if (_overlayLines is not null)
+                {
+                    <span class="export-note">@_exportNote</span>
+                    <button class="action" @onclick="CopyReport">Copy report</button>
+                    <button class="action" @onclick="DownloadReport">Save file</button>
+                }
+                <button class="action" @onclick="() => _overlay = null">Close</button>
+            </div>
         </section>
     }
 
@@ -248,7 +257,59 @@
         _overlayTitle = "Game log";
         _overlayLines = Vm.GameLog.Count > 0 ? Vm.GameLog : ["Nothing has happened yet."];
         _overlay      = "";
+        _exportNote   = "";
     }
+
+    // ── Export ────────────────────────────────────────────────────────────────
+
+    private string _exportNote = "";
+
+    /// <summary>
+    /// The full report: state, every card and where it is, metadata and the log.
+    ///
+    /// The log alone is only half a card-game bug; the other half is where the cards
+    /// actually are, which is what the game hides and what cannot be counted reliably
+    /// from a screenshot.
+    /// </summary>
+    private string BuildReport()
+        => GameReport.Build(Vm, Seats, EnabledRules,
+                            _canvas?.Renderer?.Diagnostics.CardCensus);
+
+    private async Task CopyReport()
+    {
+        try
+        {
+            var module = await ExportModule();
+            bool ok = await module.InvokeAsync<bool>("copy", BuildReport());
+
+            // The clipboard can be refused for reasons the page cannot see, so say
+            // which happened rather than looking like nothing occurred.
+            _exportNote = ok ? "Copied." : "Copy blocked — use Save file.";
+        }
+        catch
+        {
+            _exportNote = "Copy failed — use Save file.";
+        }
+    }
+
+    private async Task DownloadReport()
+    {
+        try
+        {
+            var module = await ExportModule();
+            await module.InvokeVoidAsync("download", GameReport.FileName(Vm), BuildReport());
+            _exportNote = "Saved.";
+        }
+        catch
+        {
+            _exportNote = "Save failed.";
+        }
+    }
+
+    private IJSObjectReference? _export;
+
+    private async Task<IJSObjectReference> ExportModule()
+        => _export ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/export.js");
 
     private async Task ShowRules()
     {
