@@ -234,9 +234,9 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
         DealFaceDown(state, dealerId);
 
         // Record deal animation
-        var byPlayer = new Dictionary<int, List<string>>();
+        var byPlayer = new Dictionary<int, List<int>>();
         for (int i = 0; i <= dealerIdx; i++)
-            byPlayer[i] = state.Zones[$"hand:{state.Players[i].Id}"].Cards.Select(c => c.Id).ToList();
+            byPlayer[i] = state.Zones[$"hand:{state.Players[i].Id}"].Cards.Select(c => c.Uid).ToList();
 
         var steps = new List<(int, int)>();
         for (int i = 0; i <= dealerIdx; i++) steps.Add((i, 1));

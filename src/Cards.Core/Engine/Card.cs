@@ -17,6 +17,24 @@ public class Card
     public bool IsFaceUp { get; set; }
     public bool IsWild { get; set; }
 
+    /// <summary>
+    /// Identifies this physical card, as distinct from what it is.
+    ///
+    /// <see cref="Id"/> describes a card — rank and suit — and two cards from a
+    /// multi-deck game share it. That is correct for the rules, where any five of
+    /// hearts is as good as another, and wrong for anything tracking a card as an
+    /// object: the renderer keys hit-testing and every animation off it, so with
+    /// duplicates a tap can move a different card and a fly-in can land on the wrong
+    /// one. Masked multiplayer needs it too, since a hidden card has no rank or suit
+    /// to name it by.
+    ///
+    /// Assigned in <see cref="DeckBuilder"/> in build order, so the same definition
+    /// yields the same uids on every client and a shuffle only reorders them. Zero
+    /// means "not from a built deck" — a hypothetical card used to evaluate a hand,
+    /// which is never drawn.
+    /// </summary>
+    public int Uid { get; set; }
+
     public Card(Suit suit, Rank rank, bool isFaceUp = false)
     {
         Suit = suit;

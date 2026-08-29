@@ -22,7 +22,7 @@ public sealed class RendererTableAnimator : ITableAnimator
     private readonly CardTableRenderer _renderer;
 
     /// <summary>Card id → zone id, as of the last <see cref="CaptureBeforeMove"/>.</summary>
-    private Dictionary<string, string> _sourceZones = [];
+    private Dictionary<int, string> _sourceZones = [];
 
     /// <summary>
     /// Card id → where it was painted, as of the last <see cref="CaptureBeforeMove"/>.
@@ -33,7 +33,7 @@ public sealed class RendererTableAnimator : ITableAnimator
     /// that repaint has happened yet is a matter of host scheduling, so relying on it
     /// not to would make the animation silently host-dependent.
     /// </summary>
-    private Dictionary<string, SKPoint> _sourcePoints = [];
+    private Dictionary<int, SKPoint> _sourcePoints = [];
 
     public RendererTableAnimator(CardTableRenderer renderer) => _renderer = renderer;
 
@@ -41,17 +41,17 @@ public sealed class RendererTableAnimator : ITableAnimator
 
     public void CaptureBeforeMove(GameState state)
     {
-        _sourceZones  = new Dictionary<string, string>();
-        _sourcePoints = new Dictionary<string, SKPoint>();
+        _sourceZones  = new Dictionary<int, string>();
+        _sourcePoints = new Dictionary<int, SKPoint>();
 
         foreach (var (zoneId, zone) in state.Zones)
             foreach (var card in zone.Cards)
             {
-                _sourceZones[card.Id] = zoneId;
+                _sourceZones[card.Uid] = zoneId;
 
-                var rect = _renderer.GetLastCardRect(card.Id);
+                var rect = _renderer.GetLastCardRect(card.Uid);
                 if (rect.HasValue)
-                    _sourcePoints[card.Id] = new SKPoint(rect.Value.MidX, rect.Value.MidY);
+                    _sourcePoints[card.Uid] = new SKPoint(rect.Value.MidX, rect.Value.MidY);
             }
     }
 
@@ -61,8 +61,8 @@ public sealed class RendererTableAnimator : ITableAnimator
         // whole pack at once and animating it individually looks like a glitch.
         var moved = state.Zones.Values
             .Where(z => z.Type != "deck")
-            .SelectMany(z => z.Cards.Select(c => (CardId: c.Id, DestZoneId: z.Id)))
-            .Where(x => !_sourceZones.TryGetValue(x.CardId, out var prev) || prev != x.DestZoneId)
+            .SelectMany(z => z.Cards.Select(c => (Uid: c.Uid, DestZoneId: z.Id)))
+            .Where(x => !_sourceZones.TryGetValue(x.Uid, out var prev) || prev != x.DestZoneId)
             .ToList();
 
         if (moved.Count == 0) return;
@@ -81,24 +81,24 @@ public sealed class RendererTableAnimator : ITableAnimator
     /// all that is available for rotated zones, such as an opponent's hand along the
     /// side of the table), then the deck.
     /// </summary>
-    private Dictionary<string, SKPoint> ResolveSources(
-        IReadOnlyList<(string CardId, string DestZoneId)> moved)
+    private Dictionary<int, SKPoint> ResolveSources(
+        IReadOnlyList<(int Uid, string DestZoneId)> moved)
     {
-        var sources = new Dictionary<string, SKPoint>();
-        foreach (var (cardId, _) in moved)
+        var sources = new Dictionary<int, SKPoint>();
+        foreach (var (uid, _) in moved)
         {
-            if (_sourcePoints.TryGetValue(cardId, out var pt))
+            if (_sourcePoints.TryGetValue(uid, out var pt))
             {
-                sources[cardId] = pt;
+                sources[uid] = pt;
                 continue;
             }
 
             SKPoint? center = null;
-            if (_sourceZones.TryGetValue(cardId, out var srcZoneId))
+            if (_sourceZones.TryGetValue(uid, out var srcZoneId))
                 center = _renderer.GetZoneCenter(srcZoneId);
             center ??= _renderer.GetZoneCenter("deck");
 
-            if (center.HasValue) sources[cardId] = center.Value;
+            if (center.HasValue) sources[uid] = center.Value;
         }
         return sources;
     }
@@ -108,27 +108,27 @@ public sealed class RendererTableAnimator : ITableAnimator
     /// and landing on the zone centre would drop every card on the same spot. Anything
     /// else lands on the zone centre.
     /// </summary>
-    private List<(string CardId, SKPoint From, SKPoint To)> BuildMoveEntries(
+    private List<(int Uid, SKPoint From, SKPoint To)> BuildMoveEntries(
         GameState state,
-        IReadOnlyList<(string CardId, string DestZoneId)> moved,
-        IReadOnlyDictionary<string, SKPoint> sources)
+        IReadOnlyList<(int Uid, string DestZoneId)> moved,
+        IReadOnlyDictionary<int, SKPoint> sources)
     {
         var handArrivals = moved
             .Where(m => state.Zones.TryGetValue(m.DestZoneId, out var z) && z.Type == "hand")
-            .Select(m => m.CardId);
+            .Select(m => m.Uid);
         var handDests = _renderer.ComputeHandSlotCenters(state, handArrivals);
 
-        var entries = new List<(string, SKPoint, SKPoint)>(moved.Count);
-        foreach (var (cardId, destZoneId) in moved)
+        var entries = new List<(int, SKPoint, SKPoint)>(moved.Count);
+        foreach (var (uid, destZoneId) in moved)
         {
-            if (!sources.TryGetValue(cardId, out var from)) continue;
+            if (!sources.TryGetValue(uid, out var from)) continue;
             if (!state.Zones.TryGetValue(destZoneId, out var destZone)) continue;
 
             SKPoint? to = destZone.Type == "hand"
-                ? handDests.TryGetValue(cardId, out var handPt) ? handPt : null
+                ? handDests.TryGetValue(uid, out var handPt) ? handPt : null
                 : _renderer.GetZoneCenter(destZoneId);
 
-            if (to.HasValue) entries.Add((cardId, from, to.Value));
+            if (to.HasValue) entries.Add((uid, from, to.Value));
         }
         return entries;
     }
@@ -191,7 +191,7 @@ public sealed class RendererTableAnimator : ITableAnimator
         var deckZone = preview.Zones.Values.FirstOrDefault(z => z.Type == "deck");
         if (deckZone is not null)
             foreach (var card in real.Zones.Values.SelectMany(z => z.Cards))
-                deckZone.Add(new Card(card.Suit, card.Rank, isFaceUp: false));
+                deckZone.Add(new Card(card.Suit, card.Rank, isFaceUp: false) { Uid = card.Uid });
 
         return preview;
     }
@@ -200,13 +200,13 @@ public sealed class RendererTableAnimator : ITableAnimator
     /// Deal entries in the engine's own deal order, so the stagger reproduces the
     /// round-the-table waterfall instead of an arbitrary sequence.
     /// </summary>
-    private List<(string CardId, SKPoint From, SKPoint To)> BuildDealEntries(
+    private List<(int Uid, SKPoint From, SKPoint To)> BuildDealEntries(
         DealResult deal, SKPoint deckCenter, GameState finalState)
     {
         var destinations = _renderer.ComputeHandSlotCenters(
             finalState, deal.CardsByPlayerIndex.Values.SelectMany(ids => ids));
 
-        var entries  = new List<(string, SKPoint, SKPoint)>();
+        var entries  = new List<(int, SKPoint, SKPoint)>();
         var assigned = new Dictionary<int, int>();
 
         foreach (var (playerIdx, count) in deal.Steps)

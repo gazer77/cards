@@ -47,7 +47,7 @@ public static class DeckBuilder
         for (int c = 0; c < copies; c++)
             foreach (var suit in AllSuits)
                 foreach (var rank in ranks)
-                    cards.Add(new Card(suit, rank));
+                    cards.Add(new Card(suit, rank) { Uid = cards.Count + 1 });
         return cards;
     }
 
@@ -59,7 +59,7 @@ public static class DeckBuilder
         for (int i = 0; i < jokers; i++)
         {
             var suit = (i % 2 == 0) ? Suit.Clubs : Suit.Hearts;  // black, red, …
-            cards.Add(new Card(suit, Rank.Joker) { IsWild = true });
+            cards.Add(new Card(suit, Rank.Joker) { IsWild = true, Uid = cards.Count + 1 });
         }
         return cards;
     }

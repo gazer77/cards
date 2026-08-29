@@ -235,7 +235,7 @@ public partial class GameTablePage : ContentPage
         if (deckZone is not null)
         {
             foreach (var card in real.Zones.Values.SelectMany(z => z.Cards))
-                deckZone.Add(new Card(card.Suit, card.Rank, isFaceUp: false));
+                deckZone.Add(new Card(card.Suit, card.Rank, isFaceUp: false) { Uid = card.Uid });
         }
 
         preview.CurrentPhaseId = real.CurrentPhaseId;
@@ -608,7 +608,7 @@ public partial class GameTablePage : ContentPage
     /// values to <c>BuildAllFlyInEntries</c> so destinations can be resolved
     /// against the updated layout.
     /// </summary>
-    private (IReadOnlyList<(string CardId, string DestZoneId)> Moved, IReadOnlyDictionary<string, SkiaSharp.SKPoint> SourcePts)
+    private (IReadOnlyList<(int Uid, string DestZoneId)> Moved, IReadOnlyDictionary<int, SkiaSharp.SKPoint> SourcePts)
         ApplyWithSound(GameAction action)
     {
         var faceDownBefore = _state!.Zones.Values
@@ -617,10 +617,10 @@ public partial class GameTablePage : ContentPage
             .Where(kv => kv.Key.StartsWith("hand:")).Sum(kv => kv.Value.Count);
         // Snapshot card → zone BEFORE the action so we can detect all movements and
         // resolve source positions for cards in rotated zones.
-        var cardSourceZone = new Dictionary<string, string>();
+        var cardSourceZone = new Dictionary<int, string>();
         foreach (var (zoneId, zone) in _state.Zones)
             foreach (var card in zone.Cards)
-                cardSourceZone[card.Id] = zoneId;
+                cardSourceZone[card.Uid] = zoneId;
 
         _logic!.Apply(_state, action);
 
@@ -630,25 +630,25 @@ public partial class GameTablePage : ContentPage
         // Exclude deck arrivals — reshuffles don't benefit from individual fly-ins.
         var moved = _state.Zones.Values
             .Where(z => z.Type != "deck")
-            .SelectMany(z => z.Cards.Select(c => (CardId: c.Id, DestZoneId: z.Id)))
-            .Where(x => !cardSourceZone.TryGetValue(x.CardId, out var prev) || prev != x.DestZoneId)
+            .SelectMany(z => z.Cards.Select(c => (Uid: c.Uid, DestZoneId: z.Id)))
+            .Where(x => !cardSourceZone.TryGetValue(x.Uid, out var prev) || prev != x.DestZoneId)
             .ToList();
 
         // Resolve source positions:
         //   1. Exact card rect from last rendered frame (works for non-rotated zones).
         //   2. Zone center (works for rotated zones like 4-player sides or play zones).
         //   3. Deck center as last resort.
-        var sourcePts = new Dictionary<string, SkiaSharp.SKPoint>();
-        foreach (var (cardId, _) in moved)
+        var sourcePts = new Dictionary<int, SkiaSharp.SKPoint>();
+        foreach (var (uid, _) in moved)
         {
-            var rect = TableCanvas.GetLastCardRect(cardId);
-            if (rect.HasValue) { sourcePts[cardId] = new SkiaSharp.SKPoint(rect.Value.MidX, rect.Value.MidY); continue; }
+            var rect = TableCanvas.GetLastCardRect(uid);
+            if (rect.HasValue) { sourcePts[uid] = new SkiaSharp.SKPoint(rect.Value.MidX, rect.Value.MidY); continue; }
 
             SkiaSharp.SKPoint? center = null;
-            if (cardSourceZone.TryGetValue(cardId, out var srcZoneId))
+            if (cardSourceZone.TryGetValue(uid, out var srcZoneId))
                 center = TableCanvas.GetZoneCenter(srcZoneId);
             center ??= TableCanvas.GetZoneCenter("deck");
-            if (center.HasValue) sourcePts[cardId] = center.Value;
+            if (center.HasValue) sourcePts[uid] = center.Value;
         }
 
         return (moved, sourcePts);
@@ -662,37 +662,37 @@ public partial class GameTablePage : ContentPage
     /// can be resolved against the new layout.
     /// Hand-zone arrivals use precise fan-slot centers; all other arrivals use zone centers.
     /// </summary>
-    private List<(string CardId, SkiaSharp.SKPoint From, SkiaSharp.SKPoint To)> BuildAllFlyInEntries(
-        IReadOnlyList<(string CardId, string DestZoneId)> moved,
-        IReadOnlyDictionary<string, SkiaSharp.SKPoint> sourcePts)
+    private List<(int Uid, SkiaSharp.SKPoint From, SkiaSharp.SKPoint To)> BuildAllFlyInEntries(
+        IReadOnlyList<(int Uid, string DestZoneId)> moved,
+        IReadOnlyDictionary<int, SkiaSharp.SKPoint> sourcePts)
     {
         if (moved.Count == 0 || _state is null) return [];
 
         // Pre-compute precise fan-slot centers for hand-zone arrivals
         var handArrivals = moved
             .Where(m => _state.Zones.TryGetValue(m.DestZoneId, out var z) && z.Type == "hand")
-            .Select(m => m.CardId)
+            .Select(m => m.Uid)
             .ToList();
         var handDests = TableCanvas.ComputeHandSlotCenters(_state, handArrivals);
 
-        var entries = new List<(string, SkiaSharp.SKPoint, SkiaSharp.SKPoint)>(moved.Count);
-        foreach (var (cardId, destZoneId) in moved)
+        var entries = new List<(int, SkiaSharp.SKPoint, SkiaSharp.SKPoint)>(moved.Count);
+        foreach (var (uid, destZoneId) in moved)
         {
-            if (!sourcePts.TryGetValue(cardId, out var from)) continue;
+            if (!sourcePts.TryGetValue(uid, out var from)) continue;
 
             SkiaSharp.SKPoint? to = null;
             if (_state.Zones.TryGetValue(destZoneId, out var destZone))
             {
                 if (destZone.Type == "hand")
                 {
-                    if (handDests.TryGetValue(cardId, out var handPt)) to = handPt;
+                    if (handDests.TryGetValue(uid, out var handPt)) to = handPt;
                 }
                 else
                     to = TableCanvas.GetZoneCenter(destZoneId);
             }
 
             if (to.HasValue)
-                entries.Add((cardId, from, to.Value));
+                entries.Add((uid, from, to.Value));
         }
         return entries;
     }
@@ -701,13 +701,13 @@ public partial class GameTablePage : ContentPage
     /// Builds ordered fly-in entries for the initial deal, preserving deal-step order
     /// so the stagger delay produces the correct clockwise waterfall effect.
     /// </summary>
-    private List<(string CardId, SkiaSharp.SKPoint From, SkiaSharp.SKPoint To)> BuildDealEntries(
+    private List<(int Uid, SkiaSharp.SKPoint From, SkiaSharp.SKPoint To)> BuildDealEntries(
         Engine.DealResult dealResult, SkiaSharp.SKPoint deckCenter, Engine.GameState finalState)
     {
         var allIds       = dealResult.CardsByPlayerIndex.Values.SelectMany(ids => ids);
         var destinations = TableCanvas.ComputeHandSlotCenters(finalState, allIds);
 
-        var entries  = new List<(string, SkiaSharp.SKPoint, SkiaSharp.SKPoint)>();
+        var entries  = new List<(int, SkiaSharp.SKPoint, SkiaSharp.SKPoint)>();
         var assigned = new Dictionary<int, int>();
 
         foreach (var (playerIdx, count) in dealResult.Steps)

@@ -97,18 +97,18 @@ public class GameTableView : SKCanvasView
     public void SetTheme(ITableTheme theme) => _renderer.SetTheme(theme);
 
     public void QueueFlyIns(
-        IReadOnlyList<(string CardId, SKPoint From, SKPoint To)> entries,
+        IReadOnlyList<(int Uid, SKPoint From, SKPoint To)> entries,
         int delayBetweenMs = 0)
         => _renderer.QueueFlyIns(entries, delayBetweenMs);
 
-    public Dictionary<string, SKPoint> ComputeHandSlotCenters(
-        GameState state, IEnumerable<string> cardIds)
-        => _renderer.ComputeHandSlotCenters(state, cardIds);
+    public Dictionary<int, SKPoint> ComputeHandSlotCenters(
+        GameState state, IEnumerable<int> cardUids)
+        => _renderer.ComputeHandSlotCenters(state, cardUids);
 
     public Task WaitForFlyInsAsync()                    => _renderer.WaitForFlyInsAsync();
     public Task WaitForNextPaintAsync()                 => _renderer.WaitForNextPaintAsync();
     public Task TriggerShuffleAnimationAsync(string id) => _renderer.TriggerShuffleAnimationAsync(id);
-    public SKRect? GetLastCardRect(string cardId)       => _renderer.GetLastCardRect(cardId);
+    public SKRect? GetLastCardRect(int uid)             => _renderer.GetLastCardRect(uid);
     public SKPoint? GetZoneCenter(string zoneId)        => _renderer.GetZoneCenter(zoneId);
 
     // ── Surface and input bridging ────────────────────────────────────────────

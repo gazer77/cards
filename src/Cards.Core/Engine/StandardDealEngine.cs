@@ -63,7 +63,7 @@ public sealed class StandardDealEngine : IDealStrategy
         int animDelayMs = def?.AnimDelayMs ?? 130;
 
         var steps        = new List<(int PlayerIndex, int Count)>();
-        var byPlayer     = new Dictionary<int, List<string>>();
+        var byPlayer     = new Dictionary<int, List<int>>();
         for (int i = 0; i < playerCount; i++) byPlayer[i] = [];
 
         if (def?.StacksPerPlayer > 0)
@@ -153,7 +153,7 @@ public sealed class StandardDealEngine : IDealStrategy
     /// </summary>
     private static void DealStacks(
         GameState state, int playerCount, int stackCount, int cardsPerStack, string? face,
-        Zone deckZone, List<(int, int)> steps, Dictionary<int, List<string>> byPlayer)
+        Zone deckZone, List<(int, int)> steps, Dictionary<int, List<int>> byPlayer)
     {
         string[] stackZoneNames = ["hand", "foot", "hand2", "hand3"];
         for (int stack = 0; stack < stackCount; stack++)
@@ -170,7 +170,7 @@ public sealed class StandardDealEngine : IDealStrategy
                     var c = deckZone.Draw()!;
                     c.IsFaceUp = FaceUp(face, zone);
                     zone.Add(c);
-                    byPlayer[pIdx].Add(c.Id);
+                    byPlayer[pIdx].Add(c.Uid);
                     steps.Add((pIdx, 1));
                 }
             }
@@ -179,7 +179,7 @@ public sealed class StandardDealEngine : IDealStrategy
 
     private static void DealClockwise(
         GameState state, int playerCount, int cardsPerPlayer, string? face,
-        Zone deckZone, List<(int, int)> steps, Dictionary<int, List<string>> byPlayer)
+        Zone deckZone, List<(int, int)> steps, Dictionary<int, List<int>> byPlayer)
     {
         for (int round = 0; round < cardsPerPlayer; round++)
         {
@@ -192,7 +192,7 @@ public sealed class StandardDealEngine : IDealStrategy
                 var card = deckZone.Draw()!;
                 card.IsFaceUp = FaceUp(face, zone);
                 zone.Add(card);
-                byPlayer[pIdx].Add(card.Id);
+                byPlayer[pIdx].Add(card.Uid);
                 steps.Add((pIdx, 1));
             }
         }
@@ -200,7 +200,7 @@ public sealed class StandardDealEngine : IDealStrategy
 
     private static void DealByExplicitSteps(
         GameState state, int playerCount, List<int[]> animSteps, string? face,
-        Zone deckZone, List<(int, int)> steps, Dictionary<int, List<string>> byPlayer)
+        Zone deckZone, List<(int, int)> steps, Dictionary<int, List<int>> byPlayer)
     {
         foreach (var s in animSteps)
         {
@@ -216,14 +216,14 @@ public sealed class StandardDealEngine : IDealStrategy
                 var card = deckZone.Draw()!;
                 card.IsFaceUp = FaceUp(face, zone);
                 zone.Add(card);
-                byPlayer[pIdx].Add(card.Id);
+                byPlayer[pIdx].Add(card.Uid);
             }
         }
     }
 
     private static void DealByPattern(
         GameState state, int playerCount, string pattern, string? face,
-        Zone deckZone, List<(int, int)> steps, Dictionary<int, List<string>> byPlayer)
+        Zone deckZone, List<(int, int)> steps, Dictionary<int, List<int>> byPlayer)
     {
         // Parse "3-2" → [3, 2].  Each number = cards dealt to every player in one clockwise pass.
         var batches = pattern.Split('-', StringSplitOptions.RemoveEmptyEntries)
@@ -245,7 +245,7 @@ public sealed class StandardDealEngine : IDealStrategy
                     var card = deckZone.Draw()!;
                     card.IsFaceUp = FaceUp(face, zone);
                     zone.Add(card);
-                    byPlayer[pIdx].Add(card.Id);
+                    byPlayer[pIdx].Add(card.Uid);
                 }
             }
         }
@@ -260,7 +260,7 @@ public sealed class StandardDealEngine : IDealStrategy
     /// </summary>
     public static DealResult RecordResult(
         GameState state,
-        Dictionary<int, List<string>> byPlayer,
+        Dictionary<int, List<int>> byPlayer,
         IReadOnlyList<(int PlayerIndex, int Count)> steps,
         int animDelayMs = 130)
     {

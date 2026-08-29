@@ -35,4 +35,12 @@ public sealed class SavedCard
     public int  Rank     { get; set; }
     public bool IsFaceUp { get; set; }
     public bool IsWild   { get; set; }
+
+    /// <summary>
+    /// Physical identity. Persisted so a resumed game keeps the same cards rather than
+    /// re-labelling them, which would read to the renderer as every card being new.
+    /// Zero on saves written before uids existed; harmless, since duplicates only
+    /// matter in multi-deck games.
+    /// </summary>
+    public int  Uid      { get; set; }
 }

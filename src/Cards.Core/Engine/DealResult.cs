@@ -8,9 +8,9 @@ namespace Cards.Engine;
 public sealed class DealResult
 {
     /// <summary>
-    /// Maps player index → ordered list of card IDs in that player's hand after dealing.
+    /// Maps player index → ordered list of card uids in that player's hand after dealing.
     /// </summary>
-    public required Dictionary<int, List<string>> CardsByPlayerIndex { get; init; }
+    public required Dictionary<int, List<int>> CardsByPlayerIndex { get; init; }
 
     /// <summary>
     /// The deal sequence as (PlayerIndex, Count) steps.

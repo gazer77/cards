@@ -36,18 +36,18 @@ public sealed class CardTableRenderer
     private bool    _recordCardRects;
     private const float DragThreshold = 14f;
 
-    private readonly List<(string CardId, SKRect Rect)> _cardRects = [];
+    private readonly List<(int Uid, string CardId, SKRect Rect)> _cardRects = [];
     private IReadOnlyList<ZoneLayout> _lastLayouts = [];
 
     // ── Animation state ───────────────────────────────────────────────────────
 
     // Per-card animations: cardId → (startTimeMs, durationMs)
-    private readonly Dictionary<string, (long Start, float Duration)> _dealAnims    = [];
-    private readonly Dictionary<string, (long Start, float Duration)> _flipAnims    = [];
-    private readonly Dictionary<string, (long Start, float Duration)> _receiveAnims = [];
+    private readonly Dictionary<int, (long Start, float Duration)> _dealAnims    = [];
+    private readonly Dictionary<int, (long Start, float Duration)> _flipAnims    = [];
+    private readonly Dictionary<int, (long Start, float Duration)> _receiveAnims = [];
     // Fly-in: cardId → (source center, fixed destination center, startTimeMs, durationMs)
     // Both From and To are fixed at queue time — To is never recomputed at draw time.
-    private readonly Dictionary<string, (SKPoint From, SKPoint To, long Start, float Duration)> _flyInAnims = [];
+    private readonly Dictionary<int, (SKPoint From, SKPoint To, long Start, float Duration)> _flyInAnims = [];
 
     private SKImageInfo _lastInfo;
     private const float FlyInSpeedPxMs = 1.2f; // pixels per millisecond
@@ -57,10 +57,10 @@ public sealed class CardTableRenderer
     private TaskCompletionSource? _flyInCompletion;
 
     // Scratch lists — populated during draw, cleared after
-    private readonly List<string> _finishedDealAnims    = [];
-    private readonly List<string> _finishedFlipAnims    = [];
-    private readonly List<string> _finishedReceiveAnims = [];
-    private readonly List<string> _finishedFlyInAnims   = [];
+    private readonly List<int> _finishedDealAnims    = [];
+    private readonly List<int> _finishedFlipAnims    = [];
+    private readonly List<int> _finishedReceiveAnims = [];
+    private readonly List<int> _finishedFlyInAnims   = [];
     private readonly List<string> _finishedShuffleAnims = [];
 
     private TaskCompletionSource? _nextPaintCompletion;
@@ -195,13 +195,13 @@ public sealed class CardTableRenderer
             long now = NowMs();
 
             // Collect card states before the swap
-            var oldCardIds = _state?.Zones.Values
-                .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet() ?? [];
-            var oldFaceDown = _state?.Zones.Values
-                .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Id).ToHashSet() ?? [];
-            var oldHandIds = _state?.Zones.Values
+            var oldUids = _state?.Zones.Values
+                .SelectMany(z => z.Cards).Select(c => c.Uid).ToHashSet() ?? [];
+            var oldFaceDownUids = _state?.Zones.Values
+                .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Uid).ToHashSet() ?? [];
+            var oldHandUids = _state?.Zones.Values
                 .Where(z => z.Type == "hand")
-                .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet() ?? [];
+                .SelectMany(z => z.Cards).Select(c => c.Uid).ToHashSet() ?? [];
 
             _state         = value;
             _tooltipCardId = null;   // dismiss tooltip whenever the game state advances
@@ -223,23 +223,23 @@ public sealed class CardTableRenderer
                     }
                 }
 
-                var newIds = value.Zones.Values
-                    .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet();
-                var newFaceDown = value.Zones.Values
-                    .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Id).ToHashSet();
-                var newHandIds = value.Zones.Values
+                var newUids = value.Zones.Values
+                    .SelectMany(z => z.Cards).Select(c => c.Uid).ToHashSet();
+                var newFaceDownUids = value.Zones.Values
+                    .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Uid).ToHashSet();
+                var newHandUids = value.Zones.Values
                     .Where(z => z.Type == "hand")
-                    .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet();
+                    .SelectMany(z => z.Cards).Select(c => c.Uid).ToHashSet();
 
                 // Cards that just appeared in a fan/spread zone → slide-up deal animation.
                 // Deliberately excludes deck/pile zones: DrawStack never processes _dealAnims,
                 // so entries for those cards would accumulate forever and block timer shutdown.
                 // Skip if a fly-in is already queued for this card (e.g. deal fly-in set before GameState).
-                var fanSpreadCardIds = value.Zones.Values
+                var fanSpreadUids = value.Zones.Values
                     .Where(z => z.Type is "hand" or "spread" or "trick")
-                    .SelectMany(z => z.Cards).Select(c => c.Id).ToHashSet();
-                foreach (var id in newIds.Except(oldCardIds))
-                    if (!_flyInAnims.ContainsKey(id) && fanSpreadCardIds.Contains(id))
+                    .SelectMany(z => z.Cards).Select(c => c.Uid).ToHashSet();
+                foreach (var id in newUids.Except(oldUids))
+                    if (!_flyInAnims.ContainsKey(id) && fanSpreadUids.Contains(id))
                         _dealAnims[id] = (now, 240f);
 
                 // Cards that flipped face-up → scale-X flip animation.
@@ -247,15 +247,15 @@ public sealed class CardTableRenderer
                 // time (initial deal) and haven't landed yet.  Showing a flip at the
                 // destination before the card has even flown there looks wrong and can
                 // briefly expose face values in zones that should render face-down.
-                foreach (var id in oldFaceDown.Except(newFaceDown))
-                    if (newIds.Contains(id) && !_flyInAnims.ContainsKey(id))
+                foreach (var id in oldFaceDownUids.Except(newFaceDownUids))
+                    if (newUids.Contains(id) && !_flyInAnims.ContainsKey(id))
                         _flipAnims[id] = (now, 360f);
 
                 // Cards that moved INTO a hand zone (received mid-game) → bump animation.
                 // Skip cards that already have a fly-in queued: the fly-in IS the arrival
                 // animation, so adding a receive bump on top produces erratic combined motion.
-                var justFlipped = oldFaceDown.Except(newFaceDown).ToHashSet();
-                foreach (var id in newHandIds.Except(oldHandIds).Intersect(oldCardIds))
+                var justFlipped = oldFaceDownUids.Except(newFaceDownUids).ToHashSet();
+                foreach (var id in newHandUids.Except(oldHandUids).Intersect(oldUids))
                     if (!justFlipped.Contains(id) && !_dealAnims.ContainsKey(id)
                                                   && !_flyInAnims.ContainsKey(id))
                         _receiveAnims[id] = (now, 1350f);
@@ -314,7 +314,7 @@ public sealed class CardTableRenderer
     /// </para>
     /// </summary>
     public void QueueFlyIns(
-        IReadOnlyList<(string CardId, SKPoint From, SKPoint To)> entries,
+        IReadOnlyList<(int Uid, SKPoint From, SKPoint To)> entries,
         int delayBetweenMs = 0)
     {
         if (entries.Count == 0) return;
@@ -339,11 +339,11 @@ public sealed class CardTableRenderer
     /// Call after setting <see cref="GameState"/> so the canvas size is available.
     /// Cards not currently in a hand zone are omitted from the result.
     /// </summary>
-    public Dictionary<string, SKPoint> ComputeHandSlotCenters(
-        GameState state, IEnumerable<string> cardIds)
+    public Dictionary<int, SKPoint> ComputeHandSlotCenters(
+        GameState state, IEnumerable<int> cardUids)
     {
         if (_lastInfo.Width == 0) return [];
-        return ComputeFanSlotCenters(state, cardIds, _lastInfo);
+        return ComputeFanSlotCenters(state, cardUids, _lastInfo);
     }
 
     /// <summary>
@@ -364,11 +364,11 @@ public sealed class CardTableRenderer
     /// Only hand zones (rendered as fans) are considered; cards in other zone types
     /// are omitted from the result.
     /// </summary>
-    private static Dictionary<string, SKPoint> ComputeFanSlotCenters(
-        GameState state, IEnumerable<string> cardIds, SKImageInfo info)
+    private static Dictionary<int, SKPoint> ComputeFanSlotCenters(
+        GameState state, IEnumerable<int> cardUids, SKImageInfo info)
     {
-        var result = new Dictionary<string, SKPoint>();
-        var idSet  = cardIds.ToHashSet();
+        var result = new Dictionary<int, SKPoint>();
+        var idSet  = cardUids.ToHashSet();
         if (idSet.Count == 0) return result;
 
         var layouts = ZoneLayoutEngine.Compute(state, info);
@@ -392,18 +392,24 @@ public sealed class CardTableRenderer
 
             for (int i = 0; i < cards.Count; i++)
             {
-                if (idSet.Contains(cards[i].Id))
-                    result[cards[i].Id] = new SKPoint(startX + i * step + cardW / 2f, midY);
+                if (idSet.Contains(cards[i].Uid))
+                    result[cards[i].Uid] = new SKPoint(startX + i * step + cardW / 2f, midY);
             }
         }
         return result;
     }
 
-    /// <summary>Returns the last rendered screen rect for a card, or null if not rendered.</summary>
-    public SKRect? GetLastCardRect(string cardId)
+    /// <summary>
+    /// The last rendered screen rect for one physical card, or null if it was not drawn.
+    ///
+    /// Keyed on uid, not on rank and suit: in a multi-deck game several cards answer to
+    /// the same description, and animating from "a five of hearts" picks whichever was
+    /// drawn last.
+    /// </summary>
+    public SKRect? GetLastCardRect(int uid)
     {
         for (int i = _cardRects.Count - 1; i >= 0; i--)
-            if (_cardRects[i].CardId == cardId) return _cardRects[i].Rect;
+            if (_cardRects[i].Uid == uid) return _cardRects[i].Rect;
         return null;
     }
 
@@ -470,7 +476,7 @@ public sealed class CardTableRenderer
         // are done through WaitForFlyInsAsync. Dropping one here would leave that wait
         // hanging until its safety timeout.
 
-        void Sweep(Dictionary<string, (long Start, float Duration)> anims)
+        void Sweep<TKey>(Dictionary<TKey, (long Start, float Duration)> anims) where TKey : notnull
         {
             if (anims.Count == 0) return;
 
@@ -564,11 +570,11 @@ public sealed class CardTableRenderer
         // zones here because DrawFlyingCards handles non-hand fly-ins as an overlay.
         if (_flyInAnims.Count > 0)
         {
-            var allCardIds = _state.Zones.Values
+            var allUids = _state.Zones.Values
                 .SelectMany(z => z.Cards)
-                .Select(c => c.Id)
+                .Select(c => c.Uid)
                 .ToHashSet();
-            foreach (var orphanId in _flyInAnims.Keys.Where(id => !allCardIds.Contains(id)).ToList())
+            foreach (var orphanId in _flyInAnims.Keys.Where(id => !allUids.Contains(id)).ToList())
                 _flyInAnims.Remove(orphanId);
         }
 
@@ -685,7 +691,7 @@ public sealed class CardTableRenderer
             DrawCardBackCounted(canvas, baseRect, _skin);
 
         if (topCard is not null && _recordCardRects)
-            _cardRects.Add((topCard.Id, baseRect));
+            _cardRects.Add((topCard.Uid, topCard.Id, baseRect));
     }
 
     // ── Shuffle animation ─────────────────────────────────────────────────────
@@ -762,7 +768,7 @@ public sealed class CardTableRenderer
         // position so the deck appears to still hold them.
         foreach (var card in cards)
         {
-            if (_flyInAnims.TryGetValue(card.Id, out var pending) && now < pending.Start)
+            if (_flyInAnims.TryGetValue(card.Uid, out var pending) && now < pending.Start)
             {
                 var deckRect = new SKRect(pending.From.X - cardW / 2f, pending.From.Y - cardH / 2f,
                                           pending.From.X + cardW / 2f, pending.From.Y + cardH / 2f);
@@ -783,7 +789,7 @@ public sealed class CardTableRenderer
         for (int i = 0; i < cards.Count; i++)
         {
             var card     = cards[i];
-            bool hasFlyIn = _flyInAnims.TryGetValue(card.Id, out var fia);
+            bool hasFlyIn = _flyInAnims.TryGetValue(card.Uid, out var fia);
 
             // Pending cards were already drawn at their source — skip them here.
             if (hasFlyIn && now < fia.Start)
@@ -792,17 +798,17 @@ public sealed class CardTableRenderer
             var rect = new SKRect(startX + i * step, top, startX + i * step + cardW, top + cardH);
 
             // ── Flip animation ────────────────────────────────────────────────
-            if (_flipAnims.TryGetValue(card.Id, out var fa))
+            if (_flipAnims.TryGetValue(card.Uid, out var fa))
             {
                 float t = Math.Clamp((now - fa.Start) / fa.Duration, 0f, 1f);
                 DrawFlippingCard(canvas, rect, card, t);
                 if (_recordCardRects)
                 {
-                    _cardRects.Add((card.Id, rect));
+                    _cardRects.Add((card.Uid, card.Id, rect));
                     if (layout.FaceUp)
                         DrawCardInteractiveHint(canvas, rect, card.Id);
                 }
-                if (t >= 1f) _finishedFlipAnims.Add(card.Id);
+                if (t >= 1f) _finishedFlipAnims.Add(card.Uid);
                 continue;
             }
 
@@ -818,25 +824,25 @@ public sealed class CardTableRenderer
                 float cy   = fia.From.Y + (fia.To.Y - fia.From.Y) * ease;
                 rect = new SKRect(cx - cardW / 2f, cy - cardH / 2f,
                                   cx + cardW / 2f, cy + cardH / 2f);
-                if (t >= 1f) _finishedFlyInAnims.Add(card.Id);
+                if (t >= 1f) _finishedFlyInAnims.Add(card.Uid);
             }
 
             // ── Receive animation (bump up then settle) ───────────────────────
-            if (_receiveAnims.TryGetValue(card.Id, out var ra))
+            if (_receiveAnims.TryGetValue(card.Uid, out var ra))
             {
                 float t    = Math.Clamp((now - ra.Start) / ra.Duration, 0f, 1f);
                 float bump = -cardH * 0.4f * MathF.Sin(MathF.PI * t);
                 rect = OffsetRect(rect, 0f, bump);
-                if (t >= 1f) _finishedReceiveAnims.Add(card.Id);
+                if (t >= 1f) _finishedReceiveAnims.Add(card.Uid);
             }
 
             // ── Deal animation (slide up) ─────────────────────────────────────
-            if (_dealAnims.TryGetValue(card.Id, out var da))
+            if (_dealAnims.TryGetValue(card.Uid, out var da))
             {
                 float t    = Math.Clamp((now - da.Start) / da.Duration, 0f, 1f);
                 float ease = EaseOutCubic(t);
                 rect = OffsetRect(rect, 0f, (1f - ease) * cardH * 0.65f);
-                if (t >= 1f) _finishedDealAnims.Add(card.Id);
+                if (t >= 1f) _finishedDealAnims.Add(card.Uid);
             }
 
             // ── Normal draw ───────────────────────────────────────────────────
@@ -844,7 +850,7 @@ public sealed class CardTableRenderer
 
             if (_recordCardRects)
             {
-                _cardRects.Add((card.Id, rect));
+                _cardRects.Add((card.Uid, card.Id, rect));
                 if (layout.FaceUp)
                     DrawCardInteractiveHint(canvas, rect, card.Id);
             }
@@ -876,26 +882,26 @@ public sealed class CardTableRenderer
                 startX + i * (cardW + gap) + cardW, top + cardH);
 
             // Cards with an active fly-in are drawn by DrawFlyingCards overlay — skip here.
-            if (_flyInAnims.TryGetValue(card.Id, out var fia))
+            if (_flyInAnims.TryGetValue(card.Uid, out var fia))
             {
                 float ft = Math.Clamp((now - fia.Start) / fia.Duration, 0f, 1f);
                 if (ft < 1f) continue;
             }
 
             // Deal animation (slide up)
-            if (_dealAnims.TryGetValue(card.Id, out var da))
+            if (_dealAnims.TryGetValue(card.Uid, out var da))
             {
                 float t    = Math.Clamp((now - da.Start) / da.Duration, 0f, 1f);
                 float ease = EaseOutCubic(t);
                 rect = OffsetRect(rect, 0f, (1f - ease) * cardH * 0.65f);
-                if (t >= 1f) _finishedDealAnims.Add(card.Id);
+                if (t >= 1f) _finishedDealAnims.Add(card.Uid);
             }
 
             DrawCardCounted(canvas, rect, card, _skin);
 
             if (_recordCardRects)
             {
-                _cardRects.Add((card.Id, rect));
+                _cardRects.Add((card.Uid, card.Id, rect));
                 DrawCardInteractiveHint(canvas, rect, card.Id);
             }
         }
@@ -916,15 +922,15 @@ public sealed class CardTableRenderer
         float cardH = _lastLayouts.Count > 0 ? _lastLayouts[0].CardHeight : 70f;
         long  now   = NowMs();
 
-        foreach (var (cardId, fia) in _flyInAnims)
+        foreach (var (uid, fia) in _flyInAnims)
         {
             // Hand-zone cards draw their own fly-ins inside DrawFan
-            if (IsCardInHandZone(cardId)) continue;
+            if (IsCardInHandZone(uid)) continue;
 
             if (now < fia.Start) continue;  // not yet started
 
             float t = Math.Clamp((now - fia.Start) / fia.Duration, 0f, 1f);
-            if (t >= 1f) { _finishedFlyInAnims.Add(cardId); continue; }
+            if (t >= 1f) { _finishedFlyInAnims.Add(uid); continue; }
 
             float ease = EaseOutCubic(t);
             float cx   = fia.From.X + (fia.To.X - fia.From.X) * ease;
@@ -932,7 +938,7 @@ public sealed class CardTableRenderer
             var   rect = new SKRect(cx - cardW / 2f, cy - cardH / 2f,
                                     cx + cardW / 2f, cy + cardH / 2f);
 
-            var card = FindCardById(cardId);
+            var card = FindCardByUid(uid);
             if (card is not null)
                 DrawCardCounted(canvas, rect, card, _skin);
             else
@@ -940,11 +946,11 @@ public sealed class CardTableRenderer
         }
     }
 
-    private bool IsCardInHandZone(string cardId)
+    private bool IsCardInHandZone(int uid)
     {
         if (_state is null) return false;
         foreach (var zone in _state.Zones.Values)
-            if (zone.Type == "hand" && zone.Cards.Any(c => c.Id == cardId))
+            if (zone.Type == "hand" && zone.Cards.Any(c => c.Uid == uid))
                 return true;
         return false;
     }
@@ -1095,6 +1101,15 @@ public sealed class CardTableRenderer
             DrawCardBackCounted(canvas, ghostRect, _skin);
     }
 
+    private Card? FindCardByUid(int uid)
+    {
+        if (_state is null) return null;
+        foreach (var zone in _state.Zones.Values)
+            foreach (var card in zone.Cards)
+                if (card.Uid == uid) return card;
+        return null;
+    }
+
     private Card? FindCardById(string cardId)
     {
         if (_state is null) return null;
@@ -1195,8 +1210,8 @@ public sealed class CardTableRenderer
     {
         for (int i = _cardRects.Count - 1; i >= 0; i--)
         {
-            var (id, rect) = _cardRects[i];
-            if (rect.Contains(pt)) return id;
+            var (_, cardId, rect) = _cardRects[i];
+            if (rect.Contains(pt)) return cardId;
         }
         return null;
     }
@@ -1205,8 +1220,8 @@ public sealed class CardTableRenderer
     {
         for (int i = _cardRects.Count - 1; i >= 0; i--)
         {
-            var (id, rect) = _cardRects[i];
-            if (rect.Contains(pt) && _selectableCardIds.Contains(id)) return id;
+            var (_, cardId, rect) = _cardRects[i];
+            if (rect.Contains(pt) && _selectableCardIds.Contains(cardId)) return cardId;
         }
         return null;
     }
@@ -1226,10 +1241,10 @@ public sealed class CardTableRenderer
     {
         for (int i = _cardRects.Count - 1; i >= 0; i--)
         {
-            var (id, rect) = _cardRects[i];
+            var (_, cardId, rect) = _cardRects[i];
             if (!rect.Contains(pt)) continue;
-            var zoneId = FindZoneOfCard(id);
-            if (zoneId is not null && IsHandZoneId(zoneId)) return id;
+            var zoneId = FindZoneOfCard(cardId);
+            if (zoneId is not null && IsHandZoneId(zoneId)) return cardId;
         }
         return null;
     }
