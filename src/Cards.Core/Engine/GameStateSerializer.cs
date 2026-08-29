@@ -42,6 +42,27 @@ public static class GameStateSerializer
         };
 
     /// <summary>
+    /// Zones owned by a player the game does not have.
+    ///
+    /// Such a zone is unreachable: no handler will ever address it, so any cards in it
+    /// are removed from play while still counting toward the deck. The table stays
+    /// plausible — the totals add up — but ranks can never be completed and the game
+    /// cannot finish. Worth checking explicitly, because nothing else notices.
+    /// </summary>
+    public static IReadOnlyList<string> OrphanedZones(GameState state)
+    {
+        var players = state.Players.Select(p => p.Id).ToHashSet();
+        var teams   = state.Teams.Select(t => t.Id).ToHashSet();
+
+        return state.Zones.Values
+            .Where(z => z.OwnerId is not null
+                        && !players.Contains(z.OwnerId)
+                        && !teams.Contains(z.OwnerId))
+            .Select(z => z.Id)
+            .ToList();
+    }
+
+    /// <summary>
     /// Overlays a DTO onto <paramref name="state"/>.
     ///
     /// <paramref name="logic"/>.Initialize runs first: the DTO carries no Players,

@@ -49,7 +49,25 @@ public sealed class GameSaveService
             var dto = JsonSerializer.Deserialize<SavedGameState>(json, _json);
             if (dto is null) return false;
 
+            // A save is only valid for the table it was written at. Restore replaces the
+            // zones wholesale, so loading a four-player save into a two-player game
+            // leaves hands belonging to players that no longer exist — holding cards
+            // nobody can ever ask for, while the deck drains and the game cannot finish.
+            //
+            // Not deleted: the player may yet start a table that size again, and the
+            // save is theirs.
+            if (dto.PlayerCount != playerCount) return false;
+
             GameStateSerializer.Restore(state, logic, dto, playerCount, enabledRules);
+
+            // Same failure by another route — a save whose zones name players this game
+            // does not have. That is corruption rather than a mismatch, so it goes.
+            if (GameStateSerializer.OrphanedZones(state).Count > 0)
+            {
+                DeleteSave(state.GameId);
+                return false;
+            }
+
             return true;
         }
         catch
