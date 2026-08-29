@@ -113,38 +113,15 @@ public sealed class PlayabilitySweep
         {
             while (steps < MaxSteps && !logic.IsGameOver(state))
             {
-                var actions = logic.GetValidActions(state);
-                if (actions.Count > 0)
-                {
-                    // GetAutoAction is the engine's own choice — what it would have an
-                    // AI seat do. Substituting a heuristic for it measures the heuristic
-                    // rather than the game, and a first attempt at that halved the
-                    // number of games that finished.
-                    logic.Apply(state, logic.GetAutoAction(state));
-                }
-                else if (Selected(state) is { } held
-                         && logic.GetDropZoneIds(state, held) is { Count: > 0 } zones)
-                {
-                    // A selected card usually has to be played somewhere. Selecting and
-                    // never playing leaves the position untouched, which reads as a
-                    // livelocked game when it is really an incomplete driver — that
-                    // alone accounted for nine games appearing stuck in "play".
-                    logic.Apply(state, new GameAction("play_card", CardId: held, ZoneId: zones[0]));
-                }
-                else
-                {
-                    // No action offered: the table is waiting for a card to be tapped.
-                    var selectable = logic.GetSelectableCardIds(state);
-                    if (selectable.Count == 0) { reason = "no action and nothing to tap"; break; }
+                var result = TableDriver.Step(state, logic, ref tap);
 
-                    // Rotate through the hand rather than tapping one card repeatedly.
-                    // Selection is a toggle in several handlers, and each keeps its own
-                    // metadata key for it, so "tap the first selectable card" selects
-                    // and deselects the same card forever. That alone made nine games
-                    // look permanently livelocked.
-                    logic.Apply(state, new GameAction(
-                        "select_card", CardId: selectable[tap++ % selectable.Count]));
+                if (result == TableDriver.StepResult.Stuck)
+                {
+                    reason = "nothing on offer";
+                    break;
                 }
+                if (result == TableDriver.StepResult.Finished) break;
+
                 steps++;
 
                 recent.Enqueue(Signature(state));

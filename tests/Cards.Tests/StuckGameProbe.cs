@@ -36,7 +36,9 @@ public sealed class StuckGameProbe
         logic.Initialize(state, seats, []);
 
         int tap = 0;
-        for (int step = 0; step < 40 && !logic.IsGameOver(state); step++)
+        int maxSteps = int.TryParse(Environment.GetEnvironmentVariable("PROBE_STEPS"), out var ps) ? ps : 40;
+
+        for (int step = 0; step < maxSteps && !logic.IsGameOver(state); step++)
         {
             var actions    = logic.GetValidActions(state);
             var selectable = logic.GetSelectableCardIds(state);
@@ -52,23 +54,7 @@ public sealed class StuckGameProbe
                 $"drops=[{string.Join(",", drops)}] " +
                 $"auto={logic.GetAutoAdvanceDelay(state)?.TotalMilliseconds.ToString() ?? "null"}");
 
-            if (actions.Count > 0)
-            {
-                var auto = logic.GetAutoAction(state);
-                Console.WriteLine($"[probe]      -> auto action: {auto.Type} card={auto.CardId} zone={auto.ZoneId}");
-                logic.Apply(state, auto);
-            }
-            else if (drops.Count > 0)
-            {
-                logic.Apply(state, new GameAction("play_card", CardId: selected, ZoneId: drops[0]));
-            }
-            else if (selectable.Count > 0)
-            {
-                // Rotate. Several handlers toggle selection, so tapping one card over
-                // and over selects and deselects it forever.
-                logic.Apply(state, new GameAction("select_card", CardId: selectable[tap++ % selectable.Count]));
-            }
-            else
+            if (TableDriver.Step(state, logic, ref tap) == TableDriver.StepResult.Stuck)
             {
                 Console.WriteLine("[probe]      -> nothing on offer; stuck");
                 break;
