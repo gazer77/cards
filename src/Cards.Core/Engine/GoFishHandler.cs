@@ -159,6 +159,10 @@ public sealed class GoFishHandler : IPhaseHandler
                 drawn.IsFaceUp = true;
                 p0Hand.Add(drawn);
 
+                // The player has taken one unseen card, so one thing the AI had
+                // ruled out may no longer hold.
+                ExpireOldestDenial(state);
+
                 int books    = CheckBooks(state, state.Players[0].Id);
                 PruneKnownRanks(state);
                 bool goAgain = RankCode(drawn.Id) == rankCode;
@@ -196,6 +200,7 @@ public sealed class GoFishHandler : IPhaseHandler
             var drawn = deck.Draw()!;
             drawn.IsFaceUp = true;
             p0Hand.Add(drawn);
+            ExpireOldestDenial(state);
             CheckBooks(state, state.Players[0].Id);
             PruneKnownRanks(state);
             if (p0Hand.Count > 0)
@@ -259,16 +264,22 @@ public sealed class GoFishHandler : IPhaseHandler
                 return RankCode(action.CardId);
         }
 
-        // Fallback heuristic: pick rank held most, preferring known player ranks
+        // Fallback heuristic: pick rank held most, preferring known player ranks and
+        // avoiding ones already refused.
         var aiHand     = state.Zones[$"hand:{aiId}"];
         var rankGroups = aiHand.Cards
             .GroupBy(c => RankCode(c.Id))
             .OrderByDescending(g => g.Count())
             .ToList();
 
-        var knownRanks  = GetKnownPlayerRanks(state);
-        var smartChoice = rankGroups.FirstOrDefault(g => knownRanks.Contains(g.Key));
-        return smartChoice?.Key ?? rankGroups[0].Key;
+        var knownRanks = GetKnownPlayerRanks(state);
+        var denied     = GetDeniedRanks(state);
+
+        return rankGroups.FirstOrDefault(g => knownRanks.Contains(g.Key))?.Key
+            ?? rankGroups.FirstOrDefault(g => !denied.Contains(g.Key))?.Key
+            // Everything the AI holds has been refused. Asking anyway is a wasted turn
+            // either way, so fall back rather than fail.
+            ?? rankGroups[0].Key;
     }
 
     private void ExecuteAiAsk(GameState state, string rankCode)
@@ -291,7 +302,13 @@ public sealed class GoFishHandler : IPhaseHandler
             }
 
             if (!p0Hand.Cards.Any(c => RankCode(c.Id) == rankCode))
+            {
                 RemoveKnownPlayerRank(state, rankCode);
+
+                // A successful ask takes every card of that rank, so the player is now
+                // known to hold none — asking again would be the same wasted turn.
+                RecordDeniedRank(state, rankCode);
+            }
 
             int books    = CheckBooks(state, aiId);
             string bookMsg = books > 0 ? $" {books} book{(books > 1 ? "s" : "")} complete!" : "";
@@ -300,6 +317,7 @@ public sealed class GoFishHandler : IPhaseHandler
         else
         {
             RemoveKnownPlayerRank(state, rankCode);
+            RecordDeniedRank(state, rankCode);
 
             if (deck.Count > 0)
             {
@@ -391,6 +409,15 @@ public sealed class GoFishHandler : IPhaseHandler
         var known = GetKnownPlayerRanks(state);
         known.Add(rankCode);
         state.Metadata["known_p0_ranks"] = string.Join(',', known);
+
+        // Seeing the player hold a rank is direct evidence, and outranks having been
+        // told at some earlier point that they had none.
+        var denied = GetDeniedRanks(state);
+        if (denied.Remove(rankCode))
+        {
+            if (denied.Count == 0) state.Metadata.Remove(DeniedKey);
+            else                   state.Metadata[DeniedKey] = string.Join(',', denied);
+        }
     }
 
     private static void RemoveKnownPlayerRank(GameState state, string rankCode)
@@ -398,6 +425,51 @@ public sealed class GoFishHandler : IPhaseHandler
         var known = GetKnownPlayerRanks(state);
         if (known.Remove(rankCode))
             state.Metadata["known_p0_ranks"] = string.Join(',', known);
+    }
+
+    // ── Denied ranks ──────────────────────────────────────────────────────────
+    //
+    // Asking for a rank the opponent has already refused is legal but is not how the
+    // game is played: it cannot succeed, and every failure draws a card, so an AI with
+    // no memory of refusals empties the deck asking the same question over and over.
+    // Its fallback pick — "the rank I hold most of" — is deterministic, so without this
+    // it does exactly that.
+
+    private const string DeniedKey = "gf_denied_p0";
+
+    internal static HashSet<string> GetDeniedRanks(GameState state)
+    {
+        var val = state.Metadata.GetValueOrDefault(DeniedKey, "");
+        return string.IsNullOrEmpty(val) ? [] : [.. val.Split(',')];
+    }
+
+    private static void RecordDeniedRank(GameState state, string rankCode)
+    {
+        var denied = GetDeniedRanks(state);
+        denied.Add(rankCode);
+        state.Metadata[DeniedKey] = string.Join(',', denied);
+    }
+
+    /// <summary>
+    /// Retires the oldest refusal, because the player has taken one unseen card.
+    ///
+    /// One card can restore at most one ruled-out rank, so forgetting everything on
+    /// each draw is far too much — it sends the AI straight back to the question it
+    /// just had refused, which is the behaviour this whole mechanism exists to stop.
+    /// Forgetting nothing is the opposite mistake: a rank the player draws would be
+    /// ruled out permanently. Expiring them oldest-first tracks the real uncertainty
+    /// without either failure.
+    /// </summary>
+    private static void ExpireOldestDenial(GameState state)
+    {
+        var val = state.Metadata.GetValueOrDefault(DeniedKey, "");
+        if (string.IsNullOrEmpty(val)) return;
+
+        var denied = val.Split(',').ToList();
+        denied.RemoveAt(0);
+
+        if (denied.Count == 0) state.Metadata.Remove(DeniedKey);
+        else                   state.Metadata[DeniedKey] = string.Join(',', denied);
     }
 
     private static void PruneKnownRanks(GameState state)

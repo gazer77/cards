@@ -35,8 +35,17 @@ public sealed class GoFishAiAgent : IPlayerAgent
         var knownOpponentRanks = ParseKnownRanks(
             visibleState.Metadata.GetValueOrDefault("known_p0_ranks", ""));
 
-        // Smart pick: rank we hold AND know opponent has
+        // Ranks the opponent has already been unable to supply. Asking again cannot
+        // succeed until they draw, and each failure costs a card from the deck — so an
+        // agent without this empties the deck repeating one question, because the
+        // fallback below is deterministic.
+        var refused = ParseKnownRanks(
+            visibleState.Metadata.GetValueOrDefault("gf_denied_p0", ""));
+
+        // Best: a rank we hold and have seen the opponent hold.
+        // Next: anything we hold that has not already been refused.
         var chosen = rankGroups.FirstOrDefault(g => knownOpponentRanks.Contains(g.Key))
+                     ?? rankGroups.FirstOrDefault(g => !refused.Contains(g.Key))
                      ?? rankGroups[0];
 
         // Return any card of that rank as the ask target (CardId carries rank info)
