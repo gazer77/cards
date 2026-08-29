@@ -193,4 +193,26 @@ public sealed class GoFishTests
         Assert.True(maxDenied < 13,
             $"The AI ruled out {maxDenied} of 13 ranks — refusals are never expiring.");
     }
+
+
+    /// <summary>
+    /// Go Fish is capped at two players because <c>GoFishHandler</c> is written for two
+    /// seats: it addresses <c>Players[0]</c> and <c>Players[1]</c> directly, so at three
+    /// or more, every other seat is dealt cards and then never asked, never given a
+    /// turn, and never able to give a card back. Their cards leave circulation, the deck
+    /// drains, and the game cannot finish — measured at 3, 4 and 6 players before the
+    /// cap went in.
+    ///
+    /// Delete this and raise the cap together with a handler that rotates turns over all
+    /// seats, lets the asker choose a target, and keeps its memory per opponent.
+    /// </summary>
+    [Fact]
+    public void Is_capped_at_two_players_until_the_handler_supports_more()
+    {
+        var loader = new GameLoader(
+            new FileSystemGameAssetSource(FileSystemGameAssetSource.FindRepoRoot()));
+        var definition = loader.LoadAsync("go-fish").GetAwaiter().GetResult()!;
+
+        Assert.Equal(2, definition.MaxPlayers);
+    }
 }

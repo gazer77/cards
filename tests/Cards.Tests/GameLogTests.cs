@@ -76,6 +76,46 @@ public sealed class GameLogTests
             Assert.NotEqual(vm.GameLog[i - 1], vm.GameLog[i]);
     }
 
+    /// <summary>
+    /// A message is attributed to whoever acted, not to whoever is on turn afterwards.
+    ///
+    /// Handlers set their message and then pass the turn, so reading the current player
+    /// after the fact gets it backwards on every turn change: the AI's "asked for aces,
+    /// got none" appears over the human's seat, and the table looks like it is asking
+    /// the wrong player.
+    /// </summary>
+    [Fact]
+    public async Task A_message_belongs_to_the_player_who_acted()
+    {
+        var loader = new GameLoader(
+            new FileSystemGameAssetSource(FileSystemGameAssetSource.FindRepoRoot()));
+        var vm = new GameTableViewModel(loader, new GameSaveService(new NoSaveStore()));
+
+        (string Player, string Text)? aiLine = null;
+        vm.MessagePosted += (playerId, text) =>
+        {
+            if (text.StartsWith("AI asked for") && aiLine is null) aiLine = (playerId, text);
+        };
+
+        await vm.StartAsync("go-fish", 2, resume: false, seed: 7);
+
+        for (int i = 0; i < 40 && aiLine is null && !vm.IsGameOver; i++)
+        {
+            var selectable = vm.SelectableCardIds;
+            if (selectable.Count > 0 && vm.SelectedCardId is null)
+                await vm.TapCard(selectable[0]);
+            else
+            {
+                var ask = vm.Actions.FirstOrDefault(a => a.Type == "ask");
+                if (ask is not null) await vm.Invoke(ask);
+                else break;
+            }
+        }
+
+        Assert.NotNull(aiLine);
+        Assert.Equal(vm.State!.Players[1].Id, aiLine!.Value.Player);
+    }
+
     [Fact]
     public async Task Every_logged_line_says_something()
     {

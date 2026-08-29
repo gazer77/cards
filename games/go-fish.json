@@ -4,7 +4,7 @@
   "name": "Go Fish",
   "version": "1.0",
   "deck": "standard-52",
-  "players": { "min": 2, "max": 6, "names": ["You", "AI"] },
+  "players": { "min": 2, "max": 2, "names": ["You", "AI"] },
   "teams": false,
   "dealer": "random",
   "deal": {

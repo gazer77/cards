@@ -143,12 +143,13 @@ public sealed class GameTableViewModel
     /// <summary>
     /// Records the status line if it has changed since the last check.
     ///
-    /// Attributed to whoever is on turn, which is right for a line describing what a
-    /// player is being asked to do and approximate for one describing what just
-    /// happened. The engine does not say which it is, so this is the best attribution
-    /// available without extending it.
+    /// Attributed to <paramref name="actingPlayerId"/> — whoever was on turn when the
+    /// action was applied, captured before it ran. Reading the current player afterwards
+    /// gets it backwards on exactly the moves that matter: a handler sets its message
+    /// and then passes the turn, so "the AI asked for aces and got none" ends up
+    /// labelled as the human's, and the table appears to be asking the wrong player.
     /// </summary>
-    private void CaptureStatusChange()
+    private void CaptureStatusChange(string? actingPlayerId = null)
     {
         if (_logic is null || _state is null) return;
 
@@ -158,8 +159,9 @@ public sealed class GameTableViewModel
         _lastLoggedStatus = text;
         _state.GameLog.Add(text);
 
-        if (_state.Players.Count > 0)
-            MessagePosted?.Invoke(_state.CurrentPlayer.Id, text);
+        if (_state.Players.Count == 0) return;
+
+        MessagePosted?.Invoke(actingPlayerId ?? _state.CurrentPlayer.Id, text);
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -396,9 +398,13 @@ public sealed class GameTableViewModel
     /// </summary>
     private async Task ApplyAnimatedAsync(GameAction action)
     {
-        _animator.CaptureBeforeMove(_state!);
-        _logic!.Apply(_state!, action);
-        CaptureStatusChange();
+        // Whose move this is has to be read before it is applied: applying it is what
+        // passes the turn on.
+        string? actingPlayerId = _state!.Players.Count > 0 ? _state.CurrentPlayer.Id : null;
+
+        _animator.CaptureBeforeMove(_state);
+        _logic!.Apply(_state, action);
+        CaptureStatusChange(actingPlayerId);
         Changed?.Invoke();
         await _animator.PlayMoveAsync(_state!);
     }
