@@ -41,7 +41,14 @@ public sealed class PlayabilitySweep
         var games = await loader.LoadAllAsync();
         var results = new List<Outcome>();
 
-        foreach (var game in games.OrderBy(g => g.Id, StringComparer.Ordinal))
+        // SWEEP_ONLY narrows the run to a few games, so a long budget can be spent on
+        // the ones in question rather than on all 58 configurations.
+        var only = (Environment.GetEnvironmentVariable("SWEEP_ONLY") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var game in games.Where(g => only.Count == 0 || only.Contains(g.Id))
+                                  .OrderBy(g => g.Id, StringComparer.Ordinal))
             for (int seats = game.MinPlayers; seats <= game.MaxPlayers; seats++)
                 results.Add(Run(loader, game.Id, seats));
 

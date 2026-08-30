@@ -16,6 +16,8 @@ namespace Cards.Engine;
 ///   gin_condition     — "deadwood_eq_0" (default)
 ///   go_out_condition  — "hand_empty" | "all_melds_complete_and_hand_empty" (default hand_empty)
 ///   round_ends_when   — "any_player_grid_all_face_up": end round when any grid is fully revealed
+///                       "stock_exhausted": end round when the deck runs out, so a game
+///                       whose players can no longer draw cannot run forever
 ///   remaining_players_get_one_more_turn — true: after trigger, each other player gets one more turn
 ///
 /// Turn sub-states (stored in metadata["dd_turn_state"]):
@@ -405,12 +407,23 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     {
         if (_roundEndsWhen is null) return false;
 
-        bool triggered = _roundEndsWhen == "any_player_grid_all_face_up"
-            && state.Players.Any(p =>
+        bool triggered = _roundEndsWhen switch
+        {
+            "any_player_grid_all_face_up" => state.Players.Any(p =>
             {
                 var g = PlayerGrid(state, p.Id);
                 return g is not null && g.Count > 0 && g.Cards.All(c => c.IsFaceUp);
-            });
+            }),
+
+            // The stock is gone and cannot be replenished. Without this the game runs
+            // forever: players keep drawing the single discard and putting one back,
+            // hands growing, nothing able to end it. Real Hand and Foot ends the round
+            // when the stock runs out, and a game that cannot terminate is a bug however
+            // unlikely the position.
+            "stock_exhausted" => state.FindZone("deck") is { IsEmpty: true },
+
+            _ => false,
+        };
 
         if (!triggered) return false;
 

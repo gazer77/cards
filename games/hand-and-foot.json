@@ -56,6 +56,7 @@
       "target_zone": "hand",
       "special_actions": ["meld", "add_to_meld", "go_out"],
       "go_out_condition": "all_melds_complete_and_hand_empty",
+      "round_ends_when": "stock_exhausted",
       "next": "score"
     },
     {

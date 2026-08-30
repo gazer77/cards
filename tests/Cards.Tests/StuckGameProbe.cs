@@ -53,6 +53,7 @@ public sealed class StuckGameProbe
                 $"selectable={selectable.Count} selected={(selected.Length == 0 ? "-" : selected)} " +
                 $"drops=[{string.Join(",", drops)}] " +
                 $"cards={state.Zones.Values.Sum(z => z.Count)} " +
+                $"scores=[{string.Join(" ", state.Scores.Select(s => $"{s.Key}:{s.Value}"))}] " +
                 $"[{string.Join(" ", state.Zones.Where(z => z.Value.Count > 0).Select(z => $"{z.Key}:{z.Value.Count}"))}] " +
                 $"auto={logic.GetAutoAdvanceDelay(state)?.TotalMilliseconds.ToString() ?? "null"}");
 
