@@ -215,6 +215,11 @@ heuristics, and conservative poker betting; everything else falls through to ran
 - [ ] Accessibility (colorblind mode, font size options) — **nothing implemented**
 - [ ] Android release prep (Play Store listing, signing, testing)
 - [ ] *Future:* iOS build when Mac access is available
+- [ ] **Game manager page** — create, edit, export and import game definitions in the
+      app, so the JSON vocabulary is usable without a text editor and a rebuild.
+      Depends on the definition validator, which already reports what is wrong with
+      a definition and why; an editor is mostly a UI over that. Export/import also
+      gives players a way to share a game they wrote.
 
 ---
 
@@ -251,6 +256,7 @@ Only the unbuilt work; everything above marked `[x]` is settled.
 | LAN discovery (mDNS) | Medium | Well-supported on Android; replaces manual host-IP entry |
 | Offline local (Bluetooth) | Medium | Android Nearby Connections API |
 | Table themes + custom backgrounds | High | `ITableTheme` already abstracts it; needs more implementations, a picker, and image storage |
+| Game manager page (create/edit/export/import) | Medium | Definitions are already data and validated on load, so the engine side is done; the work is an editor UI, file import/export on each platform, and deciding where user-authored games live alongside the shipped ones |
 | Accessibility | High | Colorblind palette and font scaling; touches `CardRenderer` and every XAML page |
 | Learn-to-play mode | High | Content work on top of the existing help framework |
 | Android release prep | Medium | Signing, store listing, device testing |
