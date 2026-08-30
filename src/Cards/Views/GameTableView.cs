@@ -38,6 +38,9 @@ public class GameTableView : SKCanvasView
 
     private readonly CardTableRenderer _renderer;
 
+    /// <summary>The renderer behind this view, so a page can drive its animations.</summary>
+    public CardTableRenderer Renderer => _renderer;
+
     public GameTableView()
     {
         _renderer = new CardTableRenderer(new DispatcherAnimationDriver());

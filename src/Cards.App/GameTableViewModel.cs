@@ -319,17 +319,8 @@ public sealed class GameTableViewModel
 
     // ── Hand sorting ──────────────────────────────────────────────────────────
 
-    /// <summary>Every sort a game may offer, in the order they are shown by default.</summary>
-    private static readonly (string Mode, string Label)[] AllSortModes =
-    [
-        ("suit_value",    "By Suit & Value"),
-        ("suit_stable",   "By Suit"),
-        ("rank_ace_high", "By Value (Ace High)"),
-        ("rank",          "By Value (Ace Low)"),
-    ];
-
     /// <summary>The mode meaning "leave my hand alone, I arrange it myself".</summary>
-    public const string CustomSortMode = "none";
+    public const string CustomSortMode = HandSortOptions.FreeMode;
 
     /// <summary>
     /// Sorts this game offers, most useful first.
@@ -340,33 +331,7 @@ public sealed class GameTableViewModel
     /// is always available last.
     /// </summary>
     public IReadOnlyList<(string Mode, string Label)> SortModes
-    {
-        get
-        {
-            var ui = _state?.Definition.Ui;
-
-            var modes = ui?.SortModes is { Count: > 0 } configured
-                ? configured
-                    .Select(m => AllSortModes.FirstOrDefault(o => o.Mode == m))
-                    .Where(o => o.Mode is not null)
-                    .ToList()
-                : AllSortModes.ToList();
-
-            if (!string.IsNullOrEmpty(ui?.DefaultSort))
-            {
-                int i = modes.FindIndex(o => o.Mode == ui.DefaultSort);
-                if (i > 0)
-                {
-                    var promoted = modes[i];
-                    modes.RemoveAt(i);
-                    modes.Insert(0, promoted);
-                }
-            }
-
-            modes.Add((CustomSortMode, "Free"));
-            return modes;
-        }
-    }
+        => HandSortOptions.For(_state?.Definition);
 
     /// <summary>
     /// The sort kept in effect as cards arrive, or null to leave the hand alone.
@@ -411,16 +376,7 @@ public sealed class GameTableViewModel
     }
 
     /// <summary>Sorts without raising Changed. Returns whether anything was sorted.</summary>
-    private bool SortHandInternal(string mode)
-    {
-        if (_state is null || string.IsNullOrEmpty(mode) || mode == CustomSortMode) return false;
-
-        foreach (var zone in _state.Zones.Values)
-            if (zone.Type == "hand" && zone.Visibility is "owner" or "all")
-                HandSorter.Sort(zone, mode);
-
-        return true;
-    }
+    private bool SortHandInternal(string mode) => HandSortOptions.Apply(_state, mode);
 
     // ── Input ─────────────────────────────────────────────────────────────────
 

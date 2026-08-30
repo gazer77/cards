@@ -21,9 +21,19 @@ public partial class GameTablePage : ContentPage
     private GameState?  _state;
     private IGameLogic? _logic;
 
+    /// <summary>
+    /// Card movement, shared with the browser client.
+    ///
+    /// This page used to work out fly-in geometry itself, against a MAUI control, which
+    /// is precisely why the browser had no animations until it was extracted. Keeping
+    /// one copy means a fix to how cards move is a fix on both clients.
+    /// </summary>
+    private readonly RendererTableAnimator _animator;
+
     public GameTablePage(GameLoader loader, SettingsService settings, GameSaveService saves, SoundService sounds, MultiplayerService mp)
     {
         InitializeComponent();
+        _animator = new RendererTableAnimator(TableCanvas.Renderer);
         _loader   = loader;
         _settings = settings;
         _saves    = saves;
@@ -123,45 +133,9 @@ public partial class GameTablePage : ContentPage
         _state = state;
         MaybeSortHands();
 
-        if (!restored)
-        {
-            var preDeal = BuildPreDealState(state);
-            bool hasDeck = preDeal.Zones.Values.Any(z => z.Type == "deck" && !z.IsEmpty);
-
-            if (hasDeck)
-            {
-                // Show full-deck preview; wait for the canvas to render it so
-                // _lastLayouts has real pixel positions.
-                TableCanvas.GameState = preDeal;
-                await Task.WhenAny(TableCanvas.WaitForNextPaintAsync(), Task.Delay(500));
-
-                // Capture the deck center NOW — before the shuffle, so post-shuffle
-                // layout-cleanup timing cannot interfere with the reading.
-                // On first launch the view may not be sized yet; retry once if the
-                // layout came back empty (canvas was zero-size during the first paint).
-                var deckCenter = TableCanvas.GetZoneCenter("deck");
-                if (!deckCenter.HasValue)
-                {
-                    await Task.WhenAny(TableCanvas.WaitForNextPaintAsync(), Task.Delay(350));
-                    deckCenter = TableCanvas.GetZoneCenter("deck");
-                }
-
-                var shuffleTask = TableCanvas.TriggerShuffleAnimationAsync("deck");
-                await Task.WhenAny(shuffleTask, Task.Delay(1600)); // safety timeout
-
-                // Queue sequential deal animation using the authoritative DealResult
-                // recorded by the engine — no reconstruction needed.
-                var dealResult = state.LastDealResult;
-                if (dealResult is not null && deckCenter.HasValue)
-                {
-                    var dealEntries = BuildDealEntries(dealResult, deckCenter.Value, state);
-                    if (dealEntries.Count > 0)
-                        TableCanvas.QueueFlyIns(dealEntries, delayBetweenMs: dealResult.AnimDelayMs);
-                }
-                // If deck center unavailable, cards land instantly; the GameState
-                // setter's deal slide-up animation handles the visual feedback.
-            }
-        }
+        // A fresh deal is choreographed — full deck, shuffle, cards dealt one at a time.
+        // A resumed game is already mid-hand, so it simply appears.
+        if (!restored) await _animator.PlayDealAsync(state);
 
         TableCanvas.GameState = _state;
         RefreshStatus();
@@ -212,35 +186,6 @@ public partial class GameTablePage : ContentPage
         _mp.Disconnected  -= OnMultiplayerDisconnected;
     }
 
-    /// <summary>
-    /// Creates a display-only state that shows every card piled in the deck zone
-    /// (hands empty) so the shuffle animation plays on a visually full deck.
-    /// </summary>
-    private static GameState BuildPreDealState(GameState real)
-    {
-        var preview = new GameState
-        {
-            GameId     = real.GameId,
-            Definition = real.Definition,
-        };
-        foreach (var p in real.Players)
-            preview.Players.Add(p);
-
-        // Clone all zones as empty shells
-        foreach (var (id, z) in real.Zones)
-            preview.Zones[id] = new Zone(id, z.Type, z.OwnerId, z.Visibility);
-
-        // Gather all cards and place them face-down in the first deck zone
-        var deckZone = preview.Zones.Values.FirstOrDefault(z => z.Type == "deck");
-        if (deckZone is not null)
-        {
-            foreach (var card in real.Zones.Values.SelectMany(z => z.Cards))
-                deckZone.Add(new Card(card.Suit, card.Rank, isFaceUp: false) { Uid = card.Uid });
-        }
-
-        preview.CurrentPhaseId = real.CurrentPhaseId;
-        return preview;
-    }
 
     private void BuildFallbackState(GameState state, GameDefinition definition)
     {
@@ -257,86 +202,15 @@ public partial class GameTablePage : ContentPage
     }
 
     // ── Auto-sort ──────────────────────────────────────────────────────────────
-
+    /// <summary>Applies the sort a game asks for by default, if it asks for one.</summary>
     private void MaybeSortHands()
-    {
-        if (_state is null) return;
-        string? mode = _state.Definition.Ui?.AutoSortHand;
-        if (string.IsNullOrEmpty(mode) || mode == "none") return;
-
-        // Sort all visible (player-owned) hand zones
-        foreach (var zone in _state.Zones.Values)
-        {
-            if (zone.Type == "hand" && zone.Visibility is "owner" or "all")
-                HandSorter.Sort(zone, mode);
-        }
-    }
+        => HandSortOptions.Apply(_state, _state?.Definition.Ui?.AutoSortHand);
 
     private void SortPlayerHand(string mode)
     {
-        if (_state is null || string.IsNullOrEmpty(mode) || mode == "none") return;
-
-        foreach (var zone in _state.Zones.Values)
-        {
-            if (zone.Type == "hand" && zone.Visibility is "owner" or "all")
-                HandSorter.Sort(zone, mode);
-        }
-        TableCanvas.GameState = _state;
+        if (HandSortOptions.Apply(_state, mode))
+            TableCanvas.GameState = _state;
     }
-
-    // ── Sort mode picker ──────────────────────────────────────────────────────
-
-    // All known sort modes and their display labels, in default display order.
-    private static readonly (string Mode, string Label)[] AllSortOptions =
-    [
-        ("suit_value",    "By Suit & Value"),
-        ("suit_stable",   "By Suit"),
-        ("rank_ace_high", "By Value (Ace High)"),
-        ("rank",          "By Value (Ace Low)"),
-    ];
-
-    private string[] BuildSortLabels()
-    {
-        var ui = _state?.Definition.Ui;
-        var configuredModes = ui?.SortModes;
-        var defaultMode     = ui?.DefaultSort;
-
-        // Decide which modes to include
-        IEnumerable<(string Mode, string Label)> options;
-        if (configuredModes is { Count: > 0 })
-        {
-            // Show only the game-configured modes, in configured order
-            options = configuredModes
-                .Select(m => AllSortOptions.FirstOrDefault(o => o.Mode == m))
-                .Where(o => o.Mode is not null);
-        }
-        else
-        {
-            options = AllSortOptions;
-        }
-
-        var list = options.ToList();
-
-        // Promote default_sort to the top of the list
-        if (!string.IsNullOrEmpty(defaultMode))
-        {
-            int idx = list.FindIndex(o => o.Mode == defaultMode);
-            if (idx > 0)
-            {
-                var entry = list[idx];
-                list.RemoveAt(idx);
-                list.Insert(0, entry);
-            }
-        }
-
-        // Always append "Custom (Drag to Arrange)" as the last option
-        list.Add(("none", "Custom (Drag to Arrange)"));
-
-        return list.Select(o => o.Label).ToArray();
-    }
-
-    private string? LabelToMode(string label)
-        => AllSortOptions.FirstOrDefault(o => o.Label == label).Mode;
 
     // ── Touch / interaction handlers ──────────────────────────────────────────
 
@@ -427,16 +301,11 @@ public partial class GameTablePage : ContentPage
             return;
         }
 
-        var (moved, sourcePts) = ApplyWithSound(action);
+        _animator.CaptureBeforeMove(_state!);
+        ApplyWithSound(action);
         MaybeSortHands();
         TableCanvas.GameState = _state;
-
-        var flyIns = BuildAllFlyInEntries(moved, sourcePts);
-        if (flyIns.Count > 0)
-        {
-            TableCanvas.QueueFlyIns(flyIns);
-            await Task.WhenAny(TableCanvas.WaitForFlyInsAsync(), Task.Delay(2000));
-        }
+        await _animator.PlayMoveAsync(_state!);
 
         RefreshStatus();
         RefreshActionButtons();
@@ -477,16 +346,11 @@ public partial class GameTablePage : ContentPage
                     break;
                 }
 
-                var (moved, sourcePts) = ApplyWithSound(_logic.GetAutoAction(_state!));
+                _animator.CaptureBeforeMove(_state!);
+                ApplyWithSound(_logic.GetAutoAction(_state!));
                 MaybeSortHands();
                 TableCanvas.GameState = _state;
-
-                var flyIns = BuildAllFlyInEntries(moved, sourcePts);
-                if (flyIns.Count > 0)
-                {
-                    TableCanvas.QueueFlyIns(flyIns);
-                    await Task.WhenAny(TableCanvas.WaitForFlyInsAsync(), Task.Delay(2000));
-                }
+                await _animator.PlayMoveAsync(_state!);
 
                 RefreshStatus();
                 RefreshActionButtons();
@@ -602,125 +466,24 @@ public partial class GameTablePage : ContentPage
     }
 
     /// <summary>
-    /// Applies an action, plays sound, and returns all cards that changed zones
-    /// together with each card's source screen position.
-    /// The caller must set <c>TableCanvas.GameState</c> before passing the return
-    /// values to <c>BuildAllFlyInEntries</c> so destinations can be resolved
-    /// against the updated layout.
+    /// Applies an action and plays whatever sound the change calls for.
+    ///
+    /// Card movement is no longer worked out here. Deciding where each card flew from
+    /// and where it lands is the same problem on every client, and it lived in this page
+    /// written against a MAUI control — which is why the browser had no animations at
+    /// all until that logic was moved to <see cref="RendererTableAnimator"/>. Sound
+    /// stays, being the one part that genuinely differs.
     /// </summary>
-    private (IReadOnlyList<(int Uid, string DestZoneId)> Moved, IReadOnlyDictionary<int, SkiaSharp.SKPoint> SourcePts)
-        ApplyWithSound(GameAction action)
+    private void ApplyWithSound(GameAction action)
     {
         var faceDownBefore = _state!.Zones.Values
             .SelectMany(z => z.Cards).Where(c => !c.IsFaceUp).Select(c => c.Id).ToHashSet();
         var handCountBefore = _state.Zones
             .Where(kv => kv.Key.StartsWith("hand:")).Sum(kv => kv.Value.Count);
-        // Snapshot card → zone BEFORE the action so we can detect all movements and
-        // resolve source positions for cards in rotated zones.
-        var cardSourceZone = new Dictionary<int, string>();
-        foreach (var (zoneId, zone) in _state.Zones)
-            foreach (var card in zone.Cards)
-                cardSourceZone[card.Uid] = zoneId;
 
         _logic!.Apply(_state, action);
 
         PlaySoundForStateChange(faceDownBefore, handCountBefore);
-
-        // All cards that moved to a different zone (hand, trick, pile, spread …)
-        // Exclude deck arrivals — reshuffles don't benefit from individual fly-ins.
-        var moved = _state.Zones.Values
-            .Where(z => z.Type != "deck")
-            .SelectMany(z => z.Cards.Select(c => (Uid: c.Uid, DestZoneId: z.Id)))
-            .Where(x => !cardSourceZone.TryGetValue(x.Uid, out var prev) || prev != x.DestZoneId)
-            .ToList();
-
-        // Resolve source positions:
-        //   1. Exact card rect from last rendered frame (works for non-rotated zones).
-        //   2. Zone center (works for rotated zones like 4-player sides or play zones).
-        //   3. Deck center as last resort.
-        var sourcePts = new Dictionary<int, SkiaSharp.SKPoint>();
-        foreach (var (uid, _) in moved)
-        {
-            var rect = TableCanvas.GetLastCardRect(uid);
-            if (rect.HasValue) { sourcePts[uid] = new SkiaSharp.SKPoint(rect.Value.MidX, rect.Value.MidY); continue; }
-
-            SkiaSharp.SKPoint? center = null;
-            if (cardSourceZone.TryGetValue(uid, out var srcZoneId))
-                center = TableCanvas.GetZoneCenter(srcZoneId);
-            center ??= TableCanvas.GetZoneCenter("deck");
-            if (center.HasValue) sourcePts[uid] = center.Value;
-        }
-
-        return (moved, sourcePts);
-    }
-
-    // ── Fly-in entry builders ─────────────────────────────────────────────────
-
-    /// <summary>
-    /// Builds fly-in entries for ALL cards that changed zones (hand, trick, pile, spread).
-    /// Must be called after <c>TableCanvas.GameState</c> is updated so destinations
-    /// can be resolved against the new layout.
-    /// Hand-zone arrivals use precise fan-slot centers; all other arrivals use zone centers.
-    /// </summary>
-    private List<(int Uid, SkiaSharp.SKPoint From, SkiaSharp.SKPoint To)> BuildAllFlyInEntries(
-        IReadOnlyList<(int Uid, string DestZoneId)> moved,
-        IReadOnlyDictionary<int, SkiaSharp.SKPoint> sourcePts)
-    {
-        if (moved.Count == 0 || _state is null) return [];
-
-        // Pre-compute precise fan-slot centers for hand-zone arrivals
-        var handArrivals = moved
-            .Where(m => _state.Zones.TryGetValue(m.DestZoneId, out var z) && z.Type == "hand")
-            .Select(m => m.Uid)
-            .ToList();
-        var handDests = TableCanvas.ComputeHandSlotCenters(_state, handArrivals);
-
-        var entries = new List<(int, SkiaSharp.SKPoint, SkiaSharp.SKPoint)>(moved.Count);
-        foreach (var (uid, destZoneId) in moved)
-        {
-            if (!sourcePts.TryGetValue(uid, out var from)) continue;
-
-            SkiaSharp.SKPoint? to = null;
-            if (_state.Zones.TryGetValue(destZoneId, out var destZone))
-            {
-                if (destZone.Type == "hand")
-                {
-                    if (handDests.TryGetValue(uid, out var handPt)) to = handPt;
-                }
-                else
-                    to = TableCanvas.GetZoneCenter(destZoneId);
-            }
-
-            if (to.HasValue)
-                entries.Add((uid, from, to.Value));
-        }
-        return entries;
-    }
-
-    /// <summary>
-    /// Builds ordered fly-in entries for the initial deal, preserving deal-step order
-    /// so the stagger delay produces the correct clockwise waterfall effect.
-    /// </summary>
-    private List<(int Uid, SkiaSharp.SKPoint From, SkiaSharp.SKPoint To)> BuildDealEntries(
-        Engine.DealResult dealResult, SkiaSharp.SKPoint deckCenter, Engine.GameState finalState)
-    {
-        var allIds       = dealResult.CardsByPlayerIndex.Values.SelectMany(ids => ids);
-        var destinations = TableCanvas.ComputeHandSlotCenters(finalState, allIds);
-
-        var entries  = new List<(int, SkiaSharp.SKPoint, SkiaSharp.SKPoint)>();
-        var assigned = new Dictionary<int, int>();
-
-        foreach (var (playerIdx, count) in dealResult.Steps)
-        {
-            if (!dealResult.CardsByPlayerIndex.TryGetValue(playerIdx, out var cards)) continue;
-            int start = assigned.GetValueOrDefault(playerIdx, 0);
-            int end   = Math.Min(start + count, cards.Count);
-            for (int i = start; i < end; i++)
-                if (destinations.TryGetValue(cards[i], out var to))
-                    entries.Add((cards[i], deckCenter, to));
-            assigned[playerIdx] = end;
-        }
-        return entries;
     }
 
     private void RefreshInteractionState()
@@ -923,15 +686,22 @@ public partial class GameTablePage : ContentPage
         OnGearMenuDismissed(sender, e);
         if (_state is null) return;
 
-        string[] labels = BuildSortLabels();
-        string? chosen  = await DisplayActionSheetAsync("Sort Hand", "Cancel", null, labels);
+        // Shared with the browser client: which sorts a game offers, in what order, is
+        // a per-game rule and both clients had their own copy of it.
+        var options = HandSortOptions.For(_state.Definition);
+
+        string? chosen = await DisplayActionSheetAsync(
+            "Sort Hand", "Cancel", null, options.Select(o => o.Label).ToArray());
 
         if (chosen is null || chosen == "Cancel") return;
-        if (chosen == "Custom (Drag to Arrange)") return;   // no-op; player drags manually
 
-        string? mode = LabelToMode(chosen);
-        if (mode is not null)
-            SortPlayerHand(mode);
+        var mode = options.FirstOrDefault(o => o.Label == chosen).Mode;
+
+        // Free means the player arranges the hand themselves, so there is deliberately
+        // nothing to do.
+        if (mode is null || mode == HandSortOptions.FreeMode) return;
+
+        SortPlayerHand(mode);
     }
 
     private void OnGearLogClicked(object? sender, EventArgs e)
