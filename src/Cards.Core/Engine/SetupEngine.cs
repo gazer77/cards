@@ -88,10 +88,27 @@ public sealed class SetupEngine : ISetupStrategy
             }
             else if (zoneDef.Owner == "each_team")
             {
-                foreach (var team in state.Teams)
+                // A game may form teams at some table sizes and not others — Hand and
+                // Foot pairs up at four and six players and is individual otherwise.
+                // Without a fallback the zone simply is not created at those sizes, and
+                // Hand and Foot had nowhere to meld at two or three players: melding
+                // failed silently, before any rule about what a meld is could apply.
+                if (state.Teams.Count > 0)
                 {
-                    string id = $"{zoneDef.Id}:{team.Id}";
-                    state.Zones[id] = new Zone(id, zoneDef.Type, team.Id, zoneDef.Visibility);
+                    foreach (var team in state.Teams)
+                    {
+                        string id = $"{zoneDef.Id}:{team.Id}";
+                        state.Zones[id] = new Zone(id, zoneDef.Type, team.Id, zoneDef.Visibility);
+                    }
+                }
+                else
+                {
+                    // No teams: every player is their own side.
+                    foreach (var p in state.Players)
+                    {
+                        string id = $"{zoneDef.Id}:{p.Id}";
+                        state.Zones[id] = new Zone(id, zoneDef.Type, p.Id, zoneDef.Visibility);
+                    }
                 }
             }
             else

@@ -487,6 +487,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         if (hand is null) return;
 
         var selectedCards = hand.Cards.Where(c => selectedIds.Contains(c.Id)).ToList();
+        if (selectedCards.Count == 0) return;
         if (selectedCards.Count < 3 && !addToExisting) return; // need at least 3 for a new meld
 
         // Find the player's team meld zone, fall back to player meld zone.
@@ -496,15 +497,64 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                     ?? state.FindZone("meld");
         if (meldZone is null) return;
 
+        // A meld is cards of one rank, with wilds standing in for the rest. This was
+        // documented as validated and was not: any three selected cards were accepted,
+        // so a "meld" of unrelated cards was legal and then scored as though it counted.
+        if (!IsValidMeld(selectedCards, out var meldRank))
+        {
+            state.Metadata["status"] = "That is not a meld — pick three or more of a rank.";
+            return;
+        }
+
+        // Adding to an existing meld joins the one of the same rank, so a later card
+        // lands in the meld it belongs to rather than loose in the pile.
+        int targetGroup = addToExisting ? FindGroupOfRank(meldZone, meldRank) : -1;
+
         foreach (var card in selectedCards)
         {
             hand.Remove(card);
             card.IsFaceUp = true;
-            meldZone.Add(card);
         }
 
+        if (targetGroup >= 0)
+            foreach (var card in selectedCards) meldZone.AddToGroup(targetGroup, card);
+        else
+            meldZone.AddGroup(selectedCards);
+
         state.Metadata.Remove("selected_card");
-        state.Metadata["status"] = addToExisting ? "Added to meld." : "Meld laid!";
+        state.Metadata["status"] = targetGroup >= 0 ? "Added to meld." : "Meld laid!";
+    }
+
+    /// <summary>
+    /// A meld is three or more cards of one rank, wilds allowed as stand-ins. Returns the
+    /// rank the meld is of; a selection that is all wilds has no rank and is not a meld.
+    /// </summary>
+    private static bool IsValidMeld(IReadOnlyList<Card> cards, out Rank rank)
+    {
+        rank = Rank.Joker;
+
+        var naturals = cards.Where(c => !IsWild(c)).ToList();
+        if (naturals.Count == 0) return false;
+
+        var meldRank = naturals[0].Rank;
+        rank = meldRank;
+        if (naturals.Any(c => c.Rank != meldRank)) return false;
+
+        // Wilds may not outnumber the real cards; a meld is a set with help, not a pile
+        // of substitutes.
+        return cards.Count - naturals.Count <= naturals.Count;
+    }
+
+    private static bool IsWild(Card card) => card.IsWild || card.Rank == Rank.Two;
+
+    /// <summary>Index of the meld already holding this rank, or -1.</summary>
+    private static int FindGroupOfRank(Zone zone, Rank rank)
+    {
+        for (int i = 0; i < zone.Groups.Count; i++)
+            if (zone.GroupCards(i).Any(c => !IsWild(c) && c.Rank == rank))
+                return i;
+
+        return -1;
     }
 
     private void Knock(GameState state, bool isGin)

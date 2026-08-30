@@ -805,6 +805,29 @@ public static class ScoringEngine
 
         const int maxWildsPerCanasta = 3;
 
+        // Where the melds are recorded, score them. A canasta is a property of one meld
+        // — seven cards laid as a set — not of the pile as a whole, so a zone that knows
+        // its melds can be scored exactly instead of reconstructed.
+        if (zone.HasGroups)
+        {
+            for (int i = 0; i < zone.Groups.Count; i++)
+            {
+                var meld = zone.GroupCards(i);
+                if (meld.Count < 7) continue;
+
+                int wildsInMeld = meld.Count(IsWildCard);
+                if (wildsInMeld > maxWildsPerCanasta) continue;
+
+                pts += wildsInMeld > 0 ? wildCanBonus : natCanBonus;
+            }
+
+            return pts;
+        }
+
+        // No recorded melds: fall back to inferring them. Kept for games that lay cards
+        // into a meld zone without grouping them, and for saves written before groups
+        // existed. Greedy and approximate — the reason grouping was added.
+
         // Separate wilds from naturals.
         int wildsRemaining = zone.Cards.Count(IsWildCard);
         var naturalGroups  = zone.Cards

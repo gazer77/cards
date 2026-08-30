@@ -31,6 +31,7 @@ public static class GameStateSerializer
                 Type       = z.Type,
                 OwnerId    = z.OwnerId,
                 Visibility = z.Visibility,
+                Groups     = z.Groups.Select(g => g.ToList()).ToList(),
                 Cards      = z.Cards.Select(c => new SavedCard
                 {
                     Suit     = (int)c.Suit,
@@ -88,6 +89,9 @@ public static class GameStateSerializer
             var zone = new Zone(sz.Id, sz.Type, sz.OwnerId, sz.Visibility);
             foreach (var sc in sz.Cards)
                 zone.Add(new Card((Suit)sc.Suit, (Rank)sc.Rank, sc.IsFaceUp) { IsWild = sc.IsWild, Uid = sc.Uid });
+
+            foreach (var group in sz.Groups) zone.Groups.Add(group.ToList());
+
             state.Zones[sz.Id] = zone;
         }
 

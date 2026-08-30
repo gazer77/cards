@@ -27,6 +27,13 @@ public sealed class SavedZone
     public string?      OwnerId    { get; set; }
     public string       Visibility { get; set; } = "all";
     public List<SavedCard> Cards   { get; set; } = [];
+
+    /// <summary>
+    /// Card groupings, by uid. Empty for every zone but melds. Persisted because the
+    /// grouping is part of the position: a resumed game with its melds run together
+    /// would score differently from the one that was saved.
+    /// </summary>
+    public List<List<int>> Groups  { get; set; } = [];
 }
 
 public sealed class SavedCard
