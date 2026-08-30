@@ -51,15 +51,35 @@ Merge rules: the parent is deep-cloned, then direct child fields (`id`, `name`, 
 | `"pinochle-48"` | 9–A of all 4 suits × 2 (48 cards) |
 | `"standard-104"` | Two standard decks shuffled together |
 
-Custom deck:
+The names above are shorthand. A deck can instead state its composition, which is what
+lets a game use any deck rather than one someone has already named:
+
 ```json
 "deck": {
-  "type": "custom",
-  "suits": ["spades", "hearts", "diamonds", "clubs"],
-  "ranks": ["9", "10", "J", "Q", "K", "A"],
-  "copies": 1
+  "ranks":  "2-A",                  // a range, a list ["9","10","J"], or "standard" / "short"
+  "suits":  ["hearts", "spades"],   // optional; all four by default
+  "copies": "players + 1",          // a number, an expression, or max_players tiers
+  "jokers": "(players + 1) * 2"
 }
 ```
+
+`ranks` — `"2-A"`, `"9-A"`, `"10-A"`; or an explicit list; or `"standard"` (2–A) /
+`"short"` (9–A). A range must run low to high.
+
+`suits` — restricting the four is supported. Inventing a fifth is not: suits are drawn as
+hand-authored vector paths, so a new one needs artwork before it needs parsing.
+
+`copies` and `jokers` — a number, an [expression](#expressions), or tiers selected by
+table size:
+
+```json
+"copies": [ { "max_players": 4, "count": 5 }, { "count": 6 } ]
+```
+
+An unknown deck name, or a declaration producing no cards, **fails the definition** — it
+does not fall back to a standard 52. A deck silently coming out the wrong size is a bug
+that surfaces much later and somewhere unrelated, and across two clients it deals
+different cards from the same definition with no error on either side.
 
 ---
 
@@ -391,6 +411,44 @@ One draw + one discard per player turn. Repeats until a special action ends the 
 
 `go_out_condition`: `"hand_empty"` | `"all_melds_complete_and_hand_empty"`
 
+`round_ends_when`: also accepts `"stock_exhausted"` — the round ends when the draw pile
+runs out, which is how Hand and Foot and Gin Rummy end a round nobody goes out of. Without
+it those games simply stopped, with every seat unable to draw and no way forward.
+
+#### Conditional draw sources
+
+An entry in `draw_from` may be an object instead of a zone name. Plain zone names keep
+working and mean the same thing, so only the games needing conditions carry them:
+
+```json
+"draw_from": [
+  { "zone": "deck", "count": 2 },
+  { "zone": "discard", "count": "pile",
+    "requires": { "all": [
+        "team_has_melded",
+        { "hand_count_of_rank": "top_discard", "at_least": 2 } ] } }
+]
+```
+
+`zone` — required. A source naming no zone fails the definition.
+`count` — how many cards, or `"pile"` for the whole discard pile.
+`requires` — a [condition](#conditions). The source is offered only while it holds.
+
+#### `initial_meld_requirement`
+
+What a side's *first* meld of a round must be worth before it may lay anything down. Tiers
+are matched by round number; a last entry with no `round` is the default:
+
+```json
+"initial_meld_requirement": [
+  { "round": 1, "points": 50 },  { "round": 2, "points": 90 },
+  { "round": 3, "points": 120 }, { "points": 150 }
+]
+```
+
+The minimum is measured against the cards laid in that one action, valued as `card_points`
+scoring values them.
+
 ---
 
 ### `war`
@@ -550,6 +608,89 @@ No rules enforced. Players move cards freely between zones.
   "end_game": "manual"
 }
 ```
+
+---
+
+## Conditions
+
+Wherever a definition asks a question about the position — `requires` on a draw source, and
+anywhere a phase takes `requires` or `when` — it uses this vocabulary. Conditions are JSON,
+not a string syntax: there is no parser to write, and every term can be checked when the
+definition loads.
+
+A condition is a term name, an object naming a term, or a combinator:
+
+```json
+"team_has_melded"
+{ "hand_count_of_rank": "top_discard", "at_least": 2 }
+{ "all": [ "team_has_melded", { "not": "stock_exhausted" } ] }
+```
+
+| Term | Holds when |
+|---|---|
+| `stock_exhausted` | The draw pile is empty |
+| `team_has_melded` | This side has laid anything down this round |
+| `hand_empty` | The player to act holds no cards |
+| `always` / `never` | Unconditionally true / false |
+| `{ "hand_count_of_rank": <rank>, "at_least": n }` | The player holds `n`+ of that rank. The rank is a literal (`"K"`) or `"top_discard"` |
+| `{ "meld_value_at_least": n }` | This side's melds are worth `n`+ points, valued as scoring values them |
+
+| Combinator | Meaning |
+|---|---|
+| `{ "all": [ … ] }` | Every condition holds |
+| `{ "any": [ … ] }` | At least one holds |
+| `{ "not": … }` | The condition does not hold |
+
+An **absent** condition is true — a rule with no condition applies always. An object naming
+no known term is **false**, and fails validation, so it never reaches the table: silently
+treating an unreadable rule as satisfied is how a typo becomes a game that plays wrong.
+
+Terms are deliberately few, and each exists because a real game needed it. Adding one is a
+small change to `RuleCondition`; adding one nothing needs is how this becomes a language
+nobody can hold in their head.
+
+---
+
+## Expressions
+
+Where a definition needs a number that depends on the table, it can state the arithmetic
+instead of a fixed value or a tier list. Used today by deck `copies` and `jokers`.
+
+```json
+"copies": "players + 1",
+"jokers": "(players + 1) * 2"
+```
+
+Integers, `+ - * /`, parentheses, and `min(a, b)` / `max(a, b)`. Division truncates.
+No variables, no calls, no reference to the position — an expression evaluates identically
+on every client, which is what lets two devices deal the same cards from a shared seed.
+
+Named values available: `players`.
+
+An expression that will not parse, or names something unknown, fails the definition.
+
+---
+
+## Not Yet Expressible
+
+Honest limits, so the vocabulary is judged on what it does rather than assumed complete.
+Each of these needs a primitive that does not exist; none is hard in itself, and each
+should be added when a game actually calls for it — not before.
+
+- **Anything depending on history.** "You may not discard the card you just took",
+  "trump cannot be led until it is broken", "a player who passed may not bid again". The
+  engine can see the position but keeps no per-turn record to ask questions of.
+- **Rules that reference other rules.** "Melds of this rank cannot be extended once
+  frozen", "the bonus applies only if the contract was doubled". Conditions read the
+  table, not other declarations.
+- **Per-card annotations.** Rules attaching state to an individual card — frozen piles,
+  captured cards, cards marked during play — beyond the grouping meld zones use.
+- **Choices offered mid-action.** A draw source can be gated on a condition, but a rule
+  demanding a follow-up ("...and you must immediately meld the card you took") cannot yet
+  be declared. This is the missing half of Hand and Foot's discard pickup.
+- **New suits.** Suits restrict to the standard four. A fifth needs artwork first: suits
+  are drawn as hand-authored vector paths, not glyphs.
+- **Continuous or simultaneous play.** Every phase assumes turns.
 
 ---
 
@@ -810,3 +951,9 @@ Game-specific agents (e.g., `GoFishAiAgent`) are registered in the phase handler
 4. If the game needs a new scoring type, add a case to `ScoringEngine.Apply`.
 5. Add a help file at `games/help/<id>.md`.
 6. The game appears automatically in the game picker — no other app-layer changes needed.
+
+A definition is validated when it loads. An unknown deck name, an unreadable expression, a
+draw source naming no zone, or a condition term the engine does not recognise keeps the
+game **out of the list entirely**, with the reason recorded in `GameLoader.LoadErrors`.
+That is deliberately harsh: the alternative is not a loud failure but a silent one, where
+the game appears, deals, and plays with one of its rules simply missing.

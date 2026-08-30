@@ -139,7 +139,10 @@ public static class RuleCondition
         if (melds is null) return false;
 
         int need = condition.GetProperty("meld_value_at_least").GetInt32();
-        return melds.Count >= need;
+
+        // Point value, not card count — scored the same way the game scores those cards,
+        // so a definition's "worth 120" means the same number everywhere it is written.
+        return ScoringEngine.CardPointValue(state.Definition, melds.Cards) >= need;
     }
 
     // ── Validation ────────────────────────────────────────────────────────────

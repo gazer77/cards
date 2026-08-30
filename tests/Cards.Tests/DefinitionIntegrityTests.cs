@@ -63,4 +63,43 @@ public sealed class DefinitionIntegrityTests
             Assert.NotNull(all);
         }
     }
+
+    /// <summary>
+    /// Every shipped definition's rules resolve at every table size it advertises, not
+    /// just at the two the loader checks. A deck expression or a tier list can be sound
+    /// at 2 and 6 seats and produce nothing at 4.
+    /// </summary>
+    [Fact]
+    public async Task Every_definition_reads_cleanly_at_every_seat_count_it_offers()
+    {
+        var games = await NewLoader().LoadAllAsync();
+        Assert.NotEmpty(games);
+
+        foreach (var game in games)
+            for (int seats = game.MinPlayers; seats <= game.MaxPlayers; seats++)
+            {
+                var deck = DeckSpec.Parse(game.Deck, seats);
+                Assert.True(deck.Size > 0, $"{game.Id}: no cards at {seats} players.");
+            }
+    }
+
+    /// <summary>
+    /// House rules patch definition paths, so a rule can introduce a condition or an
+    /// expression the base definition never had. Turning them all on must not produce a
+    /// definition the engine cannot read.
+    /// </summary>
+    [Fact]
+    public async Task House_rules_cannot_introduce_an_unreadable_rule()
+    {
+        var games = await NewLoader().LoadAllAsync();
+
+        foreach (var game in games.Where(g => g.HouseRules.Count > 0))
+        {
+            var patched = HouseRuleEngine.Apply(game, [.. game.HouseRules.Select(r => r.Id)]);
+
+            Assert.True(DefinitionValidator.Validate(patched) is { Count: 0 },
+                $"{game.Id} with all house rules on: " +
+                string.Join(" | ", DefinitionValidator.Validate(patched)));
+        }
+    }
 }

@@ -183,4 +183,34 @@ public sealed class RuleConditionTests
 
         Assert.NotEmpty(problems);
     }
+
+    /// <summary>
+    /// Points, not cards. The term read as "at least n cards melded" for a while, which
+    /// made a 150-point opening requirement mean 150 cards and so hold essentially never.
+    /// Three aces is 60 in Hand and Foot; three fours is 15.
+    /// </summary>
+    [Fact]
+    public void Meld_value_counts_points_rather_than_cards()
+    {
+        var (state, _) = Table();
+
+        Melds(state).AddGroup([
+            new Card(Suit.Clubs,  Rank.Ace) { Uid = 5101 },
+            new Card(Suit.Hearts, Rank.Ace) { Uid = 5102 },
+            new Card(Suit.Spades, Rank.Ace) { Uid = 5103 },
+        ]);
+
+        Assert.True(Holds("{ \"meld_value_at_least\": 60 }", state));
+        Assert.False(Holds("{ \"meld_value_at_least\": 61 }", state));
+
+        // Three cards, and nowhere near three cards' worth of points.
+        Assert.False(Holds("{ \"meld_value_at_least\": 3 }", Empty(state)));
+    }
+
+    /// <summary>The same table with nothing melded, for the card-count contrast above.</summary>
+    private static GameState Empty(GameState state)
+    {
+        Melds(state).Clear();
+        return state;
+    }
 }

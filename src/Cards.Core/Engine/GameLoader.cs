@@ -32,7 +32,12 @@ public class GameLoader
         "hand-and-foot",
     ];
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    /// <summary>
+    /// How definitions are read. Public so a validator or a test parses them exactly as
+    /// the loader does — notably SafeJsonElementConverter, without which an unset
+    /// JsonElement throws on the round trip that inheritance and house rules both use.
+    /// </summary>
+    public static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         AllowTrailingCommas = true,
@@ -82,6 +87,15 @@ public class GameLoader
             // Apply default house rule states.
             foreach (var rule in def.HouseRules)
                 rule.IsEnabled = rule.Default;
+
+            // Rules the engine cannot read are a definition error, not something to work
+            // around at the table. A condition it does not recognise would simply never
+            // hold, and a game would play on with one of its rules silently absent.
+            if (DefinitionValidator.Validate(def) is { Count: > 0 } problems)
+            {
+                LoadErrors[gameId] = string.Join(" | ", problems);
+                return null;
+            }
 
             _cache[gameId] = def;
             return def;
