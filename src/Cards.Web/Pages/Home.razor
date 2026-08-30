@@ -5,7 +5,10 @@
 <PageTitle>Cards</PageTitle>
 
 <div class="picker">
-    <h1>Cards</h1>
+    <div class="picker-head">
+        <h1>Cards</h1>
+        <button class="link" @onclick="@(() => Nav.NavigateTo("/settings"))">Settings</button>
+    </div>
     <p class="tagline">Pick a game.</p>
 
     @if (_games is null)

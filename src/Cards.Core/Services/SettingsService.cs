@@ -1,3 +1,4 @@
+using System.Globalization;
 using Cards.Engine;
 
 namespace Cards.Services;
@@ -17,6 +18,8 @@ public class SettingsService
     private const string KeyAutoReady      = "auto_ready";
     private const string KeyClientId       = "client_id";
     private const string KeyShowDiagnostics = "show_diagnostics";
+    private const string KeyTurnPace       = "turn_pace";
+    private const string KeyDefaultSort    = "default_hand_sort";
 
     private readonly ISettingsStore _store;
 
@@ -50,6 +53,38 @@ public class SettingsService
     {
         get => _store.Get(KeyAutoReady, false);
         set => _store.Set(KeyAutoReady, value);
+    }
+
+    /// <summary>
+    /// How much to stretch the pause between automatic turns. 1.0 is the engine's own
+    /// timing; higher is slower.
+    ///
+    /// The engine reports a delay per step and those steps chain, so a run of AI turns
+    /// resolves faster than a person can follow. How fast is followable depends on the
+    /// game and the player, which is why it is a setting rather than a constant.
+    /// </summary>
+    public double TurnPace
+    {
+        get => double.TryParse(_store.Get(KeyTurnPace, ""), NumberStyles.Float,
+                               CultureInfo.InvariantCulture, out var v) && v > 0
+            ? Math.Clamp(v, 0.25, 4.0)
+            : 1.8;
+        set => _store.Set(KeyTurnPace,
+            Math.Clamp(value, 0.25, 4.0).ToString(CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Hand sort applied to games the player has not set individually, or null to use
+    /// whatever each game's definition prefers.
+    /// </summary>
+    public string? DefaultHandSort
+    {
+        get
+        {
+            var value = _store.Get(KeyDefaultSort, "");
+            return string.IsNullOrEmpty(value) ? null : value;
+        }
+        set => _store.Set(KeyDefaultSort, value ?? "");
     }
 
     /// <summary>

@@ -219,6 +219,7 @@
 
             _diagnostics = Settings.ShowDiagnostics;
             _canvas.Renderer.ShowDiagnostics = _diagnostics;
+            _canvas.Renderer.SetSkin(SkinFactory.Create(Settings.CardSkinId));
 
             // Debug:RevealAllCards turns every hand face-up. Configuration only, with
             // no way to reach it from the UI: it is for finding bugs about which cards
@@ -228,11 +229,10 @@
                 Config.GetValue<bool>("Debug:RevealAllCards");
         }
 
-        // Slower than the engine's own timing, which was tuned against a phone where a
-        // turn also costs a touch and a glance. Watching AI seats play needs longer:
-        // nothing signals that a turn happened except the cards moving.
-        // Provisional until this is a user setting — see GameTableViewModel.TurnPace.
-        Vm.TurnPace         = 1.8;
+        // Pace comes from the player now. The engine's own timing was tuned against a
+        // phone, where a turn also costs a touch and a glance; watching AI seats needs
+        // longer, and how much longer is a matter of taste.
+        Vm.TurnPace         = Settings.TurnPace;
         Vm.MinimumTurnPause = TimeSpan.FromMilliseconds(650);
 
         PushToCanvas();
@@ -287,9 +287,10 @@
     /// </summary>
     private void ApplyRememberedSort()
     {
-        // Fall back to the game's own preference when the player has not chosen: a
-        // definition that names a default_sort expects hands kept that way.
+        // This game's remembered choice first, then the player's global preference,
+        // then whatever the definition itself asks for.
         _sort = Settings.GetHandSort(GameId)
+             ?? Settings.DefaultHandSort
              ?? Vm.State?.Definition.Ui?.DefaultSort;
 
         if (_sort is not null) Vm.SortHand(_sort);

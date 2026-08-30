@@ -1,0 +1,146 @@
+@page "/settings"
+@inject Cards.Services.SettingsService Prefs
+@inject NavigationManager Nav
+
+@*
+    Somewhere to change the things the app already knew how to do.
+
+    Turn pace, hand sort and game messages were all live settings with no way to reach
+    them — the pace in particular was a constant chosen in the page, with a comment
+    admitting it was provisional.
+*@
+
+<PageTitle>Settings</PageTitle>
+
+<div class="setup">
+    <button class="link" @onclick="@(() => Nav.NavigateTo("/"))">&larr; Games</button>
+
+    <h1>Settings</h1>
+
+    <section class="setup-block">
+        <h2>Cards</h2>
+        <div class="choices">
+            @foreach (var (id, label) in Skins)
+            {
+                var captured = id;
+                <button class="choice @(_skin == captured ? "chosen" : "")"
+                        @onclick="() => SetSkin(captured)">@label</button>
+            }
+        </div>
+    </section>
+
+    <section class="setup-block">
+        <h2>Pace</h2>
+        <input type="range" min="0.5" max="3" step="0.1"
+               value="@_pace.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+               @onchange="SetPace" />
+        <p class="muted">@PaceLabel</p>
+    </section>
+
+    <section class="setup-block">
+        <h2>Sort hands by</h2>
+        <div class="choices">
+            @foreach (var (mode, label) in SortChoices)
+            {
+                var captured = mode;
+                <button class="choice @(_sort == captured ? "chosen" : "")"
+                        @onclick="() => SetSort(captured)">@label</button>
+            }
+        </div>
+        <p class="muted">
+            Applies to games you have not set individually. A sort chosen at the table
+            is remembered for that game and wins over this.
+        </p>
+    </section>
+
+    <section class="setup-block">
+        <h2>Table</h2>
+        <label class="rule">
+            <input type="checkbox" checked="@_messages" @onchange="SetMessages" />
+            <span>
+                <span class="rule-name">Speech bubbles</span>
+                <span class="rule-desc">
+                    Show what each player is doing beside their seat. The game log keeps
+                    a record either way.
+                </span>
+            </span>
+        </label>
+    </section>
+</div>
+
+@code {
+    private static readonly (string Id, string Label)[] Skins =
+    [
+        ("simple",  "Simple"),
+        ("classic", "Classic"),
+    ];
+
+    /// <summary>
+    /// Null means "whatever each game prefers" — a real choice, and the default, since
+    /// a definition naming its own sort usually has a reason.
+    /// </summary>
+    private static readonly (string? Mode, string Label)[] SortChoices =
+    [
+        (null,             "Game default"),
+        ("suit_value",     "Suit & value"),
+        ("suit_stable",    "Suit"),
+        ("rank_ace_high",  "Value (ace high)"),
+        ("rank",           "Value (ace low)"),
+        ("none",           "Free"),
+    ];
+
+    private string  _skin     = "simple";
+    private double  _pace     = 1.8;
+    private string? _sort;
+    private bool    _messages = true;
+
+    protected override void OnInitialized()
+    {
+        _skin     = Prefs.CardSkinId;
+        _pace     = Prefs.TurnPace;
+        _sort     = Prefs.DefaultHandSort;
+        _messages = Prefs.ShowGameMessages;
+    }
+
+    /// <summary>
+    /// Described rather than numbered: "1.8x" means nothing to a player, and the useful
+    /// distinction is only ever roughly how long a turn takes to watch.
+    /// </summary>
+    private string PaceLabel => _pace switch
+    {
+        < 0.9  => "Brisk — turns go by quickly",
+        < 1.6  => "Steady",
+        < 2.4  => "Relaxed",
+        _      => "Slow — easy to follow every card",
+    };
+
+    private void SetSkin(string id)
+    {
+        _skin = id;
+        Prefs.CardSkinId = id;
+    }
+
+    private void SetPace(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(),
+                            System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            out var value))
+        {
+            _pace = value;
+            Prefs.TurnPace = value;
+        }
+    }
+
+    private void SetSort(string? mode)
+    {
+        _sort = mode;
+        Prefs.DefaultHandSort = mode;
+    }
+
+    private void SetMessages(ChangeEventArgs e)
+    {
+        _messages = (bool)(e.Value ?? true);
+        Prefs.ShowGameMessages = _messages;
+    }
+}

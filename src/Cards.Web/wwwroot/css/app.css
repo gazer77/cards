@@ -469,3 +469,29 @@ html, body {
 }
 
 .game-over .confirm-buttons { justify-content: center; flex-wrap: wrap; }
+
+/* ── Settings ────────────────────────────────────────────────────────────── */
+
+.picker-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.choices { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.choice {
+    padding: 0.5rem 0.9rem;
+    background: var(--surface-mid);
+    color: var(--ink);
+    border: 1px solid #ffffff1a;
+    border-radius: 0.45rem;
+    font: inherit;
+    cursor: pointer;
+}
+
+.choice:hover  { background: #2d3f35; }
+.choice.chosen { background: #2e7d4f; border-color: #2e7d4f; font-weight: 600; }
+
+.setup-block input[type=range] { width: 100%; accent-color: #2e7d4f; }

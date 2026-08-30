@@ -123,3 +123,66 @@ public sealed class GameOverTests
         Assert.True(detail.Length == 0 || detail.Trim().Length > 0);
     }
 }
+
+/// <summary>
+/// Settings that the table actually reads.
+///
+/// Turn pace and default sort were constants in the page before they were settings, so
+/// these check the round trip a player relies on: set it, and a new table picks it up.
+/// </summary>
+public sealed class SettingsTests
+{
+    private static SettingsService Fresh() => new(new InMemorySettingsStore());
+
+    [Fact]
+    public void Pace_defaults_to_something_watchable_and_survives_a_round_trip()
+    {
+        var settings = Fresh();
+
+        // The default matters: it is what every player sees before touching anything.
+        Assert.True(settings.TurnPace > 1.0, "Default pace is not slower than the engine's own timing.");
+
+        settings.TurnPace = 2.5;
+        Assert.Equal(2.5, settings.TurnPace, 3);
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-1.0)]
+    [InlineData(99.0)]
+    public void An_absurd_pace_is_clamped_rather_than_obeyed(double value)
+    {
+        var settings = Fresh();
+        settings.TurnPace = value;
+
+        // A pace of zero would spin the turn loop; a pace of 99 would look frozen.
+        Assert.InRange(settings.TurnPace, 0.25, 4.0);
+    }
+
+    [Fact]
+    public void Default_sort_distinguishes_unset_from_chosen()
+    {
+        var settings = Fresh();
+
+        // Null is "use whatever each game prefers", which is not the same as the player
+        // having chosen Free — that choice has to stop the sorting.
+        Assert.Null(settings.DefaultHandSort);
+
+        settings.DefaultHandSort = "none";
+        Assert.Equal("none", settings.DefaultHandSort);
+
+        settings.DefaultHandSort = null;
+        Assert.Null(settings.DefaultHandSort);
+    }
+
+    [Fact]
+    public void A_sort_chosen_for_one_game_does_not_become_the_default()
+    {
+        var settings = Fresh();
+        settings.SetHandSort("hearts", "suit_value");
+
+        Assert.Equal("suit_value", settings.GetHandSort("hearts"));
+        Assert.Null(settings.GetHandSort("gin-rummy"));
+        Assert.Null(settings.DefaultHandSort);
+    }
+}
