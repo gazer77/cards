@@ -5,20 +5,8 @@
   "version": "1.0",
   "deck": {
     "ranks": "2-A",
-    "copies": [
-      { "max_players": 2, "count": 3 },
-      { "max_players": 3, "count": 4 },
-      { "max_players": 4, "count": 5 },
-      { "max_players": 5, "count": 6 },
-      { "count": 7 }
-    ],
-    "jokers": [
-      { "max_players": 2, "count": 6 },
-      { "max_players": 3, "count": 8 },
-      { "max_players": 4, "count": 10 },
-      { "max_players": 5, "count": 12 },
-      { "count": 14 }
-    ]
+    "copies": "players + 1",
+    "jokers": "(players + 1) * 2"
   },
   "players": { "min": 2, "max": 6 },
   "teams": {

@@ -205,3 +205,88 @@ public sealed class DeckSufficiencyTests
             "leaving nothing in the draw pile it says it wants.");
     }
 }
+
+/// <summary>
+/// Arithmetic in a definition, where a number is expected.
+///
+/// The case that demanded it: Hand and Foot's deck is "one pack per player, plus one",
+/// which took five max_players tiers for copies and five more for jokers — ten lines to
+/// say what a person says in six words, and ten places for the two to disagree.
+/// </summary>
+public sealed class RuleExpressionTests
+{
+    private static readonly Dictionary<string, int> Values = new()
+    {
+        ["players"] = 4,
+        ["round"]   = 2,
+    };
+
+    [Theory]
+    [InlineData("1", 1)]
+    [InlineData("players", 4)]
+    [InlineData("players + 1", 5)]
+    [InlineData("(players + 1) * 2", 10)]
+    [InlineData("players * 2 + 1", 9)]      // precedence, not left-to-right
+    [InlineData("1 + players * 2", 9)]
+    [InlineData("players - round", 2)]
+    [InlineData("12 / round", 6)]
+    [InlineData("min(players, 3)", 3)]
+    [InlineData("max(players, 9)", 9)]
+    [InlineData("  players   +   1  ", 5)]  // whitespace is not significant
+    [InlineData("-2 + players", 2)]
+    public void Evaluates(string text, int expected)
+        => Assert.Equal(expected, RuleExpression.Evaluate(text, Values));
+
+    /// <summary>
+    /// A rule that cannot be read must fail, not evaluate to something plausible. A deck
+    /// silently coming out the wrong size is the failure this whole area already had once.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("players +")]
+    [InlineData("+ ")]
+    [InlineData("(players")]
+    [InlineData("players)")]
+    [InlineData("seats")]              // not a name this rule can refer to
+    [InlineData("players $ 2")]
+    [InlineData("players / 0")]
+    [InlineData("sqrt(players)")]      // not a function it can call
+    [InlineData("min(players)")]       // wrong arity
+    public void Refuses_what_it_cannot_read(string text)
+        => Assert.Throws<FormatException>(() => RuleExpression.Evaluate(text, Values));
+
+    [Fact]
+    public void An_unknown_name_says_what_is_available()
+    {
+        var ex = Assert.Throws<FormatException>(() => RuleExpression.Evaluate("seats", Values));
+
+        // Whoever wrote the rule needs to know what they could have written instead.
+        Assert.Contains("players", ex.Message);
+    }
+
+    [Fact]
+    public void Validation_reports_the_problem_without_a_game()
+    {
+        Assert.True(RuleExpression.IsValid("players + 1", ["players"], out _));
+
+        Assert.False(RuleExpression.IsValid("players + ", ["players"], out var error));
+        Assert.NotEmpty(error);
+    }
+
+    /// <summary>
+    /// The expressions replaced ten tiers; they must build exactly the decks the tiers did.
+    /// </summary>
+    [Theory]
+    [InlineData(2, 3 * 52 + 6)]
+    [InlineData(3, 4 * 52 + 8)]
+    [InlineData(4, 5 * 52 + 10)]
+    [InlineData(5, 6 * 52 + 12)]
+    [InlineData(6, 7 * 52 + 14)]
+    public async Task Hand_and_foot_builds_the_same_deck_as_the_tiers_did(int players, int expectedSize)
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = await loader.LoadAsync("hand-and-foot");
+
+        Assert.Equal(expectedSize, DeckSpec.Parse(definition!.Deck, players).Size);
+    }
+}

@@ -113,6 +113,13 @@ public sealed class DeckSpec
     /// shorthand name. A range is the common case and reads closest to how a person
     /// would describe the deck.
     /// </summary>
+    /// <summary>
+    /// What a deck expression may refer to. Only the table size: a deck is built before a
+    /// hand exists, so nothing about the position is known yet.
+    /// </summary>
+    public static IReadOnlyDictionary<string, int> NamedValues(int playerCount)
+        => new Dictionary<string, int> { ["players"] = playerCount };
+
     private static IReadOnlyList<Rank> ParseRanks(JsonElement element)
     {
         if (element.ValueKind == JsonValueKind.Array)
@@ -184,6 +191,12 @@ public sealed class DeckSpec
     {
         if (element.ValueKind == JsonValueKind.Number)
             return Math.Max(0, element.GetInt32());
+
+        // An expression says the rule outright — "players + 1" — rather than enumerating
+        // a tier per table size and leaving the reader to infer the pattern.
+        if (element.ValueKind == JsonValueKind.String)
+            return Math.Max(0, RuleExpression.Evaluate(
+                element.GetString() ?? "", NamedValues(playerCount)));
 
         if (element.ValueKind == JsonValueKind.Array)
         {
