@@ -2,7 +2,7 @@
   "blackjack/1p/seed1": "F2EACC7AE7A12FD244902A21D60D0344 steps=13 over=True phase=game_over",
   "blackjack/1p/seed12648430": "077578854CBD502AD6132A37DEB6A2D9 steps=12 over=True phase=game_over",
   "blackjack/1p/seed20260827": "A8E648AA607903E47685EB1C4649745C steps=14 over=True phase=game_over",
-  "blackjack/6p/seed1": "F4BB0B36F276065F535A2B698066E94F steps=5000 over=False phase=round",
+  "blackjack/6p/seed1": "658067079D12B2566AB8DCAA5DEBDFFC steps=39 over=True phase=game_over",
   "blackjack/6p/seed12648430": "9885BECB0C5F08CC9CEC6A62F8132159 steps=31 over=True phase=game_over",
   "blackjack/6p/seed20260827": "035F216BC61F1E12B106B98F92B10926 steps=36 over=True phase=game_over",
   "euchre-3p/3p/seed1": "DF6E7A1A855DA2A982F77D87F606BE1A steps=282 over=True phase=game_over",

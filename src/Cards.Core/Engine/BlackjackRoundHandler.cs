@@ -287,9 +287,36 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
         }
     }
 
+    /// <summary>
+    /// Takes a card from the shoe, reshuffling the discard tray back in when it runs
+    /// dry.
+    ///
+    /// Drawing straight from the deck returned null on an empty shoe and the caller
+    /// silently gave up, so a hit added no card, the hand never changed value, and the
+    /// seat could never finish its turn. Six seats get through a single pack inside one
+    /// round, which is why only the six-player table stalled.
+    /// </summary>
+    private static Card? DrawFromShoe(GameState state)
+    {
+        var deck = state.Zones["deck"];
+
+        if (deck.IsEmpty && state.FindZone("discard") is { Count: > 0 } discard)
+        {
+            foreach (var card in discard.Cards.ToList())
+            {
+                discard.Remove(card);
+                card.IsFaceUp = false;
+                deck.Add(card);
+            }
+            DeckBuilder.Shuffle(deck.Cards, state.Rng);
+        }
+
+        return deck.Draw();
+    }
+
     private static void DealFaceUp(GameState state, string playerId)
     {
-        var card = state.Zones["deck"].Draw();
+        var card = DrawFromShoe(state);
         if (card is null) return;
         card.IsFaceUp = true;
         state.Zones[$"hand:{playerId}"].Add(card);
@@ -297,7 +324,7 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
 
     private static void DealFaceDown(GameState state, string playerId)
     {
-        var card = state.Zones["deck"].Draw();
+        var card = DrawFromShoe(state);
         if (card is null) return;
         card.IsFaceUp = false;
         state.Zones[$"hand:{playerId}"].Add(card);

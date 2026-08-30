@@ -34,6 +34,7 @@
       "special_actions": ["knock", "gin"],
       "knock_condition": "deadwood_lte_10",
       "gin_condition": "deadwood_eq_0",
+      "round_ends_when": "stock_exhausted",
       "next": "score"
     },
     {
