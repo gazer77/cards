@@ -38,11 +38,28 @@
     {
       "id": "play",
       "type": "draw_discard",
-      "draw_from": ["deck", "discard"],
+      "draw_from": [
+        { "zone": "deck" },
+        {
+          "zone": "discard",
+          "requires": {
+            "all": [
+              "team_has_melded",
+              { "hand_count_of_rank": "top_discard", "at_least": 2 }
+            ]
+          }
+        }
+      ],
       "draw_count": { "from_deck": 2, "from_discard": "pile" },
       "discard_count": 1,
       "target_zone": "hand",
       "special_actions": ["meld", "add_to_meld", "go_out"],
+      "initial_meld_requirement": [
+        { "round": 1, "points": 50 },
+        { "round": 2, "points": 90 },
+        { "round": 3, "points": 120 },
+        { "points": 150 }
+      ],
       "go_out_condition": "all_melds_complete_and_hand_empty",
       "round_ends_when": "stock_exhausted",
       "next": "score"

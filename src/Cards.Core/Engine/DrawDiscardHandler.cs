@@ -39,11 +39,26 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     private readonly string?      _roundEndsWhen;
     private readonly bool         _remainingGetOneTurn;
 
+    /// <summary>Zone id → the condition under which it may be drawn from.</summary>
+    private readonly Dictionary<string, JsonElement> _drawRequires = [];
+
+    /// <summary>Round number → points needed for a side's first meld. Empty if unset.</summary>
+    private readonly List<(int? Round, int Points)> _initialMeldRequirement = [];
+
     public DrawDiscardHandler(PhaseDefinition def, string nextPhaseId)
     {
         _nextPhaseId     = nextPhaseId;
-        _drawFrom        = ParseStringArray(def, "draw_from");
+        // draw_from is either zone names, or objects carrying the conditions under which
+        // that zone may be drawn from:
+        //   ["deck", "discard"]
+        //   [ { "zone": "deck", "count": 2 },
+        //     { "zone": "discard", "count": "pile", "requires": { … } } ]
+        (_drawFrom, _drawRequires) = ParseDrawFrom(def);
         if (_drawFrom.Count == 0) _drawFrom = ["deck"];
+
+        // Points a side must lay in one go before it has melded at all, by round. Real
+        // Hand and Foot asks for 50, then 90, 120 and 150 as the rounds go on.
+        _initialMeldRequirement = ParseInitialMeldRequirement(def);
 
         // draw_count: integer (same for all zones) or object { "from_deck": 2, "from_discard": "pile" }
         if (def.Extra?.TryGetValue("draw_count", out var dcEl) == true)
@@ -92,8 +107,16 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             foreach (var zoneName in _drawFrom)
             {
                 var zone = state.FindZone(zoneName);
-                if (zone is not null && !zone.IsEmpty)
-                    actions.Add(new GameAction($"draw_from_{zoneName}", Label: $"Draw from {Capitalize(zoneName)}"));
+                if (zone is null || zone.IsEmpty) continue;
+
+                // A zone may carry conditions — claiming the discard pile in Hand and
+                // Foot needs a side that has melded and two cards matching its top.
+                // Offering the action only when it is legal beats refusing it after.
+                if (_drawRequires.TryGetValue(zoneName, out var requires)
+                    && !RuleCondition.Evaluate(requires, state))
+                    continue;
+
+                actions.Add(new GameAction($"draw_from_{zoneName}", Label: $"Draw from {Capitalize(zoneName)}"));
             }
         }
         else // discard
@@ -227,6 +250,95 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     }
 
     // ── Core turn logic ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Reads <c>draw_from</c> in either form — a list of zone names, or objects that also
+    /// carry a count and the condition under which that zone may be drawn from. Names
+    /// keep working, so no existing definition changes.
+    /// </summary>
+    private static (List<string> Zones, Dictionary<string, JsonElement> Requires)
+        ParseDrawFrom(PhaseDefinition def)
+    {
+        var zones    = new List<string>();
+        var requires = new Dictionary<string, JsonElement>();
+
+        if (def.Extra?.TryGetValue("draw_from", out var element) != true
+            || element.ValueKind != JsonValueKind.Array)
+            return (zones, requires);
+
+        foreach (var entry in element.EnumerateArray())
+        {
+            if (entry.ValueKind == JsonValueKind.String)
+            {
+                if (entry.GetString() is { } name) zones.Add(name);
+                continue;
+            }
+
+            if (entry.ValueKind != JsonValueKind.Object) continue;
+            if (!entry.TryGetProperty("zone", out var zoneEl)) continue;
+            if (zoneEl.GetString() is not { } zone) continue;
+
+            zones.Add(zone);
+            if (entry.TryGetProperty("requires", out var condition))
+                requires[zone] = condition.Clone();
+        }
+
+        return (zones, requires);
+    }
+
+    private static List<(int? Round, int Points)> ParseInitialMeldRequirement(PhaseDefinition def)
+    {
+        var tiers = new List<(int?, int)>();
+
+        if (def.Extra?.TryGetValue("initial_meld_requirement", out var element) != true)
+            return tiers;
+
+        if (element.ValueKind == JsonValueKind.Number)
+        {
+            tiers.Add((null, element.GetInt32()));
+            return tiers;
+        }
+
+        if (element.ValueKind != JsonValueKind.Array) return tiers;
+
+        foreach (var entry in element.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object) continue;
+
+            int? round = entry.TryGetProperty("round", out var r) ? r.GetInt32() : null;
+            int points = entry.TryGetProperty("points", out var p) ? p.GetInt32() : 0;
+            tiers.Add((round, points));
+        }
+
+        return tiers;
+    }
+
+    /// <summary>
+    /// Points the side to act must lay in one go, if it has not melded yet. Zero once it
+    /// has, or when the game sets no requirement.
+    /// </summary>
+    private int RequiredOpeningMeld(GameState state)
+    {
+        if (_initialMeldRequirement.Count == 0) return 0;
+        if (MeldZoneFor(state) is { Count: > 0 }) return 0;   // already open
+
+        // First tier naming this round, else the first without a round — the default.
+        foreach (var (round, points) in _initialMeldRequirement)
+            if (round is null || round == state.RoundNumber)
+                return points;
+
+        return 0;
+    }
+
+    private static Zone? MeldZoneFor(GameState state)
+    {
+        var playerId = state.CurrentPlayer.Id;
+        var team     = state.GetPlayerTeam(playerId);
+
+        return (team is not null ? state.FindZone($"meld:{team.Id}") : null)
+            ?? state.FindZone($"meld:{playerId}")
+            ?? state.FindZone("meld");
+    }
 
     private void EnsureInitialized(GameState state)
     {
@@ -477,7 +589,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     /// Moves the currently selected cards from the player's hand to their team/player meld zone.
     /// Validates: ≥3 cards of the same rank (or 1–2 wilds mixed in).
     /// </summary>
-    private static void LayMeld(GameState state, bool addToExisting)
+    private void LayMeld(GameState state, bool addToExisting)
     {
         string? selectedRaw = state.Metadata.GetValueOrDefault("selected_card");
         if (string.IsNullOrEmpty(selectedRaw)) return;
@@ -504,6 +616,21 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         {
             state.Metadata["status"] = "That is not a meld — pick three or more of a rank.";
             return;
+        }
+
+        // A side that has not melded must open with enough in one go. The requirement
+        // rises by round in Hand and Foot, which is why it is a table in the definition
+        // rather than a number.
+        int required = RequiredOpeningMeld(state);
+        if (required > 0)
+        {
+            int offered = ScoringEngine.CardPointValue(state.Definition, selectedCards);
+            if (offered < required)
+            {
+                state.Metadata["status"] =
+                    $"Your first meld this round must be worth {required}; that is {offered}.";
+                return;
+            }
         }
 
         // Adding to an existing meld joins the one of the same rank, so a later card

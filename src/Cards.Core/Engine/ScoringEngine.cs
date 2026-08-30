@@ -859,6 +859,21 @@ public static class ScoringEngine
         return pts;
     }
 
+    /// <summary>
+    /// What a set of cards is worth under this game's <c>scoring.card_values</c>.
+    ///
+    /// Public because melding rules need it as well as scoring does: a game with an
+    /// opening requirement — Hand and Foot's 50, 90, 120, 150 by round — has to price a
+    /// proposed meld before allowing it, and must price it exactly as the round will.
+    /// </summary>
+    public static int CardPointValue(GameDefinition definition, IEnumerable<Card> cards)
+    {
+        if (definition.Scoring is null) return 0;
+
+        var values = ParseMeldCardValues(definition.Scoring);
+        return cards.Sum(values.GetValue);
+    }
+
     private static MeldCardValues ParseMeldCardValues(ScoringDefinition scoring)
     {
         var dv = new MeldCardValues();

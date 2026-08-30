@@ -86,17 +86,36 @@ public sealed class MeldTests
         logic.Apply(state, new GameAction("meld"));
     }
 
+    /// <summary>
+    /// Lays a qualifying first meld, so these tests exercise what counts as a meld
+    /// rather than the separate rule about what a side's opening meld must be worth.
+    /// Three aces is 60, over round one's 50. Returns the table with that meld laid.
+    /// </summary>
+    private static (GameState State, IGameLogic Logic) OpenTable(int seats = 2)
+    {
+        var (state, logic) = HandAndFoot(seats);
+        state.RoundNumber = 1;
+
+        Lay(state, logic, Stack(state,
+            (Rank.Ace, Suit.Clubs), (Rank.Ace, Suit.Hearts), (Rank.Ace, Suit.Spades)));
+
+        return (state, logic);
+    }
+
+    /// <summary>Melds laid since the table was opened.</summary>
+    private static int MeldsLaid(GameState state) => Melds(state).Groups.Count - 1;
+
     [Fact]
     public void Three_of_a_rank_is_a_meld()
     {
-        var (state, logic) = HandAndFoot();
+        var (state, logic) = OpenTable();
 
         var cards = Stack(state, (Rank.Seven, Suit.Clubs), (Rank.Seven, Suit.Hearts), (Rank.Seven, Suit.Spades));
 
         Lay(state, logic, cards);
 
-        Assert.Single(Melds(state).Groups);
-        Assert.Equal(3, Melds(state).Count);
+        Assert.Equal(1, MeldsLaid(state));
+        Assert.Equal(6, Melds(state).Count);   // the opening aces plus these sevens
     }
 
     /// <summary>
@@ -105,55 +124,55 @@ public sealed class MeldTests
     [Fact]
     public void Three_unrelated_cards_are_not_a_meld()
     {
-        var (state, logic) = HandAndFoot();
+        var (state, logic) = OpenTable();
 
         var cards = Stack(state, (Rank.Seven, Suit.Clubs), (Rank.Nine, Suit.Hearts), (Rank.King, Suit.Spades));
         Lay(state, logic, cards);
 
-        Assert.Empty(Melds(state).Groups);
-        Assert.Equal(0, Melds(state).Count);
+        Assert.Equal(0, MeldsLaid(state));
+        Assert.Equal(3, Melds(state).Count);   // only the opening meld
         Assert.Equal(3, Hand(state).Count);   // and the cards stay in hand
     }
 
     [Fact]
     public void Wilds_can_stand_in_for_missing_cards()
     {
-        var (state, logic) = HandAndFoot();
+        var (state, logic) = OpenTable();
 
         var cards = Stack(state, (Rank.Seven, Suit.Clubs), (Rank.Seven, Suit.Hearts), (Rank.Two, Suit.Spades));
         Lay(state, logic, cards);
 
-        Assert.Single(Melds(state).Groups);
+        Assert.Equal(1, MeldsLaid(state));
     }
 
     [Fact]
     public void Wilds_cannot_outnumber_the_real_cards()
     {
-        var (state, logic) = HandAndFoot();
+        var (state, logic) = OpenTable();
 
         // One seven propped up by two wilds is not a set of sevens.
         var cards = Stack(state, (Rank.Seven, Suit.Clubs), (Rank.Two, Suit.Hearts), (Rank.Two, Suit.Spades));
         Lay(state, logic, cards);
 
-        Assert.Empty(Melds(state).Groups);
+        Assert.Equal(0, MeldsLaid(state));
     }
 
     [Fact]
     public void All_wilds_is_not_a_meld()
     {
-        var (state, logic) = HandAndFoot();
+        var (state, logic) = OpenTable();
 
         var cards = Stack(state, (Rank.Two, Suit.Clubs), (Rank.Two, Suit.Hearts), (Rank.Two, Suit.Spades));
         Lay(state, logic, cards);
 
         // A meld of wilds has no rank to be a meld of.
-        Assert.Empty(Melds(state).Groups);
+        Assert.Equal(0, MeldsLaid(state));
     }
 
     [Fact]
     public void Melds_are_kept_apart_from_each_other()
     {
-        var (state, logic) = HandAndFoot();
+        var (state, logic) = OpenTable();
 
         var sevens = Stack(state, (Rank.Seven, Suit.Clubs), (Rank.Seven, Suit.Hearts), (Rank.Seven, Suit.Spades));
         Lay(state, logic, sevens);
@@ -163,14 +182,14 @@ public sealed class MeldTests
 
         // Two melds, not one pile of six — which is what add-to-meld and canasta
         // detection both depend on.
-        Assert.Equal(2, Melds(state).Groups.Count);
+        Assert.Equal(3, Melds(state).Groups.Count);   // aces, sevens, kings
         Assert.All(Melds(state).Groups, g => Assert.Equal(3, g.Count));
     }
 
     [Fact]
     public void Adding_to_a_meld_joins_the_one_of_that_rank()
     {
-        var (state, logic) = HandAndFoot();
+        var (state, logic) = OpenTable();
 
         Lay(state, logic, Stack(state, (Rank.Seven, Suit.Clubs), (Rank.Seven, Suit.Hearts), (Rank.Seven, Suit.Spades)));
         Lay(state, logic, Stack(state, (Rank.King, Suit.Clubs), (Rank.King, Suit.Hearts), (Rank.King, Suit.Spades)));
@@ -181,7 +200,7 @@ public sealed class MeldTests
         logic.Apply(state, new GameAction("add_to_meld"));
 
         var melds = Melds(state);
-        Assert.Equal(2, melds.Groups.Count);
+        Assert.Equal(3, melds.Groups.Count);
 
         var sevenMeld = Enumerable.Range(0, melds.Groups.Count)
             .Select(melds.GroupCards)
@@ -193,16 +212,19 @@ public sealed class MeldTests
     [Fact]
     public void A_card_leaving_the_zone_leaves_its_meld()
     {
-        var (state, logic) = HandAndFoot();
+        var (state, logic) = OpenTable();
 
         var cards = Stack(state, (Rank.Seven, Suit.Clubs), (Rank.Seven, Suit.Hearts), (Rank.Seven, Suit.Spades));
         Lay(state, logic, cards);
 
         var melds = Melds(state);
+        int before = melds.Count;
+
         melds.Remove(melds.Cards[0]);
 
         // A group naming a card the zone no longer holds would score cards that are gone.
-        Assert.Equal(2, melds.Count);
-        Assert.Equal(2, melds.Groups[0].Count);
+        Assert.Equal(before - 1, melds.Count);
+        Assert.Equal(melds.Count, melds.Groups.Sum(g => g.Count));
     }
 }
+
