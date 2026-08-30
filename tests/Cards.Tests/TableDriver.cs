@@ -61,6 +61,20 @@ public static class TableDriver
             }
         }
 
+        // Cards before buttons. Most buttons act on a selection — "Meld", "Ask for
+        // Queens" — and pressing one with nothing selected does nothing at all. Hand
+        // and Foot sat pressing Meld forever with fifteen cards it had never picked up.
+        //
+        // Selecting first is safe even where a button needs no selection: a tap makes
+        // the selection non-empty, so the next step presses the button anyway.
+        var selectable = logic.GetSelectableCardIds(state);
+        if (selected is null && selectable.Count > 0)
+        {
+            logic.Apply(state, new GameAction(
+                "select_card", CardId: selectable[tapCursor++ % selectable.Count]));
+            return StepResult.Moved;
+        }
+
         // Buttons appear only for a real choice; a lone action is the canvas-tap path.
         bool buttonsShown = actions.Count > 1
                          || (actions.Count == 1 && actions[0].Type == "ready");
@@ -73,7 +87,6 @@ public static class TableDriver
             return StepResult.Moved;
         }
 
-        var selectable = logic.GetSelectableCardIds(state);
         if (selectable.Count > 0)
         {
             logic.Apply(state, new GameAction(
