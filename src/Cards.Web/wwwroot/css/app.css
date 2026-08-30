@@ -437,3 +437,35 @@ html, body {
 }
 
 .save-delete:hover { color: #ff9d9d; border-color: #ff9d9d55; }
+
+/* ── Game over ───────────────────────────────────────────────────────────── */
+
+.game-over h2 {
+    text-align: center;
+    color: var(--gold);
+    font-size: 1.35rem;
+}
+
+.game-over > .muted { text-align: center; margin: -0.4rem 0 0; }
+
+.standings {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.standing {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.45rem 0.7rem;
+    border-radius: 0.35rem;
+    background: var(--surface-mid);
+}
+
+.standing.winner {
+    background: #2e7d4f;
+    font-weight: 600;
+}
+
+.game-over .confirm-buttons { justify-content: center; flex-wrap: wrap; }

@@ -72,6 +72,40 @@
         </section>
     }
 
+    @if (Vm.IsGameOver && !_gameOverDismissed)
+    {
+        <div class="scrim"></div>
+        <section class="overlay game-over">
+            <h2>@Vm.StatusText</h2>
+
+            @if (Vm.GameOverDetail.Length > 0)
+            {
+                <p class="muted">@Vm.GameOverDetail</p>
+            }
+
+            @if (Vm.FinalScores.Count > 0)
+            {
+                <div class="standings">
+                    @foreach (var row in Vm.FinalScores)
+                    {
+                        <div class="standing @(row.IsWinner ? "winner" : "")">
+                            <span>@row.Name</span>
+                            <span>@row.Score</span>
+                        </div>
+                    }
+                </div>
+            }
+
+            <div class="confirm-buttons">
+                @* Staying on the table lets the player read the final position, which
+                   is most of the point in a game decided by what everyone was holding. *@
+                <button class="action" @onclick="() => _gameOverDismissed = true">View table</button>
+                <button class="action" @onclick="GoHome">Games</button>
+                <button class="action primary" @onclick="NewGame">Play again</button>
+            </div>
+        </section>
+    }
+
     @if (_confirm is not null)
     {
         <div class="scrim"></div>
@@ -131,6 +165,12 @@
     private GameTableCanvas? _canvas;
     private bool _failed;
     private bool _diagnostics;
+
+    /// <summary>
+    /// Set when the player dismisses the game-over screen to look at the final table.
+    /// Cleared on a new game, so the next result is announced.
+    /// </summary>
+    private bool _gameOverDismissed;
     private string _title = "";
 
     private IReadOnlyList<string> EnabledRules =>
@@ -371,6 +411,7 @@
 
     private async Task NewGame()
     {
+        _gameOverDismissed = false;
         await Vm.DeleteSaveAsync();
         _canvas?.Renderer?.ClearMessages();   // last game's bubbles are not this game's
         await Vm.StartAsync(GameId, Seats, EnabledRules, resume: false);

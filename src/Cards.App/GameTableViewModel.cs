@@ -76,6 +76,12 @@ public sealed class GameTableViewModel
 
     public GameState? State => _state;
 
+    /// <summary>
+    /// The rules driving this table. Exposed so a test harness can play a game the way
+    /// the client does rather than reimplementing the turn loop beside it.
+    /// </summary>
+    public IGameLogic? Logic => _logic;
+
     public bool IsBusy => _isAutoAdvancing;
 
     public bool IsGameOver => _logic is not null && _state is not null && _logic.IsGameOver(_state);
@@ -125,6 +131,54 @@ public sealed class GameTableViewModel
     }
 
     public IReadOnlyList<string> GameLog => _state?.GameLog ?? [];
+
+    /// <summary>
+    /// A secondary line for the game-over screen — whatever the win condition wanted to
+    /// add, or how long the game ran when it had nothing to say.
+    /// </summary>
+    public string GameOverDetail
+    {
+        get
+        {
+            if (_state is null) return string.Empty;
+
+            var sub = _state.Metadata.GetValueOrDefault("sub", "");
+            if (!string.IsNullOrEmpty(sub)) return sub;
+
+            return _state.RoundNumber > 1 ? $"{_state.RoundNumber} rounds played" : string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Final standings, best first, with the winner flagged.
+    ///
+    /// Scoring differs by game — most count up, but a game like Hand and Foot can leave
+    /// you deeply negative — so "best" follows whoever the engine declared the winner
+    /// rather than assuming high scores win.
+    /// </summary>
+    public IReadOnlyList<(string Name, int Score, bool IsWinner)> FinalScores
+    {
+        get
+        {
+            if (_state is null || _state.Scores.Count == 0) return [];
+
+            var winnerId = _state.Metadata.GetValueOrDefault("last_winner", "");
+
+            var rows = _state.Players
+                .Where(p => _state.Scores.ContainsKey(p.Id))
+                .Select(p => (p.Name, Score: _state.GetScore(p.Id), IsWinner: p.Id == winnerId))
+                .ToList();
+
+            // Order by score, in whichever direction puts the declared winner on top.
+            bool winnerHasLowest = rows.Any(r => r.IsWinner)
+                                && rows.Where(r => r.IsWinner).Min(r => r.Score)
+                                   <= rows.Min(r => r.Score);
+
+            return winnerHasLowest
+                ? rows.OrderBy(r => r.Score).ToList()
+                : rows.OrderByDescending(r => r.Score).ToList();
+        }
+    }
 
     /// <summary>
     /// Raised when something new happens, with the seat it concerns.
