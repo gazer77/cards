@@ -293,6 +293,32 @@ public sealed class CardTableRenderer
         }
     }
 
+    /// <summary>
+    /// Card id → meld index for a multi-meld selection. Selected cards borrow their
+    /// meld's colour so a combined lay reads as the separate melds it will become.
+    /// </summary>
+    public IReadOnlyDictionary<string, int>? SelectedMeldGroups
+    {
+        get => _selectedMeldGroups;
+        set { _selectedMeldGroups = value; RequestRedraw(); }
+    }
+
+    private IReadOnlyDictionary<string, int>? _selectedMeldGroups;
+
+    /// <summary>
+    /// One colour per meld in a combined lay, repeating past six. Picked to stay apart
+    /// from each other, from the gold single-meld glow, and from the green felt.
+    /// </summary>
+    private static readonly SKColor[] MeldGroupColors =
+    [
+        new(0xFF, 0xD7, 0x00),   // gold — the familiar selection colour leads
+        new(0x4F, 0xC3, 0xF7),   // sky blue
+        new(0xFF, 0x8A, 0x65),   // coral
+        new(0xBA, 0x68, 0xC8),   // orchid
+        new(0xAE, 0xD5, 0x81),   // light green
+        new(0xF0, 0x62, 0x92),   // pink
+    ];
+
     public IReadOnlyList<string> DropZoneIds
     {
         get => _dropZoneIds;
@@ -1019,12 +1045,17 @@ public sealed class CardTableRenderer
 
         if (isSelected)
         {
+            var color = new SKColor(0xFF, 0xD7, 0x00);
+            if (_selectedMeldGroups is { Count: > 0 } groups
+                && groups.TryGetValue(cardId, out int meld))
+                color = MeldGroupColors[meld % MeldGroupColors.Length];
+
             using var glow = new SKPaint
             {
                 IsAntialias = true,
                 Style       = SKPaintStyle.Stroke,
                 StrokeWidth = 7f,
-                Color       = new SKColor(0xFF, 0xD7, 0x00, 0x55),
+                Color       = color.WithAlpha(0x55),
                 MaskFilter  = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 5f),
             };
             canvas.DrawRoundRect(inflated, r + 3f, r + 3f, glow);
@@ -1034,7 +1065,7 @@ public sealed class CardTableRenderer
                 IsAntialias = true,
                 Style       = SKPaintStyle.Stroke,
                 StrokeWidth = 3.5f,
-                Color       = new SKColor(0xFF, 0xD7, 0x00, 0xFF),
+                Color       = color,
             };
             canvas.DrawRoundRect(inflated, r + 3f, r + 3f, border);
         }

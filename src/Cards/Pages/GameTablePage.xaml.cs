@@ -507,6 +507,33 @@ public partial class GameTablePage : ContentPage
         TableCanvas.DropZoneIds = !isMultiSelect && selectedCard is not null
             ? _logic.GetDropZoneIds(_state, selectedCard)
             : [];
+
+        TableCanvas.SelectedMeldGroups = isMultiSelect ? MeldGroupsFor(selectedCard!) : null;
+    }
+
+    /// <summary>
+    /// Which meld each selected card would land in, using the same partition the engine
+    /// applies on Lay Meld — the colours are a preview, not a guess. Null when the
+    /// selection is one meld or not yet a legal lay.
+    /// </summary>
+    private IReadOnlyDictionary<string, int>? MeldGroupsFor(string selectedCard)
+    {
+        if (_state is null) return null;
+
+        var ids   = selectedCard.Split(',').ToHashSet();
+        var hand  = _state.FindZone($"hand:{_state.CurrentPlayer.Id}");
+        var cards = hand?.Cards.Where(c => ids.Contains(c.Id)).ToList();
+        if (cards is null || cards.Count == 0) return null;
+
+        var wilds = MeldRules.WildRanks(_state.Definition);
+        var melds = MeldRules.PartitionIntoMelds(cards, wilds);
+        if (melds is null || melds.Count < 2) return null;
+
+        var groups = new Dictionary<string, int>();
+        for (int i = 0; i < melds.Count; i++)
+            foreach (var card in melds[i])
+                groups[card.Id] = i;
+        return groups;
     }
 
     // ── Multiplayer event handlers ────────────────────────────────────────────

@@ -54,6 +54,7 @@
       "discard_count": 1,
       "target_zone": "hand",
       "special_actions": ["meld", "add_to_meld", "go_out"],
+      "unmeldable_ranks": ["3"],
       "initial_meld_requirement": [
         { "round": 1, "points": 50 },
         { "round": 2, "points": 90 },

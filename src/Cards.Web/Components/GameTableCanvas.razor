@@ -134,14 +134,16 @@
         GameState? state,
         IReadOnlyList<string> selectableCardIds,
         string? selectedCardId,
-        IReadOnlyList<string> dropZoneIds)
+        IReadOnlyList<string> dropZoneIds,
+        IReadOnlyDictionary<string, int>? selectedMeldGroups = null)
     {
         if (_renderer is null) return;
 
-        _renderer.GameState         = state;
-        _renderer.SelectableCardIds = selectableCardIds;
-        _renderer.SelectedCardId    = selectedCardId;
-        _renderer.DropZoneIds       = dropZoneIds;
+        _renderer.GameState          = state;
+        _renderer.SelectableCardIds  = selectableCardIds;
+        _renderer.SelectedCardId     = selectedCardId;
+        _renderer.DropZoneIds        = dropZoneIds;
+        _renderer.SelectedMeldGroups = selectedMeldGroups;
 
         Redraw();
     }

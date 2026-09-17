@@ -307,4 +307,75 @@ public sealed class MeldTests
         Assert.Equal(1, Melds(state).Groups.Count);
         Assert.Equal(6, Melds(state).GroupCards(0).Count);
     }
+
+    // ── Ranks that may not be melded, and wilds joining melds ────────────────
+
+    /// <summary>
+    /// Hand and Foot's 3s exist to be discarded and score against you; the definition
+    /// bars them from melding and the engine must refuse, wilds or no wilds.
+    /// </summary>
+    [Fact]
+    public void Threes_cannot_be_melded()
+    {
+        var (state, logic) = OpenTable();
+
+        var cards = Stack(state,
+            (Rank.Three, Suit.Clubs), (Rank.Three, Suit.Hearts), (Rank.Three, Suit.Spades));
+        Lay(state, logic, cards);
+
+        Assert.Equal(0, MeldsLaid(state));
+        Assert.Equal(3, Hand(state).Count);
+    }
+
+    [Fact]
+    public void A_wild_can_join_an_existing_meld_on_its_own()
+    {
+        var (state, logic) = OpenTable();   // three aces are down
+
+        var wild = Stack(state, (Rank.Two, Suit.Hearts));
+        state.Metadata["dd_turn_state"] = "discard";
+        state.Metadata["selected_card"] = wild[0].Id;
+        logic.Apply(state, new GameAction("add_to_meld"));
+
+        Assert.Equal(1, Melds(state).Groups.Count);
+        Assert.Equal(4, Melds(state).GroupCards(0).Count);
+        Assert.Empty(Hand(state).Cards);
+    }
+
+    /// <summary>
+    /// The ratio holds on additions too: a meld may never carry more wilds than
+    /// naturals, which the old path only checked when the meld was first laid.
+    /// </summary>
+    [Fact]
+    public void Wilds_cannot_flood_a_meld_through_additions()
+    {
+        var (state, logic) = OpenTable();   // three natural aces are down
+
+        // Three naturals take three wilds; the fourth would tip the balance.
+        for (int i = 0; i < 4; i++)
+        {
+            var wild = Stack(state, (Rank.Two, (Suit)(i % 4)));
+            state.Metadata["dd_turn_state"] = "discard";
+            state.Metadata["selected_card"] = wild[0].Id;
+            logic.Apply(state, new GameAction("add_to_meld"));
+        }
+
+        Assert.Equal(6, Melds(state).GroupCards(0).Count);   // 3 aces + 3 wilds, not 7
+        Assert.Single(Hand(state).Cards);                    // the refused wild stays put
+    }
+
+    [Fact]
+    public void Adding_a_rank_with_no_meld_down_is_refused()
+    {
+        var (state, logic) = OpenTable();   // only aces are down
+
+        var cards = Stack(state, (Rank.King, Suit.Clubs));
+        state.Metadata["dd_turn_state"] = "discard";
+        state.Metadata["selected_card"] = cards[0].Id;
+        logic.Apply(state, new GameAction("add_to_meld"));
+
+        // The old path quietly created a one-card "meld".
+        Assert.Equal(1, Melds(state).Groups.Count);
+        Assert.Single(Hand(state).Cards);
+    }
 }

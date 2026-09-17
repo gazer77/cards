@@ -76,6 +76,17 @@ public static class DefinitionValidator
             }
         }
 
+        // Ranks a phase bars from melding must be ranks — a typo here would quietly
+        // make the barred rank meldable again.
+        if (phase.Extra.TryGetValue("unmeldable_ranks", out var unmeldable)
+            && unmeldable.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var entry in unmeldable.EnumerateArray())
+                if (entry.ValueKind != JsonValueKind.String
+                    || MeldRules.ParseRank(entry.GetString() ?? "") is null)
+                    problems.Add($"{phase.Id}.unmeldable_ranks: '{entry}' is not a rank.");
+        }
+
         // Conditions anywhere else a phase declares one.
         foreach (var key in new[] { "requires", "when" })
             if (phase.Extra.TryGetValue(key, out var condition))

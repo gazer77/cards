@@ -434,6 +434,20 @@ working and mean the same thing, so only the games needing conditions carry them
 `count` — how many cards, or `"pile"` for the whole discard pile.
 `requires` — a [condition](#conditions). The source is offered only while it holds.
 
+#### `unmeldable_ranks`
+
+Ranks that may never be laid in a meld, however many the player holds:
+
+```json
+"unmeldable_ranks": ["3"]
+```
+
+Hand and Foot's 3s exist to be discarded and score against you. Wild ranks are judged as
+wilds, not by their printed rank. An entry that is not a rank fails the definition.
+
+Which ranks are *wild* is not declared here — it comes from `scoring.wild_cards`, so the
+cards that score as wilds and the cards that meld as wilds are always the same ones.
+
 #### `initial_meld_requirement`
 
 What a side's *first* meld of a round must be worth before it may lay anything down. Tiers

@@ -113,6 +113,40 @@ public sealed class GameTableViewModel
 
     public string? SelectedCardId => _state?.Metadata.GetValueOrDefault("selected_card");
 
+    /// <summary>
+    /// Which meld each selected card would land in, card id → meld index, when the
+    /// selection splits into more than one. Computed with the same rules the engine
+    /// applies on Lay Meld, so the colours on screen are a preview and not a guess.
+    /// Empty for a single meld, or when the selection is not yet a legal lay.
+    /// </summary>
+    public IReadOnlyDictionary<string, int> SelectedMeldGroups
+    {
+        get
+        {
+            var selected = SelectedCardId;
+            if (_state is null || selected is null || !selected.Contains(','))
+                return EmptyGroups;
+
+            var ids  = selected.Split(',').ToHashSet();
+            var hand = _state.FindZone($"hand:{_state.CurrentPlayer.Id}");
+            var cards = hand?.Cards.Where(c => ids.Contains(c.Id)).ToList();
+            if (cards is null || cards.Count == 0) return EmptyGroups;
+
+            var wilds = MeldRules.WildRanks(_state.Definition);
+            var melds = MeldRules.PartitionIntoMelds(cards, wilds);
+            if (melds is null || melds.Count < 2) return EmptyGroups;
+
+            var groups = new Dictionary<string, int>();
+            for (int i = 0; i < melds.Count; i++)
+                foreach (var card in melds[i])
+                    groups[card.Id] = i;
+            return groups;
+        }
+    }
+
+    private static readonly IReadOnlyDictionary<string, int> EmptyGroups =
+        new Dictionary<string, int>();
+
     public IReadOnlyList<string> DropZoneIds
     {
         get

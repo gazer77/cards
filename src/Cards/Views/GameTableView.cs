@@ -90,6 +90,12 @@ public class GameTableView : SKCanvasView
         set => _renderer.SelectedCardId = value;
     }
 
+    public IReadOnlyDictionary<string, int>? SelectedMeldGroups
+    {
+        get => _renderer.SelectedMeldGroups;
+        set => _renderer.SelectedMeldGroups = value;
+    }
+
     public IReadOnlyList<string> DropZoneIds
     {
         get => _renderer.DropZoneIds;

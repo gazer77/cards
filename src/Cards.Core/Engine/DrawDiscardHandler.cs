@@ -45,6 +45,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     /// <summary>Round number → points needed for a side's first meld. Empty if unset.</summary>
     private readonly List<(int? Round, int Points)> _initialMeldRequirement = [];
 
+    /// <summary>Ranks the definition forbids melding — Hand and Foot's 3s.</summary>
+    private readonly HashSet<Rank> _unmeldableRanks = [];
+
     public DrawDiscardHandler(PhaseDefinition def, string nextPhaseId)
     {
         _nextPhaseId     = nextPhaseId;
@@ -59,6 +62,10 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         // Points a side must lay in one go before it has melded at all, by round. Real
         // Hand and Foot asks for 50, then 90, 120 and 150 as the rounds go on.
         _initialMeldRequirement = ParseInitialMeldRequirement(def);
+
+        foreach (var name in ParseStringArray(def, "unmeldable_ranks"))
+            if (MeldRules.ParseRank(name) is { } rank)
+                _unmeldableRanks.Add(rank);
 
         // draw_count: integer (same for all zones) or object { "from_deck": 2, "from_discard": "pile" }
         if (def.Extra?.TryGetValue("draw_count", out var dcEl) == true)
@@ -612,23 +619,37 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                     ?? state.FindZone("meld");
         if (meldZone is null) return;
 
-        // Adding to a meld stays one rank at a time: the action targets one group.
+        // What is wild comes from the definition (scoring.wild_cards), not from the
+        // handler: 2s are wild in Hand and Foot because its rules say so, not because
+        // every draw-discard game agrees.
+        var wilds = MeldRules.WildRanks(state.Definition);
+
+        // Ranks the definition forbids melding — Hand and Foot's 3s, which exist to be
+        // discarded and score against you, never to be laid.
+        var barred = selectedCards.FirstOrDefault(
+            c => !MeldRules.IsWild(c, wilds) && _unmeldableRanks.Contains(c.Rank));
+        if (barred is not null)
+        {
+            state.Metadata["status"] = $"{RankName(barred.Rank)}s cannot be melded.";
+            return;
+        }
+
         List<List<Card>> melds;
-        Rank meldRank = Rank.Joker;
+        int addTarget = -1;
         if (addToExisting)
         {
-            if (!IsValidAddition(selectedCards, out meldRank))
-            {
-                state.Metadata["status"] = "Pick cards of one rank to add to a meld.";
-                return;
-            }
+            // Adding stays one meld per action: the action targets one group.
+            addTarget = FindAdditionTarget(state, meldZone, selectedCards, wilds);
+            if (addTarget < 0) return;   // status already says why
             melds = [selectedCards];
         }
         // A new lay may hold several melds at once, partitioned by rank with the wilds
-        // shared out. Each part is validated as a meld in its own right — this was
-        // documented as validated and was not: any three selected cards were accepted,
-        // so a "meld" of unrelated cards was legal and then scored as though it counted.
-        else if (PartitionIntoMelds(selectedCards) is { } parts)
+        // shared out. An opening minimum often cannot be met by any single meld a hand
+        // holds, so one-meld-per-action made the requirement unsatisfiable at exactly
+        // the moment it applied. Each part is validated as a meld in its own right —
+        // this was documented as validated and was not: any three selected cards were
+        // accepted, so a "meld" of unrelated cards was legal and scored as if it counted.
+        else if (MeldRules.PartitionIntoMelds(selectedCards, wilds) is { } parts)
         {
             melds = parts;
         }
@@ -664,8 +685,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         bool joined = false;
         foreach (var meld in melds)
         {
-            var rank = addToExisting ? meldRank : MeldRankOf(meld);
-            int existing = FindGroupOfRank(meldZone, rank);
+            int existing = addToExisting
+                ? addTarget
+                : FindGroupOfRank(meldZone, MeldRules.MeldRankOf(meld, wilds), wilds);
             if (existing >= 0)
             {
                 foreach (var card in meld) meldZone.AddToGroup(existing, card);
@@ -682,91 +704,83 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                                  : joined          ? "Added to meld."
                                                    : "Meld laid!";
     }
-
     /// <summary>
-    /// A meld is three or more cards of one rank, wilds allowed as stand-ins. Returns the
-    /// rank the meld is of; a selection that is all wilds has no rank and is not a meld.
-    /// </summary>
-    private static bool IsValidMeld(IReadOnlyList<Card> cards, out Rank rank)
-    {
-        rank = Rank.Joker;
-        if (cards.Count < 3) return false;
-
-        var naturals = cards.Where(c => !IsWild(c)).ToList();
-        if (naturals.Count == 0) return false;
-
-        var meldRank = naturals[0].Rank;
-        rank = meldRank;
-        if (naturals.Any(c => c.Rank != meldRank)) return false;
-
-        // Wilds may not outnumber the real cards; a meld is a set with help, not a pile
-        // of substitutes.
-        return cards.Count - naturals.Count <= naturals.Count;
-    }
-
-    /// <summary>
-    /// Cards fit to join one existing meld: any count, one natural rank at most, wilds
-    /// welcome. Wild-only additions ride on the meld's own rank.
-    /// </summary>
-    private static bool IsValidAddition(IReadOnlyList<Card> cards, out Rank rank)
-    {
-        rank = Rank.Joker;
-
-        var naturals = cards.Where(c => !IsWild(c)).ToList();
-        if (naturals.Count == 0) return false;   // where would all-wilds go?
-
-        rank = naturals[0].Rank;
-        return naturals.All(c => c.Rank == naturals[0].Rank);
-    }
-
-    private static Rank MeldRankOf(IReadOnlyList<Card> meld)
-        => meld.First(c => !IsWild(c)).Rank;
-
-    /// <summary>
-    /// Splits a selection into melds by rank, or null when no split works.
+    /// The group the selection may join, or -1 with the refusal in status.
     ///
-    /// Naturals sort themselves — each rank present is one meld. Wilds are the choice:
-    /// each is dealt to whichever meld is furthest from being legal, which fills every
-    /// deficit before padding, so a distribution is found whenever one exists.
+    /// Naturals name their meld; an all-wild addition goes to the biggest meld with the
+    /// capacity, the one nearest to a canasta. Either way the meld it lands on must stay
+    /// legal — wilds never outnumbering the naturals — which the old path never checked
+    /// once a meld was down.
     /// </summary>
-    private static List<List<Card>>? PartitionIntoMelds(IReadOnlyList<Card> cards)
+    private static int FindAdditionTarget(
+        GameState state, Zone meldZone, IReadOnlyList<Card> selection, HashSet<Rank> wilds)
     {
-        var wilds = cards.Where(IsWild).ToList();
-        var melds = cards.Where(c => !IsWild(c))
-                         .GroupBy(c => c.Rank)
-                         .Select(g => g.ToList())
-                         .ToList();
-        if (melds.Count == 0) return null;   // all wilds is a pile of substitutes
+        var naturals   = selection.Where(c => !MeldRules.IsWild(c, wilds)).ToList();
+        int wildsAdded = selection.Count - naturals.Count;
 
-        foreach (var wild in wilds)
+        if (naturals.Count > 0 && naturals.Any(c => c.Rank != naturals[0].Rank))
         {
-            // A meld still short of three needs the wild; otherwise any meld with wild
-            // capacity left takes it. Shortest-first fills every deficit before any
-            // padding starts, so a legal distribution is found whenever one exists.
-            var target = melds.Where(CanTakeWild)
-                              .OrderByDescending(m => m.Count < 3 ? 3 - m.Count : 0)
-                              .FirstOrDefault();
-            if (target is null) return null;
-            target.Add(wild);
+            state.Metadata["status"] = "Pick cards of one rank to add to a meld.";
+            return -1;
         }
 
-        return melds.All(m => IsValidMeld(m, out _)) ? melds : null;
+        if (naturals.Count > 0)
+        {
+            int target = FindGroupOfRank(meldZone, naturals[0].Rank, wilds);
+            if (target < 0)
+            {
+                state.Metadata["status"] =
+                    $"No meld of {RankName(naturals[0].Rank)}s on the table — lay it as a new meld.";
+                return -1;
+            }
+            if (!StaysLegal(meldZone.GroupCards(target), naturals.Count, wildsAdded, wilds))
+            {
+                state.Metadata["status"] = "That would leave the meld more wild than real.";
+                return -1;
+            }
+            return target;
+        }
 
-        static bool CanTakeWild(List<Card> meld)
-            => meld.Count(IsWild) < meld.Count(c => !IsWild(c));
+        // All wilds: the choice of meld is the player's in principle, but with no way
+        // to point at a group yet, the biggest legal taker is the least surprising.
+        int best = -1;
+        for (int i = 0; i < meldZone.Groups.Count; i++)
+            if (StaysLegal(meldZone.GroupCards(i), 0, wildsAdded, wilds)
+                && (best < 0 || meldZone.Groups[i].Count > meldZone.Groups[best].Count))
+                best = i;
+
+        if (best < 0)
+            state.Metadata["status"] = "No meld can take that many wilds.";
+        return best;
+
+        static bool StaysLegal(
+            IReadOnlyList<Card> group, int naturalsAdded, int wildsAdded, HashSet<Rank> wilds)
+        {
+            int naturals = group.Count(c => !MeldRules.IsWild(c, wilds)) + naturalsAdded;
+            int wildCnt  = group.Count(c => MeldRules.IsWild(c, wilds)) + wildsAdded;
+            return wildCnt <= naturals;
+        }
     }
 
-    private static bool IsWild(Card card) => card.IsWild || card.Rank == Rank.Two;
-
     /// <summary>Index of the meld already holding this rank, or -1.</summary>
-    private static int FindGroupOfRank(Zone zone, Rank rank)
+    private static int FindGroupOfRank(Zone zone, Rank rank, HashSet<Rank> wilds)
     {
         for (int i = 0; i < zone.Groups.Count; i++)
-            if (zone.GroupCards(i).Any(c => !IsWild(c) && c.Rank == rank))
+            if (zone.GroupCards(i).Any(c => !MeldRules.IsWild(c, wilds) && c.Rank == rank))
                 return i;
 
         return -1;
     }
+
+    private static string RankName(Rank rank) => rank switch
+    {
+        Rank.Ace   => "Ace",
+        Rank.Jack  => "Jack",
+        Rank.Queen => "Queen",
+        Rank.King  => "King",
+        Rank.Joker => "Joker",
+        _          => ((int)rank).ToString(),
+    };
 
     private void Knock(GameState state, bool isGin)
     {

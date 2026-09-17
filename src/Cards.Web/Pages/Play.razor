@@ -245,7 +245,8 @@
     }
 
     private void PushToCanvas()
-        => _canvas?.Sync(Vm.State, Vm.SelectableCardIds, Vm.SelectedCardId, Vm.DropZoneIds);
+        => _canvas?.Sync(Vm.State, Vm.SelectableCardIds, Vm.SelectedCardId, Vm.DropZoneIds,
+                         Vm.SelectedMeldGroups);
 
     private Task OnCardTapped(string cardId)   => Vm.TapCard(cardId);
     private Task OnZoneTapped(string zoneId)   => Vm.TapZone(zoneId);
