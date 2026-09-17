@@ -44,10 +44,12 @@
           "zone": "discard",
           "requires": {
             "all": [
+              "top_discard_is_meldable",
               { "hand_count_of_rank": "top_discard", "at_least": 2 },
               { "any": [ "team_has_melded", "can_open_with_top_discard" ] }
             ]
-          }
+          },
+          "then_must": "meld_top_card"
         }
       ],
       "draw_count": { "from_deck": 2, "from_discard": 7 },

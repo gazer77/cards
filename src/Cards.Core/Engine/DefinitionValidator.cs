@@ -78,6 +78,11 @@ public static class DefinitionValidator
                 if (entry.TryGetProperty("requires", out var condition))
                     foreach (var problem in RuleCondition.Validate(condition))
                         problems.Add($"{phase.Id}.draw_from.requires: {problem}");
+
+                if (entry.TryGetProperty("then_must", out var owed)
+                    && owed.GetString() is not "meld_top_card")
+                    problems.Add(
+                        $"{phase.Id}.draw_from.then_must: '{owed}' is not an obligation the engine knows.");
             }
         }
 

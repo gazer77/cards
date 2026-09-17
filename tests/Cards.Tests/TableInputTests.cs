@@ -165,4 +165,86 @@ public sealed class TableInputTests
         Assert.Equal(2 + 7, hand.Count);
         Assert.Equal(21 - 7, discard.Count);
     }
+
+    // ── The price of the pile ─────────────────────────────────────────────────
+
+    /// <summary>Stacks a claimable pile: two aces held, an ace on top of the discard.</summary>
+    private static void StageClaimablePile(GameState state, Rank topRank = Rank.Ace)
+    {
+        var hand = state.Zones[$"hand:{state.CurrentPlayer.Id}"];
+        hand.Clear();
+        hand.Add(new Card(Suit.Clubs,  topRank) { Uid = 8001 });
+        hand.Add(new Card(Suit.Hearts, topRank) { Uid = 8002 });
+
+        var discard = state.Zones["discard"];
+        discard.Clear();
+        discard.Add(new Card(Suit.Diamonds, Rank.Nine, isFaceUp: true) { Uid = 8003 });
+        discard.Add(new Card(Suit.Spades, topRank, isFaceUp: true)     { Uid = 8004 });
+    }
+
+    /// <summary>
+    /// A 3 on top freezes the pile. 3s cannot be melded at all, so the card can never
+    /// be used — holding a pair of them does not change that.
+    /// </summary>
+    [Fact]
+    public void A_pile_topped_by_an_unmeldable_rank_cannot_be_claimed()
+    {
+        var (state, logic) = HandAndFoot();
+        StageClaimablePile(state, Rank.Three);
+
+        Assert.DoesNotContain("draw_from_discard", ActionTypes(state, logic));
+    }
+
+    [Fact]
+    public void Claiming_the_pile_obliges_the_player_to_meld_the_card()
+    {
+        var (state, logic) = HandAndFoot();
+        StageClaimablePile(state);
+
+        logic.Apply(state, new GameAction("draw_from_discard"));
+
+        Assert.Equal("As", state.Metadata["dd_must_meld"]);
+        Assert.Contains("Meld the", state.Metadata["status"]);
+    }
+
+    /// <summary>
+    /// The obligation is the price of the pickup, so the turn cannot be ended while it
+    /// stands. Without this the rule is decoration and the pile is a free fistful.
+    /// </summary>
+    [Fact]
+    public void The_turn_cannot_be_ended_while_a_meld_is_owed()
+    {
+        var (state, logic) = HandAndFoot();
+        StageClaimablePile(state);
+        logic.Apply(state, new GameAction("draw_from_discard"));
+
+        var hand = state.Zones[$"hand:{state.CurrentPlayer.Id}"];
+        int held = hand.Count;
+
+        state.Metadata["selected_card"] = hand.Cards[0].Id;
+        Assert.DoesNotContain("discard", ActionTypes(state, logic));
+
+        // And the discard is refused even when asked for directly.
+        logic.Apply(state, new GameAction("discard"));
+        Assert.Equal(held, hand.Count);
+    }
+
+    [Fact]
+    public void Melding_the_claimed_card_settles_the_obligation()
+    {
+        var (state, logic) = HandAndFoot();
+        StageClaimablePile(state);
+        logic.Apply(state, new GameAction("draw_from_discard"));
+
+        var hand = state.Zones[$"hand:{state.CurrentPlayer.Id}"];
+        var aces = hand.Cards.Where(c => c.Rank == Rank.Ace).Select(c => c.Id);
+        state.Metadata["selected_card"] = string.Join(",", aces);
+        logic.Apply(state, new GameAction("meld"));
+
+        Assert.False(state.Metadata.ContainsKey("dd_must_meld"));
+
+        // And the turn can be ended again.
+        state.Metadata["selected_card"] = hand.Cards[0].Id;
+        Assert.Contains("discard", ActionTypes(state, logic));
+    }
 }

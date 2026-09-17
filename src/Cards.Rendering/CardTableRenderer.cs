@@ -884,11 +884,19 @@ public sealed class CardTableRenderer
                 if (t >= 1f) _finishedDealAnims.Add(card.Uid);
             }
 
+            // ── Selection lift ────────────────────────────────────────────────
+            // Picked cards stand out of the fan, which in a heavily overlapped hand
+            // says far more than an outline can: the raised edge is visible even where
+            // the next card covers everything but a sliver.
+            if (_selectedCardIds.Contains(card.Id))
+                rect = OffsetRect(rect, 0f, -cardH * SelectionLift);
+
             // ── Normal draw ───────────────────────────────────────────────────
             DrawCardForZone(canvas, rect, card, layout.FaceUp);
 
             if (_recordCardRects)
             {
+                // The lifted rect, so a tap lands where the card actually is.
                 _cardRects.Add((card.Uid, card.Id, rect));
                 if (layout.FaceUp)
                     DrawCardInteractiveHint(canvas, rect, card.Id);
@@ -903,6 +911,13 @@ public sealed class CardTableRenderer
     /// read the index and count the buried cards.
     /// </summary>
     private const float CompactOverlap = 0.28f;
+
+    /// <summary>
+    /// How far a selected card rises out of its fan, as a fraction of card height —
+    /// about the height of the suit pip in the corner, which is enough to read as
+    /// deliberate without breaking the line of the hand.
+    /// </summary>
+    private const float SelectionLift = 0.12f;
 
     /// <summary>
     /// The zone's declared arrangement, or the default for its shape. The declaration is

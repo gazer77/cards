@@ -30,6 +30,7 @@ public static class RuleCondition
         "team_has_melded",
         "hand_empty",
         "can_open_with_top_discard",
+        "top_discard_is_meldable",
         "always",
         "never",
     ];
@@ -108,6 +109,11 @@ public static class RuleCondition
         // pile when the top card completes an opening worth enough, which is often the
         // only way a side gets open at all.
         "can_open_with_top_discard" => CanOpenWithTopDiscard(state),
+
+        // "Could the top card be laid at all?" A rank the phase bars from melding can
+        // never be used, so the pile it sits on cannot be claimed — holding two 3s in
+        // Hand and Foot does not make a 3 on top pickable.
+        "top_discard_is_meldable" => TopDiscardIsMeldable(state),
 
         "hand_count_of_rank" => HandCountOfRank(condition, state),
 
@@ -215,6 +221,36 @@ public static class RuleCondition
         => string.Join(", ", SimpleTerms.Concat(ObjectTerms).Concat(Combinators).Order(StringComparer.Ordinal));
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Whether the discard's top card is one the current phase allows melding.
+    ///
+    /// Read from the phase definition rather than from state: which ranks may be melded
+    /// is fixed configuration, so there is one place it is written and no chance of the
+    /// draw rule and the meld rule disagreeing about 3s.
+    /// </summary>
+    private static bool TopDiscardIsMeldable(GameState state)
+    {
+        var top = state.FindZone("discard")?.TopCard;
+        if (top is null) return false;
+
+        var phase = state.Definition?.Phases
+            .FirstOrDefault(p => p.Id == state.CurrentPhaseId);
+
+        if (phase?.Extra?.TryGetValue("unmeldable_ranks", out var barred) != true
+            || barred.ValueKind != JsonValueKind.Array)
+            return true;   // nothing is barred
+
+        var wilds = MeldRules.WildRanks(state.Definition);
+        if (MeldRules.IsWild(top, wilds)) return true;   // wilds are judged as wilds
+
+        foreach (var entry in barred.EnumerateArray())
+            if (entry.ValueKind == JsonValueKind.String
+                && MeldRules.ParseRank(entry.GetString() ?? "") == top.Rank)
+                return false;
+
+        return true;
+    }
 
     /// <summary>
     /// Whether the player could lay an opening meld, worth what this round demands,

@@ -45,6 +45,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     /// <summary>Round number → points needed for a side's first meld. Empty if unset.</summary>
     private readonly List<(int? Round, int Points)> _initialMeldRequirement = [];
 
+    /// <summary>Zone id → what drawing there obliges the player to do next.</summary>
+    private readonly Dictionary<string, string> _drawObligations = [];
+
     /// <summary>Ranks the definition forbids melding — Hand and Foot's 3s.</summary>
     private readonly HashSet<Rank> _unmeldableRanks = [];
 
@@ -136,12 +139,16 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         }
         else // discard
         {
+            // A card owed to the table blocks everything that would end the turn: the
+            // obligation is the price of the pickup, so it cannot be walked away from.
+            bool owesMeld = state.Metadata.ContainsKey("dd_must_meld");
+
             // Special actions available after drawing (before discarding)
             if (_specialActions.Contains("gin") && ConditionMet(state, _ginCondition))
                 actions.Add(new GameAction("gin", Label: "Gin!"));
             if (_specialActions.Contains("knock") && ConditionMet(state, _knockCondition))
                 actions.Add(new GameAction("knock", Label: "Knock"));
-            if (_specialActions.Contains("go_out") && GoOutConditionMet(state))
+            if (!owesMeld && _specialActions.Contains("go_out") && GoOutConditionMet(state))
                 actions.Add(new GameAction("go_out", Label: "Go Out"));
             if (_specialActions.Contains("meld"))
                 actions.Add(new GameAction("meld", Label: "Lay Meld"));
@@ -156,7 +163,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             int selectedCount = string.IsNullOrEmpty(sel)
                 ? 0
                 : sel.Split(',', StringSplitOptions.RemoveEmptyEntries).Length;
-            if (selectedCount == _discardCount && _targetZone != "grid")
+            if (!owesMeld && selectedCount == _discardCount && _targetZone != "grid")
                 actions.Add(new GameAction("discard", Label: "Discard"));
 
             // Clear selection when cards are multi-selected for melding
@@ -291,7 +298,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     /// carry a count and the condition under which that zone may be drawn from. Names
     /// keep working, so no existing definition changes.
     /// </summary>
-    private static (List<string> Zones, Dictionary<string, JsonElement> Requires)
+    private (List<string> Zones, Dictionary<string, JsonElement> Requires)
         ParseDrawFrom(PhaseDefinition def)
     {
         var zones    = new List<string>();
@@ -316,6 +323,11 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             zones.Add(zone);
             if (entry.TryGetProperty("requires", out var condition))
                 requires[zone] = condition.Clone();
+
+            // What the player owes the table for having drawn here.
+            if (entry.TryGetProperty("then_must", out var owed)
+                && owed.GetString() is { Length: > 0 } obligation)
+                _drawObligations[zone] = obligation;
         }
 
         return (zones, requires);
@@ -410,6 +422,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
         var dest = PlayerHand(state, state.CurrentPlayer.Id);
 
+        // The card the pile was claimed for, read before anything moves.
+        var claimed = fromZone.TopCard;
+
         if (entirePile)
         {
             // Take whole pile (canasta discard pickup)
@@ -438,6 +453,14 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             }
         }
 
+        // Claiming a pile can come with a condition attached: in Hand and Foot the card
+        // you claimed it for must go down this turn, which is what stops the pickup
+        // being a free way to fatten a hand.
+        if (_drawObligations.TryGetValue(fromZoneId, out var obligation)
+            && obligation == "meld_top_card"
+            && claimed is not null)
+            state.Metadata["dd_must_meld"] = claimed.Id;
+
         state.Metadata["dd_turn_state"] = "discard";
         state.Metadata.Remove("selected_card");
         UpdateStatus(state);
@@ -445,6 +468,15 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
     private void DiscardCard(GameState state, string cardId)
     {
+        // Owing a meld outranks every route to a discard — the button, the drop, and
+        // the "one card selected" fallback all arrive here.
+        if (state.Metadata.TryGetValue("dd_must_meld", out var owed))
+        {
+            state.Metadata["status"] =
+                $"You must meld the {CardName(state, owed)} you took before discarding.";
+            return;
+        }
+
         if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_drawn_card"))
         {
             string drawnId = state.Metadata["dd_drawn_card"];
@@ -727,6 +759,12 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             }
         }
 
+        // A card owed to the table is paid off by reaching it, whether it went down in
+        // its own meld or joined one already there.
+        if (state.Metadata.TryGetValue("dd_must_meld", out var owed)
+            && selectedCards.Any(c => c.Id == owed))
+            state.Metadata.Remove("dd_must_meld");
+
         state.Metadata.Remove("selected_card");
         state.Metadata["status"] = melds.Count > 1 ? $"{melds.Count} melds laid!"
                                  : joined          ? "Added to meld."
@@ -798,6 +836,18 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 return i;
 
         return -1;
+    }
+
+    /// <summary>A card named the way a player would say it, for a message about it.</summary>
+    private static string CardName(GameState state, string cardId)
+    {
+        foreach (var zone in state.Zones.Values)
+            if (zone.Cards.FirstOrDefault(c => c.Id == cardId) is { } card)
+                return card.Rank == Rank.Joker
+                    ? "Joker"
+                    : $"{RankName(card.Rank)} of {card.Suit}";
+
+        return "card";
     }
 
     private static string RankName(Rank rank) => rank switch
@@ -873,7 +923,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     private void UpdateStatus(GameState state)
     {
         string phase;
-        if (TurnState(state) == "draw")
+        if (state.Metadata.TryGetValue("dd_must_meld", out var owed))
+            phase = $"Meld the {CardName(state, owed)} you took";
+        else if (TurnState(state) == "draw")
             phase = "Draw a card";
         else if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_drawn_card"))
             phase = "Tap a card to swap, or discard the drawn card";

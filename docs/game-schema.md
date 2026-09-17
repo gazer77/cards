@@ -454,6 +454,10 @@ working and mean the same thing, so only the games needing conditions carry them
 `count` — how many cards. Set per zone through `draw_count` (`{ "from_deck": 2,
 "from_discard": 7 }`), or `"pile"` for the whole pile.
 `requires` — a [condition](#conditions). The source is offered only while it holds.
+`then_must` — what drawing here obliges the player to do before the turn can end.
+Only `"meld_top_card"` today: the card the pile was claimed for must go down this
+turn, which is what stops a conditional pickup being a free fistful of cards. Every
+route to a discard is refused while it stands.
 
 #### `unmeldable_ranks`
 
@@ -670,6 +674,7 @@ A condition is a term name, an object naming a term, or a combinator:
 | `{ "hand_count_of_rank": <rank>, "at_least": n }` | The player holds `n`+ of that rank. The rank is a literal (`"K"`) or `"top_discard"` |
 | `{ "meld_value_at_least": n }` | This side's melds are worth `n`+ points, valued as scoring values them |
 | `can_open_with_top_discard` | This side has not melded, and could lay an opening worth what this round demands using the top card of the discard |
+| `top_discard_is_meldable` | The discard's top card is not a rank the phase bars from melding — a 3 on top freezes the pile |
 
 | Combinator | Meaning |
 |---|---|
@@ -721,11 +726,11 @@ should be added when a game actually calls for it — not before.
   table, not other declarations.
 - **Per-card annotations.** Rules attaching state to an individual card — frozen piles,
   captured cards, cards marked during play — beyond the grouping meld zones use.
-- **Choices offered mid-action.** A draw source can be gated on a condition, but a rule
-  demanding a follow-up ("...and you must immediately meld the card you took") cannot yet
-  be declared. This is the missing half of Hand and Foot's discard pickup.
 - **New suits.** Suits restrict to the standard four. A fifth needs artwork first: suits
   are drawn as hand-authored vector paths, not glyphs.
+- **Obligations beyond one named kind.** A draw source can demand `then_must:
+  "meld_top_card"`, but the obligation vocabulary has exactly that one entry. "You must
+  discard a card of the suit led", "you must pass three cards" would each need another.
 - **Continuous or simultaneous play.** Every phase assumes turns.
 
 ---
