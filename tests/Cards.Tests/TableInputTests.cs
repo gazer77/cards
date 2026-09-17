@@ -338,4 +338,52 @@ public sealed class TableInputTests
 
         Assert.Empty(hand.Cards);
     }
+
+    /// <summary>
+    /// The deadlock from a real table: the AI legally claimed the pile to open, owed
+    /// the meld, and had no way to pay — the auto loop only taps cards, tapping routes
+    /// to a refused discard, and the game stopped mid-round for good. An agent owing a
+    /// meld must choose to meld, and a meld action with nothing selected assembles the
+    /// debt itself: the owed card, its rank-mates, and whatever else the opening needs.
+    /// </summary>
+    [Fact]
+    public void An_agent_owing_a_meld_pays_it_and_the_turn_moves_on()
+    {
+        var (state, logic) = HandAndFoot();
+
+        // Seat the AI exactly as the stuck game had it: unopened, holding a pair of
+        // the top card and enough on the side to reach round one's 50.
+        var hand = state.Zones[$"hand:{state.CurrentPlayer.Id}"];
+        hand.Clear();
+        hand.Add(new Card(Suit.Clubs,    Rank.Four) { Uid = 9301 });
+        hand.Add(new Card(Suit.Spades,   Rank.Four) { Uid = 9302 });
+        hand.Add(new Card(Suit.Clubs,    Rank.Nine) { Uid = 9303 });
+        hand.Add(new Card(Suit.Spades,   Rank.Nine) { Uid = 9304 });
+        hand.Add(new Card(Suit.Hearts,   Rank.Nine) { Uid = 9305 });
+        hand.Add(new Card(Suit.Clubs,    Rank.Ace)  { Uid = 9306 });
+        hand.Add(new Card(Suit.Spades,   Rank.Ace)  { Uid = 9307 });
+        hand.Add(new Card(Suit.Hearts,   Rank.Ace)  { Uid = 9308 });
+        hand.Add(new Card(Suit.Diamonds, Rank.King) { Uid = 9309 });
+
+        var discard = state.Zones["discard"];
+        discard.Clear();
+        discard.Add(new Card(Suit.Diamonds, Rank.Four, isFaceUp: true) { Uid = 9310 });
+
+        state.PlayerAgents[state.CurrentPlayer.Id] =
+            new SmartDefaultAiAgent(state.CurrentPlayer.Id, state.Rng);
+
+        Assert.Contains("draw_from_discard", ActionTypes(state, logic));
+        logic.Apply(state, new GameAction("draw_from_discard"));
+        Assert.True(state.Metadata.ContainsKey("dd_must_meld"));
+
+        // The stuck game looped here. Drive it the way the auto loop does.
+        for (int step = 0; step < 5 && state.Metadata.ContainsKey("dd_must_meld"); step++)
+            logic.Apply(state, logic.GetAutoAction(state));
+
+        Assert.False(state.Metadata.ContainsKey("dd_must_meld"));
+
+        var melds = state.FindZone($"meld:{state.CurrentPlayer.Id}")!;
+        Assert.True(melds.Groups.Count >= 2);   // fours plus at least one opening mate
+        Assert.True(ScoringEngine.CardPointValue(state.Definition, melds.Cards) >= 50);
+    }
 }

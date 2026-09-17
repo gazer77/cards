@@ -672,6 +672,16 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     private void LayMeld(GameState state, bool addToExisting)
     {
         string? selectedRaw = state.Metadata.GetValueOrDefault("selected_card");
+
+        // A meld action with nothing picked, while a card is owed, assembles the debt
+        // itself: the owed card, its rank-mates, and — if the side still has to open —
+        // everything else layable, which is exactly what the pickup condition counted
+        // when it allowed the claim. This is how an agent pays; a player who has
+        // selected cards keeps their own selection.
+        if (string.IsNullOrEmpty(selectedRaw) && !addToExisting
+            && state.Metadata.TryGetValue("dd_must_meld", out var owedId))
+            selectedRaw = AssembleOwedMeld(state, owedId);
+
         if (string.IsNullOrEmpty(selectedRaw)) return;
 
         var hand = PlayerHand(state, state.CurrentPlayer.Id);
@@ -894,6 +904,33 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         return int.TryParse(token, out int uid)
             ? SelectableCards(state).FirstOrDefault(c => c.Uid == uid)
             : SelectableCards(state).FirstOrDefault(c => c.Id == token);
+    }
+
+    /// <summary>
+    /// The selection that pays a meld debt, as uid tokens: every natural of the owed
+    /// card's rank, plus — while the side still owes an opening — every other rank
+    /// group of three or more naturals. Mirrors what
+    /// <c>can_open_with_top_discard</c> counted when it allowed the pickup, so a claim
+    /// that condition permitted is always one this can pay.
+    /// </summary>
+    private string? AssembleOwedMeld(GameState state, string owedId)
+    {
+        var hand = PlayerHand(state, state.CurrentPlayer.Id);
+        var owed = hand?.Cards.FirstOrDefault(c => c.Id == owedId);
+        if (hand is null || owed is null) return null;
+
+        var wilds = MeldRules.WildRanks(state.Definition);
+        bool Natural(Card c) => !MeldRules.IsWild(c, wilds) && !_unmeldableRanks.Contains(c.Rank);
+
+        var selection = hand.Cards.Where(c => Natural(c) && c.Rank == owed.Rank).ToList();
+
+        if (RequiredOpeningMeld(state) > 0)
+            foreach (var group in hand.Cards.Where(c => Natural(c) && c.Rank != owed.Rank)
+                                            .GroupBy(c => c.Rank))
+                if (group.Count() >= 3)
+                    selection.AddRange(group);
+
+        return string.Join(",", selection.Select(c => c.Uid));
     }
 
     /// <summary>A card named the way a player would say it, for a message about it.</summary>

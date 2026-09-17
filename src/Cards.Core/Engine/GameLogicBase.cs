@@ -104,6 +104,13 @@ public abstract class GameLogicBase : IGameLogic
         if (!state.PlayerAgents.TryGetValue(state.CurrentPlayer.Id, out var agent))
             return valid.Count > 0 ? valid[0] : new GameAction("tap");
 
+        // A card owed to the table (a conditional pickup's price) is the one forced
+        // move in the game: discarding is refused until it is paid. An agent left to
+        // tap cards here would try that refused discard forever — the table simply
+        // stopped, mid-round, with the AI told "you must meld" and no way to.
+        if (state.Metadata.ContainsKey("dd_must_meld") && valid.Any(a => a.Type == "meld"))
+            return new GameAction("meld");
+
         if (selCards.Count > 0)
         {
             var cardActs = selCards
