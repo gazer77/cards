@@ -451,7 +451,8 @@ working and mean the same thing, so only the games needing conditions carry them
 ```
 
 `zone` — required. A source naming no zone fails the definition.
-`count` — how many cards, or `"pile"` for the whole discard pile.
+`count` — how many cards. Set per zone through `draw_count` (`{ "from_deck": 2,
+"from_discard": 7 }`), or `"pile"` for the whole pile.
 `requires` — a [condition](#conditions). The source is offered only while it holds.
 
 #### `unmeldable_ranks`
@@ -668,6 +669,7 @@ A condition is a term name, an object naming a term, or a combinator:
 | `always` / `never` | Unconditionally true / false |
 | `{ "hand_count_of_rank": <rank>, "at_least": n }` | The player holds `n`+ of that rank. The rank is a literal (`"K"`) or `"top_discard"` |
 | `{ "meld_value_at_least": n }` | This side's melds are worth `n`+ points, valued as scoring values them |
+| `can_open_with_top_discard` | This side has not melded, and could lay an opening worth what this round demands using the top card of the discard |
 
 | Combinator | Meaning |
 |---|---|

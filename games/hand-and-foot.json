@@ -44,13 +44,13 @@
           "zone": "discard",
           "requires": {
             "all": [
-              "team_has_melded",
-              { "hand_count_of_rank": "top_discard", "at_least": 2 }
+              { "hand_count_of_rank": "top_discard", "at_least": 2 },
+              { "any": [ "team_has_melded", "can_open_with_top_discard" ] }
             ]
           }
         }
       ],
-      "draw_count": { "from_deck": 2, "from_discard": "pile" },
+      "draw_count": { "from_deck": 2, "from_discard": 7 },
       "discard_count": 1,
       "target_zone": "hand",
       "special_actions": ["meld", "add_to_meld", "go_out"],

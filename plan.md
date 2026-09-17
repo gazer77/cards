@@ -215,6 +215,13 @@ heuristics, and conservative poker betting; everything else falls through to ran
 - [ ] Accessibility (colorblind mode, font size options) — **nothing implemented**
 - [ ] Android release prep (Play Store listing, signing, testing)
 - [ ] *Future:* iOS build when Mac access is available
+- [ ] **Declarative zone layout** — where a zone sits and how much room it gets is
+      still the renderer's decision (`ZoneLayoutEngine`), tuned per player count in
+      C#. `arrangement` says how cards sit within a zone; nothing says where the zone
+      is. Wanted: a definition states its table layout — rows or a grid, each zone's
+      share of the space, which side owns which area — so a new game can lay out its
+      table without touching the renderer. Needs care not to become a CSS of its own;
+      rows with proportional shares would cover every shipped game today.
 - [ ] **Player-settable card size, per zone** — `arrangement` says how cards sit;
       size is still the renderer's call, with melds hardcoded 50% larger than the
       deck beside them (`ZoneLayoutEngine.MeldCardScale`). A definition should be
@@ -264,6 +271,7 @@ Only the unbuilt work; everything above marked `[x]` is settled.
 | Table themes + custom backgrounds | High | `ITableTheme` already abstracts it; needs more implementations, a picker, and image storage |
 | Game manager page (create/edit/export/import) | Medium | Definitions are already data and validated on load, so the engine side is done; the work is an editor UI, file import/export on each platform, and deciding where user-authored games live alongside the shipped ones |
 | Player-settable card size per zone | Low-Medium | Zone layout already computes per-zone card width, so the plumbing exists; needs a definition field, a settings multiplier, and a decision about how the two compose |
+| Declarative zone layout | Medium-High | The layout engine already computes per-zone bounds, so the shape is right; the risk is designing a layout vocabulary that stays small. Two hand-tuned layouts (2-player and 4-player) would collapse into one data-driven path |
 | Accessibility | High | Colorblind palette and font scaling; touches `CardRenderer` and every XAML page |
 | Learn-to-play mode | High | Content work on top of the existing help framework |
 | Android release prep | Medium | Signing, store listing, device testing |

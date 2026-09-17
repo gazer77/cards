@@ -290,7 +290,7 @@ public sealed class CardTableRenderer
     public IReadOnlyList<string> SelectableCardIds
     {
         get => _selectableCardIds;
-        set { _selectableCardIds = value; RequestRedraw(); }
+        set { _selectableCardIds = value; _allSelectable = null; RequestRedraw(); }
     }
 
     public string? SelectedCardId
@@ -617,6 +617,7 @@ public sealed class CardTableRenderer
         }
 
         _cardRects.Clear();
+        _allSelectable = null;
         var layouts = ZoneLayoutEngine.Compute(_state, info);
         _lastLayouts = layouts;
 
@@ -959,28 +960,81 @@ public sealed class CardTableRenderer
             return sum + groupGap * (zone.Groups.Count - 1);
         }
 
-        // Full that will not fit becomes compact before anything shrinks.
+        // Full that will not fit on one row becomes compact before anything shrinks.
         if (arrangement == "full" && TotalAt("full", cardW) > layout.Bounds.Width)
             arrangement = "compact";
 
-        float total = TotalAt(arrangement, cardW);
-        if (total > layout.Bounds.Width && total > 0f)
+        // Melds wrap onto as many rows as the zone's height allows. Squeezing every
+        // meld a side owns into one row is what made them unreadable by mid-round —
+        // and a side can end a round with a dozen of them.
+        float cardH    = cardW * 1.4f;
+        float rowGap   = 6f;
+        int   maxRows  = Math.Max(1, (int)((layout.Bounds.Height + rowGap) / (cardH + rowGap)));
+
+        var rows = WrapIntoRows(zone, cardW, WidthOf, groupGap, layout.Bounds.Width, maxRows);
+
+        // Still too wide on the last allowed row: shrink so everything fits.
+        float widest = rows.Max(r => r.Width);
+        if (widest > layout.Bounds.Width && widest > 0f)
         {
-            cardW *= layout.Bounds.Width / total;
-            total  = layout.Bounds.Width;
+            float shrink = layout.Bounds.Width / widest;
+            cardW *= shrink;
+            cardH  = cardW * 1.4f;
+            foreach (var row in rows) row.Width *= shrink;
         }
 
-        float cardH = cardW * 1.4f;
-        float top   = layout.Bounds.MidY - cardH / 2f;
-        float x     = layout.Bounds.MidX - total / 2f;
+        float blockH = rows.Count * cardH + (rows.Count - 1) * rowGap;
+        float y      = layout.Bounds.MidY - blockH / 2f;
+
+        foreach (var row in rows)
+        {
+            float x = layout.Bounds.MidX - row.Width / 2f;
+            foreach (var meld in row.Melds)
+            {
+                float w = WidthOf(meld.Count, cardW);
+                DrawCardRun(canvas, meld, new SKRect(x, y, x + w, y + cardH), cardW, arrangement);
+                x += w + groupGap;
+            }
+            y += cardH + rowGap;
+        }
+    }
+
+    private sealed class MeldRow
+    {
+        public readonly List<IReadOnlyList<Card>> Melds = [];
+        public float Width;
+    }
+
+    /// <summary>
+    /// Packs melds into rows, breaking when the next one would overrun. The last
+    /// allowed row takes whatever is left, so nothing is ever dropped — a meld that
+    /// does not fit is drawn smaller, never not at all.
+    /// </summary>
+    private static List<MeldRow> WrapIntoRows(
+        Zone zone, float cardW, Func<int, float, float> widthOf,
+        float groupGap, float available, int maxRows)
+    {
+        var rows = new List<MeldRow> { new() };
 
         for (int g = 0; g < zone.Groups.Count; g++)
         {
-            var meld  = zone.GroupCards(g);
-            float w   = WidthOf(meld.Count, cardW);
-            DrawCardRun(canvas, meld, new SKRect(x, top, x + w, top + cardH), cardW, arrangement);
-            x += w + groupGap;
+            var meld = zone.GroupCards(g);
+            float w  = widthOf(meld.Count, cardW);
+            var row  = rows[^1];
+
+            float withIt = row.Melds.Count == 0 ? w : row.Width + groupGap + w;
+            if (row.Melds.Count > 0 && withIt > available && rows.Count < maxRows)
+            {
+                row = new MeldRow();
+                rows.Add(row);
+                withIt = w;
+            }
+
+            row.Melds.Add(meld);
+            row.Width = withIt;
         }
+
+        return rows;
     }
 
     /// <summary>
@@ -1163,14 +1217,38 @@ public sealed class CardTableRenderer
 
     // ── Interactive card hints ────────────────────────────────────────────────
 
+    /// <summary>
+    /// Whether every card on the table is selectable, in which case marking them says
+    /// nothing. During a discard every card in hand qualifies, so the whole hand lit up
+    /// — twenty outlines conveying exactly as much as none. The selection highlight is
+    /// unaffected; that one is always worth drawing.
+    /// </summary>
+    private bool EverythingIsSelectable()
+    {
+        if (_state is null || _selectableCardIds.Count == 0) return false;
+
+        _allSelectable ??= _state.Zones.Values
+            .Where(z => z.Type == "hand")
+            .All(z => z.Cards.All(c => _selectableCardIds.Contains(c.Id)));
+
+        return _allSelectable.Value;
+    }
+
+    private bool? _allSelectable;
+
     private void DrawCardInteractiveHint(SKCanvas canvas, SKRect rect, string cardId)
     {
         bool isSelected   = _selectedCardIds.Contains(cardId);
-        bool isSelectable = !isSelected && _selectableCardIds.Contains(cardId);
+        bool isSelectable = !isSelected && _selectableCardIds.Contains(cardId)
+                                        && !EverythingIsSelectable();
         if (!isSelected && !isSelectable) return;
 
+        // Drawn just inside the card rather than around it. Outlining an inflated rect
+        // put a rounded border into the sliver of every card behind it in a fan, which
+        // read as a row of little curls hooking over each card near the suit.
         float r        = rect.Width * 0.08f;
-        var   inflated = new SKRect(rect.Left - 3f, rect.Top - 3f, rect.Right + 3f, rect.Bottom + 3f);
+        var   inflated = new SKRect(rect.Left + 1.5f, rect.Top + 1.5f,
+                                    rect.Right - 1.5f, rect.Bottom - 1.5f);
 
         if (isSelected)
         {

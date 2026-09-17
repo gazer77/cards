@@ -109,6 +109,14 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         string turnState = TurnState(state);
         var actions = new List<GameAction>();
 
+        // Conditions are evaluated against the state alone, so what this phase asks of
+        // an opening meld has to be readable from there. Published every time rather
+        // than once, because the requirement rises by round — and only by the games
+        // that have one, since state is hashed and a game without openings should not
+        // change shape because another game needed a value.
+        if (_initialMeldRequirement.Count > 0)
+            state.Metadata["dd_opening_requirement"] = RequiredOpeningMeld(state).ToString();
+
         if (turnState == "draw")
         {
             foreach (var zoneName in _drawFrom)

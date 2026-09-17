@@ -29,6 +29,7 @@ public static class RuleCondition
         "stock_exhausted",
         "team_has_melded",
         "hand_empty",
+        "can_open_with_top_discard",
         "always",
         "never",
     ];
@@ -101,6 +102,12 @@ public static class RuleCondition
         // "Has this side put anything down yet" — the gate on picking up the discard
         // pile in Hand and Foot, and on laying off in most rummy games.
         "team_has_melded" => MeldZone(state) is { Count: > 0 },
+
+        // "Can this side open using the top of the discard?" — the other half of the
+        // Hand and Foot pickup rule. A side that has not melded may still claim the
+        // pile when the top card completes an opening worth enough, which is often the
+        // only way a side gets open at all.
+        "can_open_with_top_discard" => CanOpenWithTopDiscard(state),
 
         "hand_count_of_rank" => HandCountOfRank(condition, state),
 
@@ -208,6 +215,47 @@ public static class RuleCondition
         => string.Join(", ", SimpleTerms.Concat(ObjectTerms).Concat(Combinators).Order(StringComparer.Ordinal));
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Whether the player could lay an opening meld, worth what this round demands,
+    /// that uses the top card of the discard.
+    ///
+    /// The requirement is published into metadata by the phase that owns it, since a
+    /// condition sees only the state. No requirement, or a side already open, means
+    /// there is nothing to open with and the answer is no — the caller asks this as the
+    /// alternative to <c>team_has_melded</c>, so saying yes there would let an open side
+    /// claim the pile on the strength of a rule that no longer applies to it.
+    /// </summary>
+    private static bool CanOpenWithTopDiscard(GameState state)
+    {
+        if (MeldZone(state) is { Count: > 0 }) return false;   // already open
+
+        int required = int.TryParse(
+            state.Metadata.GetValueOrDefault("dd_opening_requirement"), out int r) ? r : 0;
+        if (required <= 0) return false;
+
+        var hand = CurrentHand(state);
+        var top  = state.FindZone("discard")?.TopCard;
+        if (hand is null || top is null) return false;
+
+        // The meld the top card would join must itself be legal, so the hand has to
+        // hold two of its rank — the same pair the pickup rule asks for.
+        var wilds = MeldRules.WildRanks(state.Definition);
+        if (MeldRules.IsWild(top, wilds)) return false;
+
+        var matching = hand.Cards.Where(c => !MeldRules.IsWild(c, wilds) && c.Rank == top.Rank).ToList();
+        if (matching.Count < 2) return false;
+
+        // Everything the hand could lay alongside it counts toward the opening, since
+        // the opening is measured across the whole lay.
+        var layable = new List<Card>(matching) { top };
+        foreach (var group in hand.Cards.Where(c => !MeldRules.IsWild(c, wilds) && c.Rank != top.Rank)
+                                        .GroupBy(c => c.Rank))
+            if (group.Count() >= 3)
+                layable.AddRange(group);
+
+        return ScoringEngine.CardPointValue(state.Definition, layable) >= required;
+    }
 
     private static Zone? CurrentHand(GameState state)
         => state.Players.Count == 0
