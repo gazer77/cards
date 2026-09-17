@@ -887,6 +887,12 @@ public sealed class CardTableRenderer
 
     private void DrawSpread(SKCanvas canvas, ZoneLayout layout)
     {
+        if (layout.Zone.HasGroups)
+        {
+            DrawGroupedSpread(canvas, layout);
+            return;
+        }
+
         var cards = layout.Zone.Cards;
         if (cards.Count == 0) return;
 
@@ -902,34 +908,80 @@ public sealed class CardTableRenderer
 
         for (int i = 0; i < cards.Count; i++)
         {
-            var card = cards[i];
             var rect = new SKRect(
                 startX + i * (cardW + gap), top,
                 startX + i * (cardW + gap) + cardW, top + cardH);
 
-            // Cards with an active fly-in are drawn by DrawFlyingCards overlay — skip here.
-            if (_flyInAnims.TryGetValue(card.Uid, out var fia))
-            {
-                float ft = Math.Clamp((now - fia.Start) / fia.Duration, 0f, 1f);
-                if (ft < 1f) continue;
-            }
+            DrawSpreadCard(canvas, cards[i], rect, cardH, now);
+        }
+    }
 
-            // Deal animation (slide up)
-            if (_dealAnims.TryGetValue(card.Uid, out var da))
-            {
-                float t    = Math.Clamp((now - da.Start) / da.Duration, 0f, 1f);
-                float ease = EaseOutCubic(t);
-                rect = OffsetRect(rect, 0f, (1f - ease) * cardH * 0.65f);
-                if (t >= 1f) _finishedDealAnims.Add(card.Uid);
-            }
+    /// <summary>
+    /// A spread that knows its melds draws each one as its own overlapped stack — the
+    /// canasta look — so two melds read as two melds and not one long row of cards.
+    /// </summary>
+    private void DrawGroupedSpread(SKCanvas canvas, ZoneLayout layout)
+    {
+        var zone = layout.Zone;
+        if (zone.Groups.Count == 0) return;
 
-            DrawCardCounted(canvas, rect, card, _skin);
+        // Only the top card of a buried run needs to be readable; the rest show a
+        // sliver wide enough to count them.
+        const float overlap  = 0.28f;
+        const float groupGap = 10f;
 
-            if (_recordCardRects)
+        float cardW = layout.CardWidth;
+        float WidthOf(int count, float w) => w * (1f + (count - 1) * overlap);
+
+        float total = zone.Groups.Sum(g => WidthOf(g.Count, cardW))
+                    + groupGap * (zone.Groups.Count - 1);
+        if (total > layout.Bounds.Width && total > 0f)
+        {
+            cardW *= layout.Bounds.Width / total;
+            total  = layout.Bounds.Width;
+        }
+
+        float cardH = cardW * 1.4f;
+        float top   = layout.Bounds.MidY - cardH / 2f;
+        float x     = layout.Bounds.MidX - total / 2f;
+        long  now   = NowMs();
+
+        for (int g = 0; g < zone.Groups.Count; g++)
+        {
+            var meld = zone.GroupCards(g);
+            for (int i = 0; i < meld.Count; i++)
             {
-                _cardRects.Add((card.Uid, card.Id, rect));
-                DrawCardInteractiveHint(canvas, rect, card.Id);
+                float left = x + i * cardW * overlap;
+                DrawSpreadCard(canvas, meld[i], new SKRect(left, top, left + cardW, top + cardH), cardH, now);
             }
+            x += WidthOf(meld.Count, cardW) + groupGap;
+        }
+    }
+
+    private void DrawSpreadCard(SKCanvas canvas, Card card, SKRect rect, float cardH, long now)
+    {
+        // Cards with an active fly-in are drawn by DrawFlyingCards overlay — skip here.
+        if (_flyInAnims.TryGetValue(card.Uid, out var fia))
+        {
+            float ft = Math.Clamp((now - fia.Start) / fia.Duration, 0f, 1f);
+            if (ft < 1f) return;
+        }
+
+        // Deal animation (slide up)
+        if (_dealAnims.TryGetValue(card.Uid, out var da))
+        {
+            float t    = Math.Clamp((now - da.Start) / da.Duration, 0f, 1f);
+            float ease = EaseOutCubic(t);
+            rect = OffsetRect(rect, 0f, (1f - ease) * cardH * 0.65f);
+            if (t >= 1f) _finishedDealAnims.Add(card.Uid);
+        }
+
+        DrawCardCounted(canvas, rect, card, _skin);
+
+        if (_recordCardRects)
+        {
+            _cardRects.Add((card.Uid, card.Id, rect));
+            DrawCardInteractiveHint(canvas, rect, card.Id);
         }
     }
 

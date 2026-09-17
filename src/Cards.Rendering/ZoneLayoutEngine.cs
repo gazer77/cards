@@ -239,6 +239,21 @@ public static class ZoneLayoutEngine
             if (z is not null) centerZones.Add(z);
         }
 
+        // Meld areas — team-owned when teams exist, per-player otherwise, one shared
+        // zone as the fallback. These went unplaced for a long time: melds were laid,
+        // scored, and never drawn.
+        foreach (var team in state.Teams)
+        {
+            var z = state.FindZone($"meld:{team.Id}");
+            if (z is not null) centerZones.Add(z);
+        }
+        foreach (var player in state.Players)
+        {
+            var z = state.FindZone($"meld:{player.Id}");
+            if (z is not null) centerZones.Add(z);
+        }
+        if (state.FindZone("meld") is { } sharedMeld) centerZones.Add(sharedMeld);
+
         if (centerZones.Count == 0) return;
 
         float cy = centerBounds.MidY;
