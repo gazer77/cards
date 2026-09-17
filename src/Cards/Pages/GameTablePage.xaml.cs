@@ -223,7 +223,7 @@ public partial class GameTablePage : ContentPage
     /// </summary>
     private string? _saveSlotId;
 
-    private void OnCardTapped(string cardId)
+    private void OnCardTapped(string cardId, int uid)
     {
         if (_state is null || _logic is null) return;
         if (GameOverOverlay.IsVisible || GameLogOverlay.IsVisible || _isAutoAdvancing) return;
@@ -231,7 +231,7 @@ public partial class GameTablePage : ContentPage
         var selectables = _logic.GetSelectableCardIds(_state);
         if (!selectables.Contains(cardId)) return;
 
-        _ = ApplyAndRefreshAsync(new GameAction("select_card", CardId: cardId));
+        _ = ApplyAndRefreshAsync(new GameAction("select_card", CardId: cardId, CardUid: uid));
     }
 
     private void OnCanvasTapped()
@@ -534,23 +534,26 @@ public partial class GameTablePage : ContentPage
     /// applies on Lay Meld — the colours are a preview, not a guess. Null when the
     /// selection is one meld or not yet a legal lay.
     /// </summary>
-    private IReadOnlyDictionary<string, int>? MeldGroupsFor(string selectedCard)
+    private IReadOnlyDictionary<int, int>? MeldGroupsFor(string selectedCard)
     {
         if (_state is null) return null;
 
-        var ids   = selectedCard.Split(',').ToHashSet();
+        // Tokens are uids — each names one physical card.
+        var uids  = selectedCard.Split(",", StringSplitOptions.RemoveEmptyEntries)
+            .Select(t => int.TryParse(t, out int u) ? u : -1)
+            .ToHashSet();
         var hand  = _state.FindZone($"hand:{_state.CurrentPlayer.Id}");
-        var cards = hand?.Cards.Where(c => ids.Contains(c.Id)).ToList();
+        var cards = hand?.Cards.Where(c => uids.Contains(c.Uid)).ToList();
         if (cards is null || cards.Count == 0) return null;
 
         var wilds = MeldRules.WildRanks(_state.Definition);
         var melds = MeldRules.PartitionIntoMelds(cards, wilds);
         if (melds is null || melds.Count < 2) return null;
 
-        var groups = new Dictionary<string, int>();
+        var groups = new Dictionary<int, int>();
         for (int i = 0; i < melds.Count; i++)
             foreach (var card in melds[i])
-                groups[card.Id] = i;
+                groups[card.Uid] = i;
         return groups;
     }
 

@@ -24,7 +24,7 @@ public sealed class CardTableRenderer
 
     private IReadOnlyList<string> _selectableCardIds = [];
     private string?               _selectedCardId;
-    private HashSet<string>       _selectedCardIds   = [];
+    private readonly HashSet<string> _selectedCardIds = [];
     private IReadOnlyList<string> _dropZoneIds       = [];
 
     private string? _dragCardId;
@@ -160,7 +160,8 @@ public sealed class CardTableRenderer
 
     // ── Events ────────────────────────────────────────────────────────────────
 
-    public event Action<string>?         CardTapped;
+    /// <summary>A card was tapped: its description id, and the uid of the physical card hit.</summary>
+    public event Action<string, int>?    CardTapped;
     public event Action<string>?         ZoneTapped;
 
     /// <summary>
@@ -299,23 +300,37 @@ public sealed class CardTableRenderer
         set
         {
             _selectedCardId = value;
-            _selectedCardIds = value is null ? []
-                : new HashSet<string>(value.Split(',', StringSplitOptions.RemoveEmptyEntries));
+            _selectedCardIds.Clear();
+            _selectedUids.Clear();
+
+            // A token is a uid (one physical card) or, from older callers, a card id.
+            // Ids are why selecting one 4♥ used to light every 4♥ on the table,
+            // the opponent's included.
+            foreach (var token in (value ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (int.TryParse(token, out int uid)) _selectedUids.Add(uid);
+                else _selectedCardIds.Add(token);
+            }
             RequestRedraw();
         }
     }
 
+    private readonly HashSet<int> _selectedUids = [];
+
+    private bool IsSelected(int uid, string cardId)
+        => _selectedUids.Contains(uid) || _selectedCardIds.Contains(cardId);
+
     /// <summary>
-    /// Card id → meld index for a multi-meld selection. Selected cards borrow their
+    /// Card uid → meld index for a multi-meld selection. Selected cards borrow their
     /// meld's colour so a combined lay reads as the separate melds it will become.
     /// </summary>
-    public IReadOnlyDictionary<string, int>? SelectedMeldGroups
+    public IReadOnlyDictionary<int, int>? SelectedMeldGroups
     {
         get => _selectedMeldGroups;
         set { _selectedMeldGroups = value; RequestRedraw(); }
     }
 
-    private IReadOnlyDictionary<string, int>? _selectedMeldGroups;
+    private IReadOnlyDictionary<int, int>? _selectedMeldGroups;
 
     /// <summary>
     /// One colour per meld in a combined lay, repeating past six. Picked to stay apart
@@ -845,7 +860,7 @@ public sealed class CardTableRenderer
                 {
                     _cardRects.Add((card.Uid, card.Id, rect));
                     if (layout.FaceUp)
-                        DrawCardInteractiveHint(canvas, rect, card.Id);
+                        DrawCardInteractiveHint(canvas, rect, card.Id, card.Uid);
                 }
                 if (t >= 1f) _finishedFlipAnims.Add(card.Uid);
                 continue;
@@ -888,7 +903,7 @@ public sealed class CardTableRenderer
             // Picked cards stand out of the fan, which in a heavily overlapped hand
             // says far more than an outline can: the raised edge is visible even where
             // the next card covers everything but a sliver.
-            if (_selectedCardIds.Contains(card.Id))
+            if (IsSelected(card.Uid, card.Id))
                 rect = OffsetRect(rect, 0f, -cardH * SelectionLift);
 
             // ── Normal draw ───────────────────────────────────────────────────
@@ -899,7 +914,7 @@ public sealed class CardTableRenderer
                 // The lifted rect, so a tap lands where the card actually is.
                 _cardRects.Add((card.Uid, card.Id, rect));
                 if (layout.FaceUp)
-                    DrawCardInteractiveHint(canvas, rect, card.Id);
+                    DrawCardInteractiveHint(canvas, rect, card.Id, card.Uid);
             }
         }
     }
@@ -1127,7 +1142,7 @@ public sealed class CardTableRenderer
         if (_recordCardRects)
         {
             _cardRects.Add((card.Uid, card.Id, rect));
-            DrawCardInteractiveHint(canvas, rect, card.Id);
+            DrawCardInteractiveHint(canvas, rect, card.Id, card.Uid);
         }
     }
 
@@ -1251,9 +1266,9 @@ public sealed class CardTableRenderer
 
     private bool? _allSelectable;
 
-    private void DrawCardInteractiveHint(SKCanvas canvas, SKRect rect, string cardId)
+    private void DrawCardInteractiveHint(SKCanvas canvas, SKRect rect, string cardId, int uid = -1)
     {
-        bool isSelected   = _selectedCardIds.Contains(cardId);
+        bool isSelected   = IsSelected(uid, cardId);
         bool isSelectable = !isSelected && _selectableCardIds.Contains(cardId)
                                         && !EverythingIsSelectable();
         if (!isSelected && !isSelectable) return;
@@ -1269,7 +1284,7 @@ public sealed class CardTableRenderer
         {
             var color = new SKColor(0xFF, 0xD7, 0x00);
             if (_selectedMeldGroups is { Count: > 0 } groups
-                && groups.TryGetValue(cardId, out int meld))
+                && groups.TryGetValue(uid, out int meld))
                 color = MeldGroupColors[meld % MeldGroupColors.Length];
 
             using var glow = new SKPaint
@@ -1454,16 +1469,18 @@ public sealed class CardTableRenderer
                 return;
             }
 
-            var cardId = HitTestCard(location);
-            if (cardId is not null)
+            var hit = HitTestCardWithUid(location);
+            if (hit is { } tapped)
             {
                 // Toggle info tooltip on face-up cards (any card, not just selectable ones)
-                if (IsCardFaceUp(cardId))
-                    _tooltipCardId = (_tooltipCardId == cardId) ? null : cardId;
+                if (IsCardFaceUp(tapped.Id))
+                    _tooltipCardId = (_tooltipCardId == tapped.Id) ? null : tapped.Id;
                 else
                     _tooltipCardId = null;
 
-                CardTapped?.Invoke(cardId);
+                // The uid names the physical card under the finger, so a five-deck
+                // game can tell which of its identical fours was meant.
+                CardTapped?.Invoke(tapped.Id, tapped.Uid);
             }
             else
             {
@@ -1490,12 +1507,14 @@ public sealed class CardTableRenderer
 
     // ── Hit testing ───────────────────────────────────────────────────────────
 
-    private string? HitTestCard(SKPoint pt)
+    private string? HitTestCard(SKPoint pt) => HitTestCardWithUid(pt)?.Id;
+
+    private (int Uid, string Id)? HitTestCardWithUid(SKPoint pt)
     {
         for (int i = _cardRects.Count - 1; i >= 0; i--)
         {
-            var (_, cardId, rect) = _cardRects[i];
-            if (rect.Contains(pt)) return cardId;
+            var (uid, cardId, rect) = _cardRects[i];
+            if (rect.Contains(pt)) return (uid, cardId);
         }
         return null;
     }

@@ -249,7 +249,7 @@
         => _canvas?.Sync(Vm.State, Vm.SelectableCardIds, Vm.SelectedCardId, Vm.DropZoneIds,
                          Vm.SelectedMeldGroups);
 
-    private Task OnCardTapped(string cardId)   => Vm.TapCard(cardId);
+    private Task OnCardTapped((string CardId, int Uid) card) => Vm.TapCard(card.CardId, card.Uid);
     private Task OnZoneTapped(string zoneId)   => Vm.TapZone(zoneId);
     private Task OnZoneActivated(string zoneId)=> Vm.ActivateZone(zoneId);
     private Task OnTableTapped()               => Vm.TapTable();

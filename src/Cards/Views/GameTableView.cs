@@ -46,7 +46,7 @@ public class GameTableView : SKCanvasView
         _renderer = new CardTableRenderer(new DispatcherAnimationDriver());
         _renderer.RedrawRequested += InvalidateSurface;
 
-        _renderer.CardTapped          += id      => CardTapped?.Invoke(id);
+        _renderer.CardTapped          += (id, uid) => CardTapped?.Invoke(id, uid);
         _renderer.ZoneTapped          += id      => ZoneTapped?.Invoke(id);
         _renderer.ZoneActivated       += id      => ZoneActivated?.Invoke(id);
         _renderer.CanvasTapped        += ()      => CanvasTapped?.Invoke();
@@ -59,7 +59,7 @@ public class GameTableView : SKCanvasView
 
     // ── Events (unchanged contract for GameTablePage) ─────────────────────────
 
-    public event Action<string>?         CardTapped;
+    public event Action<string, int>?    CardTapped;
     public event Action<string>?         ZoneTapped;
     public event Action<string>?         ZoneActivated;
     public event Action?                 CanvasTapped;
@@ -92,7 +92,7 @@ public class GameTableView : SKCanvasView
         set => _renderer.SelectedCardId = value;
     }
 
-    public IReadOnlyDictionary<string, int>? SelectedMeldGroups
+    public IReadOnlyDictionary<int, int>? SelectedMeldGroups
     {
         get => _renderer.SelectedMeldGroups;
         set => _renderer.SelectedMeldGroups = value;

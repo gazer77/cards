@@ -247,4 +247,95 @@ public sealed class TableInputTests
         state.Metadata["selected_card"] = hand.Cards[0].Id;
         Assert.Contains("discard", ActionTypes(state, logic));
     }
+
+    // ── One tap, one card ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Selection is by physical card. It was keyed by description, so in a five-deck
+    /// game tapping one 4♥ selected every 4♥ on the table — the opponent's included —
+    /// and tapping the second copy toggled the first back off, which made a natural
+    /// pair of identical cards impossible to meld.
+    /// </summary>
+    [Fact]
+    public void Selecting_two_identical_cards_selects_two_cards()
+    {
+        var (state, logic) = HandAndFoot();
+        logic.Apply(state, new GameAction("draw_from_deck"));
+
+        var hand = state.Zones[$"hand:{state.CurrentPlayer.Id}"];
+        hand.Clear();
+        var first  = new Card(Suit.Hearts, Rank.Four) { Uid = 9001 };
+        var second = new Card(Suit.Hearts, Rank.Four) { Uid = 9002 };
+        hand.Add(first);
+        hand.Add(second);
+
+        logic.Apply(state, new GameAction("select_card", CardId: first.Id,  CardUid: first.Uid));
+        logic.Apply(state, new GameAction("select_card", CardId: second.Id, CardUid: second.Uid));
+
+        var tokens = state.Metadata["selected_card"].Split(',');
+        Assert.Equal(["9001", "9002"], tokens);
+    }
+
+    /// <summary>
+    /// An agent that only knows descriptions still gets a second copy: naming an id
+    /// already selected resolves to a copy not yet picked rather than toggling.
+    /// </summary>
+    [Fact]
+    public void Selecting_by_description_prefers_an_unselected_copy()
+    {
+        var (state, logic) = HandAndFoot();
+        logic.Apply(state, new GameAction("draw_from_deck"));
+
+        var hand = state.Zones[$"hand:{state.CurrentPlayer.Id}"];
+        hand.Clear();
+        hand.Add(new Card(Suit.Hearts, Rank.Four) { Uid = 9101 });
+        hand.Add(new Card(Suit.Hearts, Rank.Four) { Uid = 9102 });
+
+        logic.Apply(state, new GameAction("select_card", CardId: "4h"));
+        logic.Apply(state, new GameAction("select_card", CardId: "4h"));
+
+        Assert.Equal(2, state.Metadata["selected_card"].Split(',').Length);
+    }
+
+    /// <summary>
+    /// And tapping the same physical card again is still a deselect — the toggle
+    /// belongs to the card, not to its description.
+    /// </summary>
+    [Fact]
+    public void Retapping_the_same_physical_card_deselects_it()
+    {
+        var (state, logic) = HandAndFoot();
+        logic.Apply(state, new GameAction("draw_from_deck"));
+
+        var hand = state.Zones[$"hand:{state.CurrentPlayer.Id}"];
+        var card = hand.Cards[0];
+
+        logic.Apply(state, new GameAction("select_card", CardId: card.Id, CardUid: card.Uid));
+        logic.Apply(state, new GameAction("select_card", CardId: card.Id, CardUid: card.Uid));
+
+        Assert.Equal("", state.Metadata.GetValueOrDefault("selected_card", ""));
+    }
+
+    /// <summary>Two identical naturals plus a third card of the rank make a meld.</summary>
+    [Fact]
+    public void Identical_copies_can_be_melded_together()
+    {
+        var (state, logic) = HandAndFoot();
+        state.Metadata["dd_turn_state"] = "discard";
+
+        var hand = state.Zones[$"hand:{state.CurrentPlayer.Id}"];
+        hand.Clear();
+        var cards = new[]
+        {
+            new Card(Suit.Hearts, Rank.Ace) { Uid = 9201 },
+            new Card(Suit.Hearts, Rank.Ace) { Uid = 9202 },
+            new Card(Suit.Clubs,  Rank.Ace) { Uid = 9203 },
+        };
+        foreach (var c in cards) hand.Add(c);
+
+        state.Metadata["selected_card"] = string.Join(",", cards.Select(c => c.Uid));
+        logic.Apply(state, new GameAction("meld"));
+
+        Assert.Empty(hand.Cards);
+    }
 }

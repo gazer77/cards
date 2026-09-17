@@ -220,11 +220,27 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
         if (action.Type == "select_card" && action.CardId is { } selectId)
         {
-            // In grid mode, tapping the drawn card discards it without swapping.
+            var current = (state.Metadata.GetValueOrDefault("selected_card") ?? "")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .ToList();
+
+            // Selection is by physical card, not description: a five-deck game holds
+            // several cards answering to "4h", and selecting one used to light them
+            // all — the opponent's included — while making a second copy unselectable,
+            // since its id was already "in" the selection. A tap carries the uid; an
+            // agent sending only the id gets the first copy not yet selected, so
+            // selecting "4h" twice means two fours rather than a toggle.
+            var chosen = ResolveCard(state, action.CardUid, selectId, current);
+            if (chosen is null) return;
+            string token = chosen.Uid.ToString();
+
+            // In grid mode, tapping the drawn card discards it without swapping. The
+            // drawn-card channel stays id-keyed: it holds exactly one card, so the
+            // ambiguity uids exist for cannot arise there.
             if (_targetZone == "grid" &&
-                state.Metadata.GetValueOrDefault("dd_drawn_card") == selectId)
+                state.Metadata.GetValueOrDefault("dd_drawn_card") == chosen.Id)
             {
-                DiscardCard(state, selectId);
+                DiscardCard(state, token);
                 return;
             }
 
@@ -232,20 +248,12 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             // in a comma-separated list so the player can assemble a 3+ card meld.
             if (_specialActions.Contains("meld") || _specialActions.Contains("add_to_meld"))
             {
-                var current = (state.Metadata.GetValueOrDefault("selected_card") ?? "")
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .ToList();
-                if (current.Remove(selectId))
-                    state.Metadata["selected_card"] = string.Join(",", current);
-                else
-                {
-                    current.Add(selectId);
-                    state.Metadata["selected_card"] = string.Join(",", current);
-                }
+                if (!current.Remove(token)) current.Add(token);
+                state.Metadata["selected_card"] = string.Join(",", current);
                 return;
             }
 
-            state.Metadata["selected_card"] = selectId;
+            state.Metadata["selected_card"] = token;
             return;
         }
 
@@ -477,26 +485,28 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             return;
         }
 
+        // Any token form — a uid from a tap, an id from drag-drop or an agent.
+        var card = CardFromToken(state, cardId);
+        if (card is null) return;
+
         if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_drawn_card"))
         {
-            string drawnId = state.Metadata["dd_drawn_card"];
-            if (cardId != drawnId)
+            if (card.Id != state.Metadata["dd_drawn_card"])
             {
                 // Grid mode: the selected card is a grid card to swap out.
                 // The drawn card goes face-up into the grid slot; the grid card goes to discard.
-                SwapGridCard(state, cardId);
+                SwapGridCard(state, card.Id);
                 return;
             }
-            // cardId == drawnId: player chose to discard the drawn card without swapping.
-            // Fall through to standard discard logic so the drawn card is removed from hand.
+            // Player chose to discard the drawn card without swapping. Fall through to
+            // standard discard logic so the drawn card is removed from hand.
         }
 
-        var hand    = PlayerHand(state, state.CurrentPlayer.Id);
-        var card    = hand?.Cards.FirstOrDefault(c => c.Id == cardId);
-        if (card is null || hand is null) return;
+        var hand = PlayerHand(state, state.CurrentPlayer.Id);
+        if (hand is null || !hand.Cards.Contains(card)) return;
 
         bool drawnCardDiscarded = _targetZone == "grid"
-            && state.Metadata.GetValueOrDefault("dd_drawn_card") == cardId;
+            && state.Metadata.GetValueOrDefault("dd_drawn_card") == card.Id;
 
         hand.Remove(card);
         card.IsFaceUp = true;
@@ -664,11 +674,17 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         string? selectedRaw = state.Metadata.GetValueOrDefault("selected_card");
         if (string.IsNullOrEmpty(selectedRaw)) return;
 
-        var selectedIds = selectedRaw.Split(',').ToHashSet();
-        var hand        = PlayerHand(state, state.CurrentPlayer.Id);
+        var hand = PlayerHand(state, state.CurrentPlayer.Id);
         if (hand is null) return;
 
-        var selectedCards = hand.Cards.Where(c => selectedIds.Contains(c.Id)).ToList();
+        // Tokens are uids, so two physical fours are two cards here — matching by id
+        // collapsed identical copies into one and made a natural pair unmeldable.
+        var selectedCards = selectedRaw.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(t => CardFromToken(state, t))
+            .OfType<Card>()
+            .Where(hand.Cards.Contains)
+            .Distinct()
+            .ToList();
         if (selectedCards.Count == 0) return;
         if (selectedCards.Count < 3 && !addToExisting) return; // need at least 3 for a new meld
 
@@ -836,6 +852,48 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 return i;
 
         return -1;
+    }
+
+    /// <summary>
+    /// The physical card an action means, in the current player's hand. A uid names it
+    /// outright. An id alone prefers a copy not already selected, so an agent that only
+    /// knows descriptions can still pick up a second identical card instead of
+    /// toggling the first back off.
+    /// </summary>
+    /// <summary>The zones the current player selects from: their hand, and in grid mode their grid.</summary>
+    private IEnumerable<Card> SelectableCards(GameState state)
+    {
+        var hand = PlayerHand(state, state.CurrentPlayer.Id);
+        foreach (var c in hand?.Cards ?? Enumerable.Empty<Card>()) yield return c;
+
+        if (_targetZone == "grid")
+        {
+            var grid = PlayerGrid(state, state.CurrentPlayer.Id);
+            foreach (var c in grid?.Cards ?? Enumerable.Empty<Card>()) yield return c;
+        }
+    }
+
+    private Card? ResolveCard(GameState state, int? uid, string cardId, List<string> selectedTokens)
+    {
+        var cards = SelectableCards(state).ToList();
+
+        if (uid is int u)
+            return cards.FirstOrDefault(c => c.Uid == u);
+
+        var copies = cards.Where(c => c.Id == cardId).ToList();
+        return copies.FirstOrDefault(c => !selectedTokens.Contains(c.Uid.ToString()))
+            ?? copies.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// The card a selection token names — a uid, or (for callers predating uids, such
+    /// as drag-drop and outside agents) a card id resolved to its first copy.
+    /// </summary>
+    private Card? CardFromToken(GameState state, string token)
+    {
+        return int.TryParse(token, out int uid)
+            ? SelectableCards(state).FirstOrDefault(c => c.Uid == uid)
+            : SelectableCards(state).FirstOrDefault(c => c.Id == token);
     }
 
     /// <summary>A card named the way a player would say it, for a message about it.</summary>

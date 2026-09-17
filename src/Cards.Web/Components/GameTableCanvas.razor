@@ -57,7 +57,7 @@
     /// </summary>
     public CardTableRenderer? Renderer => _renderer;
 
-    [Parameter] public EventCallback<string> CardTapped { get; set; }
+    [Parameter] public EventCallback<(string CardId, int Uid)> CardTapped { get; set; }
     [Parameter] public EventCallback<string> ZoneTapped { get; set; }
     [Parameter] public EventCallback<string> ZoneActivated { get; set; }
     [Parameter] public EventCallback TableTapped { get; set; }
@@ -87,7 +87,7 @@
         _renderer = new CardTableRenderer(_driver);
 
         _renderer.RedrawRequested      += Redraw;
-        _renderer.CardTapped           += id     => _ = CardTapped.InvokeAsync(id);
+        _renderer.CardTapped           += (id, uid) => _ = CardTapped.InvokeAsync((id, uid));
         _renderer.ZoneTapped           += id     => _ = ZoneTapped.InvokeAsync(id);
         _renderer.ZoneActivated        += id     => _ = ZoneActivated.InvokeAsync(id);
         _renderer.CanvasTapped         += ()     => _ = TableTapped.InvokeAsync();
@@ -137,7 +137,7 @@
         IReadOnlyList<string> selectableCardIds,
         string? selectedCardId,
         IReadOnlyList<string> dropZoneIds,
-        IReadOnlyDictionary<string, int>? selectedMeldGroups = null)
+        IReadOnlyDictionary<int, int>? selectedMeldGroups = null)
     {
         if (_renderer is null) return;
 
