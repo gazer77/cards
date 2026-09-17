@@ -265,7 +265,8 @@ public sealed class GameTableViewModel
         IReadOnlyList<string>? enabledRules = null,
         bool resume = true,
         string? resumeSlotId = null,
-        ulong? seed = null)
+        ulong? seed = null,
+        string? initialSort = null)
     {
         var definition = await _loader.LoadAsync(gameId);
         if (definition is null) return false;
@@ -309,6 +310,16 @@ public sealed class GameTableViewModel
 
         _state = state;
         _logic = logic;
+
+        // Sorted BEFORE the deal is choreographed, so cards fly straight to the slots
+        // they will occupy. Sorting after — as the browser client used to — dealt the
+        // hand in shuffle order and then snapped it into place the instant the
+        // animation finished, which read as the table rearranging itself.
+        if ((initialSort ?? definition.Ui?.DefaultSort) is { } sort)
+        {
+            ActiveSortMode = sort;
+            SortHandInternal(sort);
+        }
 
         // A restored game keeps the log it was saved with; only the opening line of a
         // fresh game is new. Either way the baseline is set here so resuming does not

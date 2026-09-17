@@ -815,7 +815,12 @@ public sealed class CardTableRenderer
         float totalW = layout.Bounds.Width;
         float cardW  = layout.CardWidth;
         float cardH  = layout.CardHeight;
-        float top    = layout.Bounds.MidY - cardH / 2f;
+
+        // Centred in the band, but never hanging past its bottom edge. The player's
+        // band sits at the screen edge, and a card clipped there has no visible bottom
+        // — so the selection lift read as the card growing taller instead of rising.
+        float top    = MathF.Min(layout.Bounds.MidY - cardH / 2f,
+                                 layout.Bounds.Bottom - cardH);
         long  now    = NowMs();
 
         // Draw pending cards (fly-in not yet started) face-down at their source

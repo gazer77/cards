@@ -238,10 +238,16 @@
 
         PushToCanvas();
 
-        _failed = !await Vm.StartAsync(GameId, Seats, EnabledRules, resume: Slot is not null, resumeSlotId: Slot);
+        // The sort travels WITH the start, so the deal flies cards straight to their
+        // sorted slots. Sorting afterwards dealt in shuffle order and then snapped the
+        // hand into place — the table visibly rearranging itself the moment it settled.
+        _sort = Settings.GetHandSort(GameId) ?? Settings.DefaultHandSort;
+
+        _failed = !await Vm.StartAsync(GameId, Seats, EnabledRules, resume: Slot is not null,
+                                       resumeSlotId: Slot, initialSort: _sort);
         _title      = Vm.State?.Definition.Name ?? GameId;
         _sortModes  = Vm.SortModes;
-        ApplyRememberedSort();
+        _sort       = Vm.ActiveSortMode;   // reflects the definition's default if we passed none
         StateHasChanged();
     }
 
@@ -284,20 +290,6 @@
         Vm.SortHand(mode);
     }
 
-    /// <summary>
-    /// Applies the player's remembered sort for this game, if they have chosen one.
-    /// A game's own default_sort applies when they have not.
-    /// </summary>
-    private void ApplyRememberedSort()
-    {
-        // This game's remembered choice first, then the player's global preference,
-        // then whatever the definition itself asks for.
-        _sort = Settings.GetHandSort(GameId)
-             ?? Settings.DefaultHandSort
-             ?? Vm.State?.Definition.Ui?.DefaultSort;
-
-        if (_sort is not null) Vm.SortHand(_sort);
-    }
 
     private void ShowLog()
     {
@@ -418,7 +410,7 @@
         _gameOverDismissed = false;
         await Vm.DeleteSaveAsync();
         _canvas?.Renderer?.ClearMessages();   // last game's bubbles are not this game's
-        await Vm.StartAsync(GameId, Seats, EnabledRules, resume: false);
+        await Vm.StartAsync(GameId, Seats, EnabledRules, resume: false, initialSort: _sort);
     }
 
     private async Task GoHome()
