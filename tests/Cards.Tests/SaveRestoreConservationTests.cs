@@ -247,4 +247,33 @@ public sealed class SaveRestoreConservationTests
         Assert.True(await vm.StartAsync("go-fish", 2, resume: true, resumeSlotId: "does-not-exist"));
         Assert.Equal(52, Total(vm.State!));
     }
+
+    /// <summary>
+    /// A save holds a zone's contents; its configuration comes from the definition. A
+    /// resumed game rebuilt zones from the save's four fields and silently dropped
+    /// everything else the definition declared — arrangement, labels, group labels —
+    /// so the meld captions vanished after a reload and looked like they had never
+    /// been added at all.
+    /// </summary>
+    [Fact]
+    public async Task Resuming_keeps_what_the_definition_declares_about_a_zone()
+    {
+        var (loader, saves) = Fresh();
+
+        var vm = Vm(loader, saves);
+        await vm.StartAsync("hand-and-foot", 2, resume: false, seed: 5);
+        await Play(vm, 3);
+
+        var before = vm.State!.Zones.Values.First(z => z.Id.StartsWith("meld:"));
+        Assert.NotNull(before.GroupLabel);
+
+        await vm.SaveAsync();
+        var resumed = Vm(loader, saves);
+        await resumed.StartAsync("hand-and-foot", 2, resume: true, resumeSlotId: vm.SlotId);
+
+        var after = resumed.State!.Zones[before.Id];
+        Assert.Equal(before.GroupLabel!.Text, after.GroupLabel?.Text);
+        Assert.Equal(before.Label!.Text,      after.Label?.Text);
+        Assert.Equal(before.Arrangement,      after.Arrangement);
+    }
 }

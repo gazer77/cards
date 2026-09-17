@@ -86,7 +86,16 @@ public static class GameStateSerializer
         state.Zones.Clear();
         foreach (var sz in dto.Zones)
         {
-            var zone = new Zone(sz.Id, sz.Type, sz.OwnerId, sz.Visibility);
+            // A save holds a zone's CONTENTS. Its configuration — arrangement, labels,
+            // and whatever the definition declares next — comes from the definition,
+            // through the zone Initialize just built. Rebuilding from the save's four
+            // fields silently dropped every other property on resume, so a game looked
+            // different after a reload than before it.
+            var zone = initZones.TryGetValue(sz.Id, out var configured)
+                ? configured
+                : new Zone(sz.Id, sz.Type, sz.OwnerId, sz.Visibility);
+            zone.Clear();
+
             foreach (var sc in sz.Cards)
                 zone.Add(new Card((Suit)sc.Suit, (Rank)sc.Rank, sc.IsFaceUp) { IsWild = sc.IsWild, Uid = sc.Uid });
 
