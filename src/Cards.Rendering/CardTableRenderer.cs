@@ -733,20 +733,40 @@ public sealed class CardTableRenderer
     private void DrawStack(SKCanvas canvas, ZoneLayout layout)
     {
         var baseRect = CenterCardRect(layout);
-        int depth    = Math.Min(layout.Zone.Count, 3);
+        long now     = NowMs();
 
+        // The pile's face is the topmost card that has actually LANDED. The zone gains
+        // its card the instant the move applies, but the fly-in is still en route — so
+        // drawing the true top showed the discard on the pile while its animation was
+        // also carrying it there, and the card appeared to arrive twice.
+        var cards = layout.Zone.Cards;
+        Card? topCard = null;
+        int landed = 0;
+        for (int i = cards.Count - 1; i >= 0; i--)
+        {
+            if (IsInFlight(cards[i].Uid, now)) continue;
+            topCard ??= cards[i];
+            landed++;
+        }
+
+        int depth = Math.Min(landed, 3);
         for (int i = depth - 1; i >= 1; i--)
             DrawCardBackCounted(canvas, OffsetRect(baseRect, i * 2f, i * -1.5f), _skin);
 
-        var topCard = layout.Zone.TopCard;
         if (topCard is not null)
             DrawCardForZone(canvas, baseRect, topCard, layout.FaceUp);
-        else
+        else if (cards.Count == 0)
             DrawCardBackCounted(canvas, baseRect, _skin);
+        // Every card in flight: leave the spot empty for them to land on.
 
         if (topCard is not null && _recordCardRects)
             _cardRects.Add((topCard.Uid, topCard.Id, baseRect));
     }
+
+    /// <summary>Whether this card's fly-in is pending or still moving.</summary>
+    private bool IsInFlight(int uid, long now)
+        => _flyInAnims.TryGetValue(uid, out var f)
+           && (now < f.Start || (now - f.Start) / f.Duration < 1f);
 
     // ── Shuffle animation ─────────────────────────────────────────────────────
 
