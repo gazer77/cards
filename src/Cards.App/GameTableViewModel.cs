@@ -95,18 +95,12 @@ public sealed class GameTableViewModel
     /// <summary>
     /// Whether the action bar should be shown.
     ///
-    /// A lone action is deliberately NOT given a button — it is triggered by tapping
-    /// the table (see <see cref="TapTable"/>). "ready" is the exception, because after
-    /// a showdown the player needs something explicit to press.
+    /// Every available action gets a button. A lone action used to get none — it was
+    /// reachable only by tapping bare felt, an affordance nothing on screen mentioned.
+    /// The result was a table saying "Draw a card" with no way to draw one that a
+    /// player could find.
     /// </summary>
-    public bool ShowActionButtons
-    {
-        get
-        {
-            var actions = Actions;
-            return actions.Count > 1 || (actions.Count == 1 && actions[0].Type == "ready");
-        }
-    }
+    public bool ShowActionButtons => Actions.Count > 0;
 
     public IReadOnlyList<string> SelectableCardIds =>
         _logic is not null && _state is not null ? _logic.GetSelectableCardIds(_state) : [];
@@ -441,6 +435,26 @@ public sealed class GameTableViewModel
         if (!_logic!.GetDropZoneIds(_state!, selected).Contains(zoneId)) return Task.CompletedTask;
 
         return ApplyAsync(new GameAction("play_card", CardId: selected, ZoneId: zoneId));
+    }
+
+    /// <summary>
+    /// Does the obvious thing for a zone — what a double-tap on it means.
+    ///
+    /// The binding is read from the game, never hardcoded: a zone offering
+    /// <c>draw_from_{zone}</c> draws, and a zone the selection can be played to takes
+    /// it. So a definition that adds a third pile gets the same gesture for free, and
+    /// one that forbids drawing from the discard simply never offers the action.
+    /// </summary>
+    public Task ActivateZone(string zoneId)
+    {
+        if (!CanAcceptInput()) return Task.CompletedTask;
+
+        var drawAction = _logic!.GetValidActions(_state!)
+            .FirstOrDefault(a => a.Type == $"draw_from_{zoneId}");
+        if (drawAction is not null) return ApplyAsync(drawAction);
+
+        // Otherwise it is a destination: play the selection onto it.
+        return TapZone(zoneId);
     }
 
     public Task DropCard(string cardId, string zoneId)

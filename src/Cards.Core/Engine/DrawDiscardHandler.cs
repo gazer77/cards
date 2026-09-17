@@ -140,8 +140,18 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             if (_specialActions.Contains("add_to_meld"))
                 actions.Add(new GameAction("add_to_meld", Label: "Add to Meld"));
 
-            // Clear selection when cards are multi-selected for melding
             string? sel = state.Metadata.GetValueOrDefault("selected_card");
+
+            // Discarding is offered once the selection is the size the definition asks
+            // for. In a game that also melds, the same selection means two things, so
+            // the player needs a way to say which — tapping the pile is the other.
+            int selectedCount = string.IsNullOrEmpty(sel)
+                ? 0
+                : sel.Split(',', StringSplitOptions.RemoveEmptyEntries).Length;
+            if (selectedCount == _discardCount && _targetZone != "grid")
+                actions.Add(new GameAction("discard", Label: "Discard"));
+
+            // Clear selection when cards are multi-selected for melding
             if (!string.IsNullOrEmpty(sel) && sel.Contains(','))
                 actions.Add(new GameAction("clear_selection", Label: "Clear"));
         }
@@ -227,6 +237,16 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         if ((action.Type == "play_card" || action.Type == "discard") && action.CardId is { } discardId)
         {
             DiscardCard(state, discardId);
+            return;
+        }
+
+        // A Discard button carries no card: the selection is the card. Without this the
+        // action fell through to the meld-mode guard below and did nothing at all.
+        if (action.Type == "discard"
+            && state.Metadata.GetValueOrDefault("selected_card") is { Length: > 0 } picked
+            && !picked.Contains(','))
+        {
+            DiscardCard(state, picked);
             return;
         }
 

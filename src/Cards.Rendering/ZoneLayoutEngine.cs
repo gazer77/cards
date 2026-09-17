@@ -5,6 +5,13 @@ namespace Cards.Rendering;
 
 public static class ZoneLayoutEngine
 {
+    /// <summary>
+    /// How much larger meld cards are drawn than the deck and discard beside them.
+    /// Melds are the zone a player reads rather than merely recognises. A placeholder
+    /// for per-zone, player-settable card size — see plan.md.
+    /// </summary>
+    private const float MeldCardScale = 1.5f;
+
     public static IReadOnlyList<ZoneLayout> Compute(GameState state, SKImageInfo canvasInfo)
     {
         int playerCount = state.Players.Count;
@@ -278,7 +285,14 @@ public static class ZoneLayoutEngine
         {
             var zone   = centerZones[i];
             float zoneW = weights[i] * unitW;
-            var bounds  = new SKRect(xLeft, cy - cardH / 2f, xLeft + zoneW, cy + cardH / 2f);
+
+            // Melds are the zone a player actually reads — which rank, how close to a
+            // canasta — while the deck and discard only need recognising. Until card
+            // size is per-zone and player-settable, melds simply get more room.
+            float zCardW = zone.Id.StartsWith("meld") ? cardW * MeldCardScale : cardW;
+            float zCardH = zCardW * 1.4f;
+
+            var bounds  = new SKRect(xLeft, cy - zCardH / 2f, xLeft + zoneW, cy + zCardH / 2f);
             xLeft += zoneW;
 
             // Spread zones always render as spread (they now have sufficient bounds width).
@@ -291,7 +305,7 @@ public static class ZoneLayoutEngine
             string? label = ZoneLabelFor(zone.Id)
                          ?? (zone.Id.StartsWith("books:") ? BooksLabelFor(state, zone, compact) : null);
 
-            layouts.Add(new ZoneLayout(zone, bounds, cardW, cardH, hint,
+            layouts.Add(new ZoneLayout(zone, bounds, zCardW, zCardH, hint,
                 FaceUp: faceUp, RotationDegrees: 0f,
                 Label: label,
                 IsCurrentPlayer: false));

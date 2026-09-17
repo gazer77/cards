@@ -162,6 +162,18 @@ public sealed class CardTableRenderer
 
     public event Action<string>?         CardTapped;
     public event Action<string>?         ZoneTapped;
+
+    /// <summary>
+    /// A zone was double-tapped — "do this zone's obvious thing": draw from the deck,
+    /// claim the discard pile, discard the selection onto it.
+    ///
+    /// Separate from <see cref="ZoneTapped"/> because these acts are irreversible and a
+    /// stray tap while reading the table should not spend a turn. It fires even when a
+    /// card was hit, since the top card of a pile covers the zone it belongs to — which
+    /// is why tapping the deck used to do nothing whatsoever.
+    /// </summary>
+    public event Action<string>?         ZoneActivated;
+
     public event Action?                 CanvasTapped;
     public event Action<string, string>? CardDropped;
     /// <summary>Card was dragged to a new position within its own hand zone.</summary>
@@ -1274,6 +1286,15 @@ public sealed class CardTableRenderer
     /// pixels — a browser host has to scale by the device pixel ratio before calling in,
     /// or every hit test lands in the wrong place on a high-DPI screen.
     /// </summary>
+    // Double-tap window and how far the second tap may wander — generous enough for a
+    // finger on a phone, tight enough that two deliberate taps on different cards are
+    // still two taps.
+    private const long  DoubleTapMs   = 400;
+    private const float DoubleTapSlop = 28f;
+
+    private long    _lastTapMs;
+    private SKPoint _lastTapPoint;
+
     public void OnPointerDown(SKPoint location)
     {
         _touchStartPt  = location;
@@ -1317,6 +1338,29 @@ public sealed class CardTableRenderer
         }
         else
         {
+            // A second tap in the same place, soon after the first, activates the zone
+            // under it. Checked before anything else so it works over the pile's top
+            // card, which is exactly where a player aims when they mean "draw".
+            var hitZone = HitTestZone(location);
+            bool isDoubleTap =
+                NowMs() - _lastTapMs <= DoubleTapMs
+                && MathF.Abs(location.X - _lastTapPoint.X) <= DoubleTapSlop
+                && MathF.Abs(location.Y - _lastTapPoint.Y) <= DoubleTapSlop;
+
+            _lastTapMs    = isDoubleTap ? 0 : NowMs();   // a third tap starts over
+            _lastTapPoint = location;
+
+            if (isDoubleTap && hitZone is not null)
+            {
+                _tooltipCardId = null;
+                ZoneActivated?.Invoke(hitZone);
+                _isDragging       = false;
+                _dragCardId       = null;
+                _dragSourceZoneId = null;
+                RequestRedraw();
+                return;
+            }
+
             var cardId = HitTestCard(location);
             if (cardId is not null)
             {
@@ -1331,9 +1375,8 @@ public sealed class CardTableRenderer
             else
             {
                 _tooltipCardId = null;  // dismiss tooltip on empty-space tap
-                var zoneId = HitTestZone(location);
-                if (zoneId is not null)
-                    ZoneTapped?.Invoke(zoneId);
+                if (hitZone is not null)
+                    ZoneTapped?.Invoke(hitZone);
                 else
                     CanvasTapped?.Invoke();
             }

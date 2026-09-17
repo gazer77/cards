@@ -215,6 +215,12 @@ heuristics, and conservative poker betting; everything else falls through to ran
 - [ ] Accessibility (colorblind mode, font size options) — **nothing implemented**
 - [ ] Android release prep (Play Store listing, signing, testing)
 - [ ] *Future:* iOS build when Mac access is available
+- [ ] **Player-settable card size, per zone** — `arrangement` says how cards sit;
+      size is still the renderer's call, with melds hardcoded 50% larger than the
+      deck beside them (`ZoneLayoutEngine.MeldCardScale`). A definition should be
+      able to state a relative size per zone, and the player should be able to
+      scale it further from settings — eyesight and screen size vary more than
+      any default can cover.
 - [ ] **Game manager page** — create, edit, export and import game definitions in the
       app, so the JSON vocabulary is usable without a text editor and a rebuild.
       Depends on the definition validator, which already reports what is wrong with
@@ -257,6 +263,7 @@ Only the unbuilt work; everything above marked `[x]` is settled.
 | Offline local (Bluetooth) | Medium | Android Nearby Connections API |
 | Table themes + custom backgrounds | High | `ITableTheme` already abstracts it; needs more implementations, a picker, and image storage |
 | Game manager page (create/edit/export/import) | Medium | Definitions are already data and validated on load, so the engine side is done; the work is an editor UI, file import/export on each platform, and deciding where user-authored games live alongside the shipped ones |
+| Player-settable card size per zone | Low-Medium | Zone layout already computes per-zone card width, so the plumbing exists; needs a definition field, a settings multiplier, and a decision about how the two compose |
 | Accessibility | High | Colorblind palette and font scaling; touches `CardRenderer` and every XAML page |
 | Learn-to-play mode | High | Content work on top of the existing help framework |
 | Android release prep | Medium | Signing, store listing, device testing |

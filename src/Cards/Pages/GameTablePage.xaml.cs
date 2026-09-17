@@ -43,6 +43,7 @@ public partial class GameTablePage : ContentPage
         TableCanvas.CardTapped          += OnCardTapped;
         TableCanvas.CanvasTapped        += OnCanvasTapped;
         TableCanvas.ZoneTapped          += OnZoneTapped;
+        TableCanvas.ZoneActivated       += OnZoneActivated;
         TableCanvas.CardDropped         += OnCardDropped;
         TableCanvas.CardReorderedInHand += OnCardReorderedInHand;
         TableCanvas.SizeChanged         += OnCanvasSizeChanged;
@@ -255,6 +256,23 @@ public partial class GameTablePage : ContentPage
         if (!dropZones.Contains(zoneId)) return;
 
         _ = ApplyAndRefreshAsync(new GameAction("play_card", CardId: selectedCard, ZoneId: zoneId));
+    }
+
+    /// <summary>
+    /// Double-tapping a zone does its obvious thing — draw from it, or play the
+    /// selection onto it. The binding comes from the game's own actions, so a
+    /// definition that adds a pile gets the gesture without any code here.
+    /// </summary>
+    private void OnZoneActivated(string zoneId)
+    {
+        if (_state is null || _logic is null) return;
+        if (GameOverOverlay.IsVisible || GameLogOverlay.IsVisible || _isAutoAdvancing) return;
+
+        var draw = _logic.GetValidActions(_state)
+            .FirstOrDefault(a => a.Type == $"draw_from_{zoneId}");
+        if (draw is not null) { _ = ApplyAndRefreshAsync(draw); return; }
+
+        OnZoneTapped(zoneId);
     }
 
     private void OnCardDropped(string cardId, string zoneId)
