@@ -226,5 +226,85 @@ public sealed class MeldTests
         Assert.Equal(before - 1, melds.Count);
         Assert.Equal(melds.Count, melds.Groups.Sum(g => g.Count));
     }
-}
 
+    // ── Several melds in one action ──────────────────────────────────────────
+
+    /// <summary>
+    /// A selection may hold more than one meld: three tens and three queens laid
+    /// together. One-meld-per-action made a 50-point opening unsatisfiable for a hand
+    /// whose biggest single meld was worth 30 — the requirement applied at exactly the
+    /// moment it could not be met.
+    /// </summary>
+    [Fact]
+    public void Two_melds_can_be_laid_in_one_action()
+    {
+        var (state, logic) = OpenTable();
+
+        Lay(state, logic, Stack(state,
+            (Rank.Ten, Suit.Clubs), (Rank.Ten, Suit.Hearts), (Rank.Ten, Suit.Spades),
+            (Rank.Queen, Suit.Clubs), (Rank.Queen, Suit.Hearts), (Rank.Queen, Suit.Spades)));
+
+        Assert.Equal(2, MeldsLaid(state));
+        Assert.Equal(0, Hand(state).Count);
+    }
+
+    [Fact]
+    public void A_combined_lay_meets_an_opening_a_single_meld_cannot()
+    {
+        var (state, logic) = HandAndFoot();
+        state.RoundNumber = 1;   // opening requirement: 50
+
+        // Tens are 10 each: 30 alone, refused. With queens it is 60.
+        Lay(state, logic, Stack(state,
+            (Rank.Ten, Suit.Clubs), (Rank.Ten, Suit.Hearts), (Rank.Ten, Suit.Spades)));
+        Assert.Equal(0, Melds(state).Groups.Count);
+
+        Lay(state, logic, Stack(state,
+            (Rank.Ten, Suit.Clubs), (Rank.Ten, Suit.Hearts), (Rank.Ten, Suit.Spades),
+            (Rank.Queen, Suit.Clubs), (Rank.Queen, Suit.Hearts), (Rank.Queen, Suit.Spades)));
+        Assert.Equal(2, Melds(state).Groups.Count);
+    }
+
+    [Fact]
+    public void Wilds_spread_across_the_melds_that_need_them()
+    {
+        var (state, logic) = OpenTable();
+
+        // Two tens and two queens, two wilds: each pair needs one.
+        Lay(state, logic, Stack(state,
+            (Rank.Ten, Suit.Clubs), (Rank.Ten, Suit.Hearts),
+            (Rank.Queen, Suit.Clubs), (Rank.Queen, Suit.Hearts),
+            (Rank.Two, Suit.Spades), (Rank.Two, Suit.Diamonds)));
+
+        Assert.Equal(2, MeldsLaid(state));
+    }
+
+    [Fact]
+    public void A_leftover_pair_spoils_the_whole_lay()
+    {
+        var (state, logic) = OpenTable();
+
+        // Three tens are a meld; two queens are not, and there is no wild to help.
+        var cards = Stack(state,
+            (Rank.Ten, Suit.Clubs), (Rank.Ten, Suit.Hearts), (Rank.Ten, Suit.Spades),
+            (Rank.Queen, Suit.Clubs), (Rank.Queen, Suit.Hearts));
+        Lay(state, logic, cards);
+
+        // Nothing moves: half a lay reaching the table would strand the queens.
+        Assert.Equal(0, MeldsLaid(state));
+        Assert.Equal(5, Hand(state).Count);
+    }
+
+    [Fact]
+    public void A_lay_of_a_rank_already_on_the_table_joins_that_meld()
+    {
+        var (state, logic) = OpenTable();   // opening meld is three aces
+
+        Lay(state, logic, Stack(state,
+            (Rank.Ace, Suit.Diamonds), (Rank.Ace, Suit.Clubs), (Rank.Ace, Suit.Hearts)));
+
+        // One meld of six aces, not two meld groups of the same rank.
+        Assert.Equal(1, Melds(state).Groups.Count);
+        Assert.Equal(6, Melds(state).GroupCards(0).Count);
+    }
+}

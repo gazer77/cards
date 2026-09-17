@@ -584,10 +584,13 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     }
 
     /// <summary>
-    /// Simplified inline meld for games like Hand and Foot where melding happens
-    /// within the draw/discard phase rather than a separate meld phase.
-    /// Moves the currently selected cards from the player's hand to their team/player meld zone.
-    /// Validates: ≥3 cards of the same rank (or 1–2 wilds mixed in).
+    /// Inline meld for games like Hand and Foot where melding happens within the
+    /// draw/discard phase rather than a separate meld phase.
+    ///
+    /// A selection may hold SEVERAL melds at once — three tens and three queens laid
+    /// together. That is not a convenience: an opening minimum of 50 often cannot be met
+    /// by any single meld a hand holds, so one-meld-per-action made the requirement
+    /// unsatisfiable at exactly the moment it applied.
     /// </summary>
     private void LayMeld(GameState state, bool addToExisting)
     {
@@ -609,10 +612,27 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                     ?? state.FindZone("meld");
         if (meldZone is null) return;
 
-        // A meld is cards of one rank, with wilds standing in for the rest. This was
+        // Adding to a meld stays one rank at a time: the action targets one group.
+        List<List<Card>> melds;
+        Rank meldRank = Rank.Joker;
+        if (addToExisting)
+        {
+            if (!IsValidAddition(selectedCards, out meldRank))
+            {
+                state.Metadata["status"] = "Pick cards of one rank to add to a meld.";
+                return;
+            }
+            melds = [selectedCards];
+        }
+        // A new lay may hold several melds at once, partitioned by rank with the wilds
+        // shared out. Each part is validated as a meld in its own right — this was
         // documented as validated and was not: any three selected cards were accepted,
         // so a "meld" of unrelated cards was legal and then scored as though it counted.
-        if (!IsValidMeld(selectedCards, out var meldRank))
+        else if (PartitionIntoMelds(selectedCards) is { } parts)
+        {
+            melds = parts;
+        }
+        else
         {
             state.Metadata["status"] = "That is not a meld — pick three or more of a rank.";
             return;
@@ -633,23 +653,34 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             }
         }
 
-        // Adding to an existing meld joins the one of the same rank, so a later card
-        // lands in the meld it belongs to rather than loose in the pile.
-        int targetGroup = addToExisting ? FindGroupOfRank(meldZone, meldRank) : -1;
-
         foreach (var card in selectedCards)
         {
             hand.Remove(card);
             card.IsFaceUp = true;
         }
 
-        if (targetGroup >= 0)
-            foreach (var card in selectedCards) meldZone.AddToGroup(targetGroup, card);
-        else
-            meldZone.AddGroup(selectedCards);
+        // Each part joins the table's meld of its rank when one exists — a second set of
+        // sevens belongs on the first, which is what canasta counting builds on.
+        bool joined = false;
+        foreach (var meld in melds)
+        {
+            var rank = addToExisting ? meldRank : MeldRankOf(meld);
+            int existing = FindGroupOfRank(meldZone, rank);
+            if (existing >= 0)
+            {
+                foreach (var card in meld) meldZone.AddToGroup(existing, card);
+                joined = true;
+            }
+            else
+            {
+                meldZone.AddGroup(meld);
+            }
+        }
 
         state.Metadata.Remove("selected_card");
-        state.Metadata["status"] = targetGroup >= 0 ? "Added to meld." : "Meld laid!";
+        state.Metadata["status"] = melds.Count > 1 ? $"{melds.Count} melds laid!"
+                                 : joined          ? "Added to meld."
+                                                   : "Meld laid!";
     }
 
     /// <summary>
@@ -659,6 +690,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     private static bool IsValidMeld(IReadOnlyList<Card> cards, out Rank rank)
     {
         rank = Rank.Joker;
+        if (cards.Count < 3) return false;
 
         var naturals = cards.Where(c => !IsWild(c)).ToList();
         if (naturals.Count == 0) return false;
@@ -670,6 +702,58 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         // Wilds may not outnumber the real cards; a meld is a set with help, not a pile
         // of substitutes.
         return cards.Count - naturals.Count <= naturals.Count;
+    }
+
+    /// <summary>
+    /// Cards fit to join one existing meld: any count, one natural rank at most, wilds
+    /// welcome. Wild-only additions ride on the meld's own rank.
+    /// </summary>
+    private static bool IsValidAddition(IReadOnlyList<Card> cards, out Rank rank)
+    {
+        rank = Rank.Joker;
+
+        var naturals = cards.Where(c => !IsWild(c)).ToList();
+        if (naturals.Count == 0) return false;   // where would all-wilds go?
+
+        rank = naturals[0].Rank;
+        return naturals.All(c => c.Rank == naturals[0].Rank);
+    }
+
+    private static Rank MeldRankOf(IReadOnlyList<Card> meld)
+        => meld.First(c => !IsWild(c)).Rank;
+
+    /// <summary>
+    /// Splits a selection into melds by rank, or null when no split works.
+    ///
+    /// Naturals sort themselves — each rank present is one meld. Wilds are the choice:
+    /// each is dealt to whichever meld is furthest from being legal, which fills every
+    /// deficit before padding, so a distribution is found whenever one exists.
+    /// </summary>
+    private static List<List<Card>>? PartitionIntoMelds(IReadOnlyList<Card> cards)
+    {
+        var wilds = cards.Where(IsWild).ToList();
+        var melds = cards.Where(c => !IsWild(c))
+                         .GroupBy(c => c.Rank)
+                         .Select(g => g.ToList())
+                         .ToList();
+        if (melds.Count == 0) return null;   // all wilds is a pile of substitutes
+
+        foreach (var wild in wilds)
+        {
+            // A meld still short of three needs the wild; otherwise any meld with wild
+            // capacity left takes it. Shortest-first fills every deficit before any
+            // padding starts, so a legal distribution is found whenever one exists.
+            var target = melds.Where(CanTakeWild)
+                              .OrderByDescending(m => m.Count < 3 ? 3 - m.Count : 0)
+                              .FirstOrDefault();
+            if (target is null) return null;
+            target.Add(wild);
+        }
+
+        return melds.All(m => IsValidMeld(m, out _)) ? melds : null;
+
+        static bool CanTakeWild(List<Card> meld)
+            => meld.Count(IsWild) < meld.Count(c => !IsWild(c));
     }
 
     private static bool IsWild(Card card) => card.IsWild || card.Rank == Rank.Two;
