@@ -175,4 +175,56 @@ public sealed class DefinitionValidatorTests
         Assert.NotEmpty(problems);
         Assert.Contains(problems, p => p.Contains("meld") && p.Contains("sideways"));
     }
+
+    private static GameDefinition WithMeldZone(string zoneExtras) => Parse($$"""
+    {
+      "id": "probe", "name": "Probe", "version": "1.0",
+      "deck": "standard-52",
+      "players": { "min": 2, "max": 4 },
+      "zones": [ { "id": "meld", "type": "spread", "visibility": "all", {{zoneExtras}} } ],
+      "phases": []
+    }
+    """);
+
+    [Fact]
+    public void A_well_formed_label_passes()
+    {
+        var definition = WithMeldZone("""
+        "label": { "text": "{owner}", "placement": "left", "orientation": "vertical" },
+        "group_label": { "text": "{rank}s", "placement": "top", "when": "team_has_melded" }
+        """);
+
+        Assert.Empty(DefinitionValidator.Validate(definition));
+    }
+
+    [Fact]
+    public void An_unknown_label_placement_is_reported()
+    {
+        var definition = WithMeldZone("""
+        "label": { "text": "x", "placement": "sideways" }
+        """);
+
+        Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("sideways"));
+    }
+
+    /// <summary>{rank} names a group's rank; a zone as a whole has none.</summary>
+    [Fact]
+    public void Rank_placeholder_outside_a_group_label_is_reported()
+    {
+        var definition = WithMeldZone("""
+        "label": { "text": "{rank}s" }
+        """);
+
+        Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("{rank}"));
+    }
+
+    [Fact]
+    public void A_label_condition_is_validated_like_any_other()
+    {
+        var definition = WithMeldZone("""
+        "group_label": { "text": "{rank}s", "when": "team_has_meldded" }
+        """);
+
+        Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("team_has_meldded"));
+    }
 }

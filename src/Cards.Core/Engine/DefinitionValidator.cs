@@ -29,14 +29,38 @@ public static class DefinitionValidator
         ValidateDeck(definition, problems);
 
         foreach (var zone in definition.Zones)
+        {
             if (zone.Arrangement is { } arr && arr is not ("full" or "compact" or "stack"))
                 problems.Add(
                     $"zone '{zone.Id}': arrangement '{arr}' is not full, compact, or stack.");
+
+            ValidateLabel(zone.Id, "label", zone.Label, problems);
+            ValidateLabel(zone.Id, "group_label", zone.GroupLabel, problems);
+        }
 
         foreach (var phase in definition.Phases)
             ValidatePhase(phase, problems);
 
         return problems;
+    }
+
+    private static void ValidateLabel(string zoneId, string field, ZoneLabelDefinition? label, List<string> problems)
+    {
+        if (label is null) return;
+
+        if (label.Placement is not ("top" or "bottom" or "left" or "right"))
+            problems.Add($"zone '{zoneId}'.{field}: placement '{label.Placement}' is not top, bottom, left, or right.");
+
+        if (label.Orientation is not ("horizontal" or "vertical" or "angled"))
+            problems.Add($"zone '{zoneId}'.{field}: orientation '{label.Orientation}' is not horizontal, vertical, or angled.");
+
+        // {rank} means nothing for a zone as a whole, only for a group within one.
+        if (field == "label" && label.Text.Contains("{rank}"))
+            problems.Add($"zone '{zoneId}'.label: {{rank}} is only meaningful in a group_label.");
+
+        if (label.When is { } when)
+            foreach (var problem in RuleCondition.Validate(when))
+                problems.Add($"zone '{zoneId}'.{field}.when: {problem}");
     }
 
     private static void ValidateDeck(GameDefinition definition, List<string> problems)

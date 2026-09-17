@@ -175,6 +175,42 @@ public class ZoneDefinition
     /// </summary>
     [JsonPropertyName("arrangement")]
     public string? Arrangement { get; set; }
+
+    /// <summary>A declared caption for the zone. Null keeps the renderer's default.</summary>
+    [JsonPropertyName("label")]
+    public ZoneLabelDefinition? Label { get; set; }
+
+    /// <summary>
+    /// A caption for each group in a grouped zone — what names a meld when a wild on
+    /// top hides which rank it is of.
+    /// </summary>
+    [JsonPropertyName("group_label")]
+    public ZoneLabelDefinition? GroupLabel { get; set; }
+}
+
+/// <summary>
+/// A caption a definition places beside a zone or each of its groups.
+///
+/// <c>text</c> may use placeholders: <c>{rank}</c> (a group's natural rank — group
+/// labels only), <c>{count}</c> (cards held), <c>{owner}</c> (the owning player or
+/// team's name). Pluralisation stays in the text ("{rank}s"), not in code.
+/// </summary>
+public class ZoneLabelDefinition
+{
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>"top" | "bottom" (default) | "left" | "right", relative to the cards.</summary>
+    [JsonPropertyName("placement")]
+    public string Placement { get; set; } = "bottom";
+
+    /// <summary>"horizontal" (default) | "vertical" | "angled".</summary>
+    [JsonPropertyName("orientation")]
+    public string Orientation { get; set; } = "horizontal";
+
+    /// <summary>A condition; the label shows only while it holds. Absent means always.</summary>
+    [JsonPropertyName("when")]
+    public JsonElement? When { get; set; }
 }
 
 public class PhaseDefinition

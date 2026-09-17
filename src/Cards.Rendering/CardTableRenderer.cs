@@ -206,6 +206,7 @@ public sealed class CardTableRenderer
         set
         {
             long now = NowMs();
+            _wildRanks = null;   // a different game may have different wilds
 
             // Collect card states before the swap
             var oldUids = _state?.Zones.Values
@@ -1024,7 +1025,11 @@ public sealed class CardTableRenderer
         // and a side can end a round with a dozen of them.
         float cardH    = cardW * 1.4f;
         float rowGap   = 6f;
-        int   maxRows  = Math.Max(1, (int)((layout.Bounds.Height + rowGap) / (cardH + rowGap)));
+        // Room a caption above or below each row will take, counted before the row
+        // count is fixed so captions never push the last row out of the zone.
+        bool  captioned = zone.GroupLabel is { Placement: "top" or "bottom" } gl0 && LabelApplies(gl0);
+        float rowH     = cardH + (captioned ? cardW * 0.16f * 1.6f : 0f);
+        int   maxRows  = Math.Max(1, (int)((layout.Bounds.Height + rowGap) / (rowH + rowGap)));
 
         var rows = WrapIntoRows(zone, cardW, WidthOf, groupGap, layout.Bounds.Width, maxRows);
 
@@ -1038,16 +1043,38 @@ public sealed class CardTableRenderer
             foreach (var row in rows) row.Width *= shrink;
         }
 
-        float blockH = rows.Count * cardH + (rows.Count - 1) * rowGap;
-        float y      = layout.Bounds.MidY - blockH / 2f;
+        // A caption per meld, when declared. It names the rank a wild on top would hide.
+        var caption   = zone.GroupLabel is { } gl && LabelApplies(gl) ? gl : null;
+        float capSz   = cardW * 0.16f;
+        float capRoom = caption is null ? 0f
+                      : caption.Placement is "top" or "bottom" ? capSz * 1.6f : 0f;
+        rowGap += capRoom;
+
+        float blockH = rows.Count * cardH + (rows.Count - 1) * rowGap
+                     + (caption?.Placement == "top" ? capRoom : 0f)
+                     + (caption?.Placement == "bottom" ? capRoom : 0f);
+        float y      = layout.Bounds.MidY - blockH / 2f
+                     + (caption?.Placement == "top" ? capRoom : 0f);
+
+        var wilds = MeldRules.WildRanks(_state?.Definition);
 
         foreach (var row in rows)
         {
             float x = layout.Bounds.MidX - row.Width / 2f;
             foreach (var meld in row.Melds)
             {
-                float w = WidthOf(meld.Count, cardW);
-                DrawCardRun(canvas, meld, new SKRect(x, y, x + w, y + cardH), cardW, arrangement);
+                float w    = WidthOf(meld.Count, cardW);
+                var   rect = new SKRect(x, y, x + w, y + cardH);
+                DrawCardRun(canvas, meld, rect, cardW, arrangement);
+
+                if (caption is not null && meld.Any(c => !MeldRules.IsWild(c, wilds)))
+                {
+                    string rank = MeldRules.RankDisplayName(MeldRules.MeldRankOf(meld, wilds));
+                    DrawPlacedLabel(canvas, rect,
+                        FillLabel(caption.Text, zone, rank, meld.Count),
+                        capSz, caption.Placement, caption.Orientation);
+                }
+
                 x += w + groupGap;
             }
             y += cardH + rowGap;
@@ -1620,12 +1647,79 @@ public sealed class CardTableRenderer
     private void DrawLabel(SKCanvas canvas, ZoneLayout layout)
     {
         float labelSz = layout.CardWidth * 0.18f;
-        float y       = layout.Bounds.Bottom + labelSz * 1.4f;
 
+        // A declared caption wins over the renderer's default, and may decline to show.
+        if (layout.Zone.Label is { } declared)
+        {
+            if (!LabelApplies(declared)) return;
+            string text = FillLabel(declared.Text, layout.Zone, rank: null);
+            DrawPlacedLabel(canvas, layout.Bounds, text, labelSz,
+                            declared.Placement, declared.Orientation);
+            return;
+        }
+
+        float y = layout.Bounds.Bottom + labelSz * 1.4f;
         using var paint = new SKPaint { Color = _theme.PlayerNameColor, IsAntialias = true };
         using var font  = new SKFont(SKTypeface.Default, labelSz);
         float w = font.MeasureText(layout.Label!);
         canvas.DrawText(layout.Label!, layout.Bounds.MidX - w / 2f, y, font, paint);
+    }
+
+    /// <summary>
+    /// Draws a caption against a rectangle, on the side and at the angle the definition
+    /// asked for. "vertical" reads bottom-to-top like a book spine; "angled" leans 30°.
+    /// </summary>
+    private void DrawPlacedLabel(
+        SKCanvas canvas, SKRect target, string text, float size,
+        string placement, string orientation)
+    {
+        using var paint = new SKPaint { Color = _theme.PlayerNameColor, IsAntialias = true };
+        using var font  = new SKFont(SKTypeface.Default, size);
+        float w   = font.MeasureText(text);
+        float gap = size * 0.5f;
+
+        float degrees = orientation switch
+        {
+            "vertical" => -90f,
+            "angled"   => -30f,
+            _          => 0f,
+        };
+
+        // Where the label's centre sits, then rotate the text about that point.
+        (float cx, float cy) = placement switch
+        {
+            "top"   => (target.MidX, target.Top - gap - size * 0.4f),
+            "left"  => (target.Left - gap - size * 0.4f, target.MidY),
+            "right" => (target.Right + gap + size * 0.4f, target.MidY),
+            _       => (target.MidX, target.Bottom + gap + size * 0.5f),
+        };
+
+        // A side label that stays horizontal needs room for its width, not its height.
+        if (degrees == 0f && placement == "left")  cx -= w / 2f;
+        if (degrees == 0f && placement == "right") cx += w / 2f;
+
+        canvas.Save();
+        canvas.RotateDegrees(degrees, cx, cy);
+        canvas.DrawText(text, cx - w / 2f, cy + size * 0.35f, font, paint);
+        canvas.Restore();
+    }
+
+    private bool LabelApplies(Cards.Models.ZoneLabelDefinition label)
+        => _state is null || label.When is not { } when || RuleCondition.Evaluate(when, _state);
+
+    /// <summary>Fills {rank}, {count} and {owner} in a declared caption.</summary>
+    private string FillLabel(string template, Zone zone, string? rank, int? count = null)
+    {
+        string owner = "";
+        if (_state is not null && zone.OwnerId is { } id)
+            owner = _state.Teams.FirstOrDefault(t => t.Id == id)?.Name
+                 ?? _state.Players.FirstOrDefault(p => p.Id == id)?.Name
+                 ?? "";
+
+        return template
+            .Replace("{rank}",  rank ?? "")
+            .Replace("{count}", (count ?? zone.Count).ToString())
+            .Replace("{owner}", owner);
     }
 
     private void DrawHighlight(SKCanvas canvas, SKRect bounds)
@@ -1942,8 +2036,20 @@ public sealed class CardTableRenderer
     private void DrawCardCounted(SKCanvas canvas, SKRect rect, Card card, ICardSkin skin)
     {
         _diagnostics.CardsDrawn++;
-        CardRenderer.DrawCard(canvas, rect, card, skin);
+        CardRenderer.DrawCard(canvas, rect, card, skin, IsWildHere(card));
     }
+
+    /// <summary>
+    /// Whether this game treats the card as wild. Read from the definition once per
+    /// paint, since wildness is a rule of the game and the same 2 is ordinary elsewhere.
+    /// </summary>
+    private bool IsWildHere(Card card)
+    {
+        _wildRanks ??= MeldRules.WildRanks(_state?.Definition);
+        return MeldRules.IsWild(card, _wildRanks);
+    }
+
+    private HashSet<Rank>? _wildRanks;
 
     private void DrawCardBackCounted(SKCanvas canvas, SKRect rect, ICardSkin skin)
     {
@@ -1963,7 +2069,7 @@ public sealed class CardTableRenderer
             // itself as well as hidden by its zone, so honouring IsFaceUp here would
             // reveal nothing.
             _diagnostics.CardsDrawn++;
-            CardRenderer.DrawCardFace(canvas, rect, card, _skin);
+            CardRenderer.DrawCardFace(canvas, rect, card, _skin, IsWildHere(card));
             return;
         }
 

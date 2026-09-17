@@ -15,6 +15,8 @@ public sealed class DefaultCardSkin : ICardSkin
     public SKColor FaceBorderColor  => new(0xC8, 0xC6, 0xBC);
     public SKColor RedSuitColor     => new(0xCC, 0x22, 0x22);
     public SKColor BlackSuitColor   => new(0x1A, 0x1A, 0x1A);
+    public SKColor WildFaceColor    => new(0xFF, 0xF6, 0xD5);   // warm cream, reads as "special" at a glance
+    public SKColor WildBorderColor  => new(0xD4, 0xA0, 0x17);   // gold, matching the selection glow
 
     public float CornerRadiusFraction => 0.08f;
     public CardFaceStyle FaceStyle => CardFaceStyle.Classic;

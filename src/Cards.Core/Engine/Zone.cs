@@ -13,16 +13,26 @@ public class Zone
     /// </summary>
     public string? Arrangement { get; }
 
+    /// <summary>The definition's caption for this zone. Null keeps the renderer's default.</summary>
+    public Cards.Models.ZoneLabelDefinition? Label { get; }
+
+    /// <summary>The definition's caption for each group — what names a meld.</summary>
+    public Cards.Models.ZoneLabelDefinition? GroupLabel { get; }
+
     public List<Card> Cards { get; } = [];
 
     public Zone(string id, string type, string? ownerId = null, string visibility = "all",
-                string? arrangement = null)
+                string? arrangement = null,
+                Cards.Models.ZoneLabelDefinition? label = null,
+                Cards.Models.ZoneLabelDefinition? groupLabel = null)
     {
         Id = id;
         Type = type;
         OwnerId = ownerId;
         Visibility = visibility;
         Arrangement = arrangement;
+        Label = label;
+        GroupLabel = groupLabel;
     }
 
     /// <summary>

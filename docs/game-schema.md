@@ -202,6 +202,29 @@ table overlaps instead, and a compact run that still will not fit shrinks — on
 fifteen-card meld must not break the layout for everyone. Any other value fails the
 definition.
 
+### `label` and `group_label`
+
+A caption the definition places beside a zone, or beside **each group** in a grouped zone
+(a meld). Group captions are what name a meld when a wild sits on top and hides its rank.
+
+```json
+{ "id": "meld", "type": "spread", "owner": "each_team", "visibility": "all",
+  "label":       { "text": "{owner}", "placement": "bottom" },
+  "group_label": { "text": "{rank}s", "placement": "top", "orientation": "horizontal" } }
+```
+
+| Field | Values |
+|---|---|
+| `text` | Any text. Placeholders: `{rank}` (a group's natural rank — `group_label` only), `{count}` (cards held), `{owner}` (the owning player or team) |
+| `placement` | `top`, `bottom` (default), `left`, `right` — relative to the cards |
+| `orientation` | `horizontal` (default), `vertical` (reads like a book spine), `angled` (leans 30°) |
+| `when` | A [condition](#conditions); the caption shows only while it holds. Absent means always |
+
+Pluralisation lives in the text (`"{rank}s"`), not in code. A `label` keeps the renderer's
+default caption when omitted; a `group_label` is off unless declared. An unknown placement
+or orientation, a `{rank}` outside a `group_label`, or an unreadable `when` fails the
+definition.
+
 ### Visibility Values
 
 All values are enforced by `GameStateMask` when creating agent snapshots.

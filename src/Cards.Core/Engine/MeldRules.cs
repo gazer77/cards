@@ -101,6 +101,17 @@ public static class MeldRules
     public static Rank MeldRankOf(IReadOnlyList<Card> meld, HashSet<Rank> wildRanks)
         => meld.First(c => !IsWild(c, wildRanks)).Rank;
 
+    /// <summary>A rank the way a player says it: "4", "Jack", "Ace".</summary>
+    public static string RankDisplayName(Rank rank) => rank switch
+    {
+        Rank.Ace   => "Ace",
+        Rank.Jack  => "Jack",
+        Rank.Queen => "Queen",
+        Rank.King  => "King",
+        Rank.Joker => "Joker",
+        _          => ((int)rank).ToString(),
+    };
+
     private static bool CanTakeWild(List<Card> meld, HashSet<Rank> wildRanks)
         => meld.Count(c => IsWild(c, wildRanks)) < meld.Count(c => !IsWild(c, wildRanks));
 }
