@@ -182,6 +182,26 @@ Zones are named areas where cards reside.
 | `grid` | Fixed N×M grid of cards (Golf). `rows`/`cols` define layout. `peek_count`: after dealing, flip this many cards face-up per player (Golf's "peek at 2"). |
 | `pot` | Virtual zone for chips/point tracking |
 
+### `arrangement`
+
+How a zone's cards sit on the table — geometry only; what may be *seen* stays
+`visibility`'s job:
+
+| Value | Layout |
+|---|---|
+| `"full"` | Side by side, every card fully visible |
+| `"compact"` | Overlapped so each card's index and suit still show |
+| `"stack"` | Top card only, with a count badge |
+
+Omitted, a zone takes the natural default for its shape: hands fan, decks and piles
+stack, spreads lay out full, and grouped spreads (melds) lay out compact. On a grouped
+zone the arrangement applies to **each meld**, not to the zone as one row.
+
+The declaration is a preference, not a promise: a `full` run that will not fit the
+table overlaps instead, and a compact run that still will not fit shrinks — one
+fifteen-card meld must not break the layout for everyone. Any other value fails the
+definition.
+
 ### Visibility Values
 
 All values are enforced by `GameStateMask` when creating agent snapshots.

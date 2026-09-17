@@ -83,7 +83,7 @@ public sealed class SetupEngine : ISetupStrategy
                 foreach (var p in state.Players)
                 {
                     string id = $"{zoneDef.Id}:{p.Id}";
-                    state.Zones[id] = new Zone(id, zoneDef.Type, p.Id, zoneDef.Visibility);
+                    state.Zones[id] = new Zone(id, zoneDef.Type, p.Id, zoneDef.Visibility, zoneDef.Arrangement);
                 }
             }
             else if (zoneDef.Owner == "each_team")
@@ -98,7 +98,7 @@ public sealed class SetupEngine : ISetupStrategy
                     foreach (var team in state.Teams)
                     {
                         string id = $"{zoneDef.Id}:{team.Id}";
-                        state.Zones[id] = new Zone(id, zoneDef.Type, team.Id, zoneDef.Visibility);
+                        state.Zones[id] = new Zone(id, zoneDef.Type, team.Id, zoneDef.Visibility, zoneDef.Arrangement);
                     }
                 }
                 else
@@ -107,14 +107,14 @@ public sealed class SetupEngine : ISetupStrategy
                     foreach (var p in state.Players)
                     {
                         string id = $"{zoneDef.Id}:{p.Id}";
-                        state.Zones[id] = new Zone(id, zoneDef.Type, p.Id, zoneDef.Visibility);
+                        state.Zones[id] = new Zone(id, zoneDef.Type, p.Id, zoneDef.Visibility, zoneDef.Arrangement);
                     }
                 }
             }
             else
             {
                 state.Zones[zoneDef.Id] =
-                    new Zone(zoneDef.Id, zoneDef.Type, zoneDef.Owner, zoneDef.Visibility);
+                    new Zone(zoneDef.Id, zoneDef.Type, zoneDef.Owner, zoneDef.Visibility, zoneDef.Arrangement);
             }
         }
     }

@@ -885,6 +885,20 @@ public sealed class CardTableRenderer
 
     // ── Spread ────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Fraction of a card left showing under the next one in a compact run — enough to
+    /// read the index and count the buried cards.
+    /// </summary>
+    private const float CompactOverlap = 0.28f;
+
+    /// <summary>
+    /// The zone's declared arrangement, or the default for its shape. The declaration is
+    /// a preference, not a promise: full degrades to compact when the cards will not
+    /// fit, because a fifteen-card meld at full width is a broken table.
+    /// </summary>
+    private static string ArrangementFor(Zone zone)
+        => zone.Arrangement ?? (zone.HasGroups ? "compact" : "full");
+
     private void DrawSpread(SKCanvas canvas, ZoneLayout layout)
     {
         if (layout.Zone.HasGroups)
@@ -896,45 +910,48 @@ public sealed class CardTableRenderer
         var cards = layout.Zone.Cards;
         if (cards.Count == 0) return;
 
-        float totalW = layout.Bounds.Width;
-        float cardW  = MathF.Min(layout.CardWidth, totalW / cards.Count - 4f);
-        float cardH  = cardW * 1.4f;
-        float top    = layout.Bounds.MidY - cardH / 2f;
-        float gap    = 4f;
-        float total  = cards.Count * cardW + (cards.Count - 1) * gap;
-        float startX = layout.Bounds.MidX - total / 2f;
-
-        long now = NowMs();
-
-        for (int i = 0; i < cards.Count; i++)
-        {
-            var rect = new SKRect(
-                startX + i * (cardW + gap), top,
-                startX + i * (cardW + gap) + cardW, top + cardH);
-
-            DrawSpreadCard(canvas, cards[i], rect, cardH, now);
-        }
+        DrawCardRun(canvas, cards, layout.Bounds, layout.CardWidth, ArrangementFor(layout.Zone));
     }
 
     /// <summary>
-    /// A spread that knows its melds draws each one as its own overlapped stack — the
-    /// canasta look — so two melds read as two melds and not one long row of cards.
+    /// A spread that knows its melds draws each one separately — the canasta look — so
+    /// two melds read as two melds and not one long row of cards. The arrangement
+    /// applies to each meld, not to the zone as one row.
     /// </summary>
     private void DrawGroupedSpread(SKCanvas canvas, ZoneLayout layout)
     {
         var zone = layout.Zone;
         if (zone.Groups.Count == 0) return;
 
-        // Only the top card of a buried run needs to be readable; the rest show a
-        // sliver wide enough to count them.
-        const float overlap  = 0.28f;
+        string arrangement = ArrangementFor(zone);
         const float groupGap = 10f;
 
         float cardW = layout.CardWidth;
-        float WidthOf(int count, float w) => w * (1f + (count - 1) * overlap);
+        float WidthOf(int count, float w) => arrangement switch
+        {
+            "stack" => w,
+            "full"  => w * count + 4f * (count - 1),
+            _       => w * (1f + (count - 1) * CompactOverlap),
+        };
 
-        float total = zone.Groups.Sum(g => WidthOf(g.Count, cardW))
-                    + groupGap * (zone.Groups.Count - 1);
+        float TotalAt(string arr, float w)
+        {
+            float sum = 0f;
+            foreach (var g in zone.Groups)
+                sum += arr switch
+                {
+                    "stack" => w,
+                    "full"  => w * g.Count + 4f * (g.Count - 1),
+                    _       => w * (1f + (g.Count - 1) * CompactOverlap),
+                };
+            return sum + groupGap * (zone.Groups.Count - 1);
+        }
+
+        // Full that will not fit becomes compact before anything shrinks.
+        if (arrangement == "full" && TotalAt("full", cardW) > layout.Bounds.Width)
+            arrangement = "compact";
+
+        float total = TotalAt(arrangement, cardW);
         if (total > layout.Bounds.Width && total > 0f)
         {
             cardW *= layout.Bounds.Width / total;
@@ -944,17 +961,65 @@ public sealed class CardTableRenderer
         float cardH = cardW * 1.4f;
         float top   = layout.Bounds.MidY - cardH / 2f;
         float x     = layout.Bounds.MidX - total / 2f;
-        long  now   = NowMs();
 
         for (int g = 0; g < zone.Groups.Count; g++)
         {
-            var meld = zone.GroupCards(g);
-            for (int i = 0; i < meld.Count; i++)
-            {
-                float left = x + i * cardW * overlap;
-                DrawSpreadCard(canvas, meld[i], new SKRect(left, top, left + cardW, top + cardH), cardH, now);
-            }
-            x += WidthOf(meld.Count, cardW) + groupGap;
+            var meld  = zone.GroupCards(g);
+            float w   = WidthOf(meld.Count, cardW);
+            DrawCardRun(canvas, meld, new SKRect(x, top, x + w, top + cardH), cardW, arrangement);
+            x += w + groupGap;
+        }
+    }
+
+    /// <summary>
+    /// One run of cards in the given arrangement: "full" side by side, "compact"
+    /// overlapped, "stack" top card only with a count badge — a pile of six aces
+    /// showing one must still say six.
+    /// </summary>
+    private void DrawCardRun(
+        SKCanvas canvas, IReadOnlyList<Card> cards, SKRect bounds, float maxCardW, string arrangement)
+    {
+        if (cards.Count == 0) return;
+        long now = NowMs();
+
+        if (arrangement == "stack")
+        {
+            float w    = MathF.Min(maxCardW, bounds.Width);
+            float h    = w * 1.4f;
+            var   rect = new SKRect(bounds.MidX - w / 2f, bounds.MidY - h / 2f,
+                                    bounds.MidX + w / 2f, bounds.MidY + h / 2f);
+            DrawSpreadCard(canvas, cards[^1], rect, h, now);
+            if (cards.Count > 1)
+                DrawCountBadge(canvas, rect, cards.Count);
+            return;
+        }
+
+        float gap     = arrangement == "full" ? 4f : 0f;
+        float advance = arrangement == "full" ? maxCardW + gap : maxCardW * CompactOverlap;
+
+        float cardW = maxCardW;
+        float total = cardW + (cards.Count - 1) * advance;
+        if (arrangement == "full" && total > bounds.Width)
+        {
+            // Preference, not promise: a full row that will not fit overlaps instead.
+            advance = maxCardW * CompactOverlap;
+            total   = cardW + (cards.Count - 1) * advance;
+        }
+        if (total > bounds.Width && total > 0f)
+        {
+            float scale = bounds.Width / total;
+            cardW   *= scale;
+            advance *= scale;
+        }
+
+        float cardH  = cardW * 1.4f;
+        float top    = bounds.MidY - cardH / 2f;
+        float startX = bounds.MidX - (cardW + (cards.Count - 1) * advance) / 2f;
+
+        for (int i = 0; i < cards.Count; i++)
+        {
+            float left = startX + i * advance;
+            DrawSpreadCard(canvas, cards[i], new SKRect(left, top, left + cardW, top + cardH), cardH, now);
         }
     }
 

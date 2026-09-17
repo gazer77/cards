@@ -7,14 +7,22 @@ public class Zone
     public string? OwnerId { get; }     // player id, team id, or null for shared
     public string Visibility { get; }   // none, top, owner, all, count_only
 
+    /// <summary>
+    /// How the cards sit — "full", "compact", or "stack". Geometry only; what may be
+    /// seen stays <see cref="Visibility"/>'s job. Null takes the type's default.
+    /// </summary>
+    public string? Arrangement { get; }
+
     public List<Card> Cards { get; } = [];
 
-    public Zone(string id, string type, string? ownerId = null, string visibility = "all")
+    public Zone(string id, string type, string? ownerId = null, string visibility = "all",
+                string? arrangement = null)
     {
         Id = id;
         Type = type;
         OwnerId = ownerId;
         Visibility = visibility;
+        Arrangement = arrangement;
     }
 
     /// <summary>

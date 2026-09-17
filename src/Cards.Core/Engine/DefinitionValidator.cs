@@ -28,6 +28,11 @@ public static class DefinitionValidator
 
         ValidateDeck(definition, problems);
 
+        foreach (var zone in definition.Zones)
+            if (zone.Arrangement is { } arr && arr is not ("full" or "compact" or "stack"))
+                problems.Add(
+                    $"zone '{zone.Id}': arrangement '{arr}' is not full, compact, or stack.");
+
         foreach (var phase in definition.Phases)
             ValidatePhase(phase, problems);
 

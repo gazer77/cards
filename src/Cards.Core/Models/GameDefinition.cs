@@ -167,6 +167,14 @@ public class ZoneDefinition
     /// <summary>How many cards the player may peek at on initial deal (type = "grid" only).</summary>
     [JsonPropertyName("peek_count")]
     public int PeekCount { get; set; } = 0;
+
+    /// <summary>
+    /// How the cards sit: "full" (side by side), "compact" (overlapped, index showing),
+    /// or "stack" (top card only, with a count). Geometry, not information — what may
+    /// be SEEN stays visibility's job. Null takes the default for the zone's type.
+    /// </summary>
+    [JsonPropertyName("arrangement")]
+    public string? Arrangement { get; set; }
 }
 
 public class PhaseDefinition

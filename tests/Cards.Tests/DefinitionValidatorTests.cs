@@ -156,4 +156,23 @@ public sealed class DefinitionValidatorTests
                 new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json)));
         }
     }
+
+    [Fact]
+    public void An_unknown_zone_arrangement_is_reported()
+    {
+        var definition = Parse("""
+        {
+          "id": "probe", "name": "Probe", "version": "1.0",
+          "deck": "standard-52",
+          "players": { "min": 2, "max": 4 },
+          "zones": [ { "id": "meld", "type": "spread", "arrangement": "sideways" } ],
+          "phases": []
+        }
+        """);
+
+        var problems = DefinitionValidator.Validate(definition);
+
+        Assert.NotEmpty(problems);
+        Assert.Contains(problems, p => p.Contains("meld") && p.Contains("sideways"));
+    }
 }
