@@ -713,7 +713,7 @@ public static class ScoringEngine
                 var meldZone = state.FindZone($"meld:{team.Id}");
                 if (meldZone is not null)
                 {
-                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus);
+                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus, BookSize(state.Definition));
                 }
 
                 // Deduct card values for cards remaining in each player's hand.
@@ -743,7 +743,7 @@ public static class ScoringEngine
 
                 var meldZone = state.FindZone($"meld:{p.Id}") ?? state.FindZone("meld");
                 if (meldZone is not null)
-                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus);
+                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus, BookSize(state.Definition));
 
                 var hand = state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand");
                 if (hand is not null)
@@ -793,7 +793,7 @@ public static class ScoringEngine
     /// </summary>
     private static int ScoreMeldZone(
         Zone zone, MeldCardValues values, HashSet<string> wildCards,
-        int natCanBonus, int wildCanBonus)
+        int natCanBonus, int wildCanBonus, int bookSize)
     {
         int pts = zone.Cards.Sum(c => values.GetValue(c));
 
@@ -813,7 +813,7 @@ public static class ScoringEngine
             for (int i = 0; i < zone.Groups.Count; i++)
             {
                 var meld = zone.GroupCards(i);
-                if (meld.Count < 7) continue;
+                if (meld.Count < bookSize) continue;
 
                 int wildsInMeld = meld.Count(IsWildCard);
                 if (wildsInMeld > maxWildsPerCanasta) continue;
@@ -840,7 +840,7 @@ public static class ScoringEngine
         foreach (var group in naturalGroups)
         {
             int count    = group.Count();
-            int need     = Math.Max(0, 7 - count);
+            int need     = Math.Max(0, bookSize - count);
             int canUse   = Math.Min(need, Math.Min(wildsRemaining, maxWildsPerCanasta));
 
             if (count + canUse < 7) continue;  // can't reach canasta size
@@ -850,9 +850,9 @@ public static class ScoringEngine
         }
 
         // Pure wild canasta (7+ wilds with no natural cards assigned above).
-        while (wildsRemaining >= 7)
+        while (wildsRemaining >= bookSize)
         {
-            wildsRemaining -= 7;
+            wildsRemaining -= bookSize;
             pts += wildCanBonus;
         }
 
@@ -866,6 +866,19 @@ public static class ScoringEngine
     /// opening requirement — Hand and Foot's 50, 90, 120, 150 by round — has to price a
     /// proposed meld before allowing it, and must price it exactly as the round will.
     /// </summary>
+    /// <summary>
+    /// How many cards make a complete book — a canasta. Declared as scoring.book_size,
+    /// seven by default. Read here by scoring and by the table, so the badge that says
+    /// "1 book" and the bonus that pays for it agree on what a book is.
+    /// </summary>
+    public static int BookSize(GameDefinition? definition)
+    {
+        if (definition?.Scoring?.Extra?.TryGetValue("book_size", out var el) == true
+            && el.ValueKind == System.Text.Json.JsonValueKind.Number)
+            return Math.Max(1, el.GetInt32());
+        return 7;
+    }
+
     public static int CardPointValue(GameDefinition definition, IEnumerable<Card> cards)
     {
         if (definition.Scoring is null) return 0;

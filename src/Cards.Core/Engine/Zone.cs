@@ -8,31 +8,36 @@ public class Zone
     public string Visibility { get; }   // none, top, owner, all, count_only
 
     /// <summary>
+    /// What the definition declared about this zone — arrangement, captions, badges,
+    /// slot layout, and whatever comes next. Carried whole so a newly declared property
+    /// reaches the renderer without another constructor parameter, and so a resumed
+    /// game reads configuration from the definition rather than from the save.
+    /// Null for a zone built outside a definition, such as in a test.
+    /// </summary>
+    public Cards.Models.ZoneDefinition? Definition { get; }
+
+    /// <summary>
     /// How the cards sit — "full", "compact", or "stack". Geometry only; what may be
     /// seen stays <see cref="Visibility"/>'s job. Null takes the type's default.
     /// </summary>
-    public string? Arrangement { get; }
+    public string? Arrangement => Definition?.Arrangement;
 
     /// <summary>The definition's caption for this zone. Null keeps the renderer's default.</summary>
-    public Cards.Models.ZoneLabelDefinition? Label { get; }
+    public Cards.Models.ZoneLabelDefinition? Label => Definition?.Label;
 
     /// <summary>The definition's caption for each group — what names a meld.</summary>
-    public Cards.Models.ZoneLabelDefinition? GroupLabel { get; }
+    public Cards.Models.ZoneLabelDefinition? GroupLabel => Definition?.GroupLabel;
 
     public List<Card> Cards { get; } = [];
 
     public Zone(string id, string type, string? ownerId = null, string visibility = "all",
-                string? arrangement = null,
-                Cards.Models.ZoneLabelDefinition? label = null,
-                Cards.Models.ZoneLabelDefinition? groupLabel = null)
+                Cards.Models.ZoneDefinition? definition = null)
     {
         Id = id;
         Type = type;
         OwnerId = ownerId;
         Visibility = visibility;
-        Arrangement = arrangement;
-        Label = label;
-        GroupLabel = groupLabel;
+        Definition = definition;
     }
 
     /// <summary>

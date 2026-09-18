@@ -36,6 +36,12 @@ public static class DefinitionValidator
 
             ValidateLabel(zone.Id, "label", zone.Label, problems);
             ValidateLabel(zone.Id, "group_label", zone.GroupLabel, problems);
+
+            if (zone.GroupLayout is not ("flow" or "by_rank"))
+                problems.Add($"zone '{zone.Id}': group_layout '{zone.GroupLayout}' is not flow or by_rank.");
+
+            for (int i = 0; i < zone.GroupBadges.Count; i++)
+                ValidateBadge(zone.Id, i, zone.GroupBadges[i], problems);
         }
 
         foreach (var phase in definition.Phases)
@@ -62,6 +68,32 @@ public static class DefinitionValidator
             foreach (var problem in RuleCondition.Validate(when))
                 problems.Add($"zone '{zoneId}'.{field}.when: {problem}");
     }
+
+    private static void ValidateBadge(string zoneId, int index, BadgeDefinition badge, List<string> problems)
+    {
+        string where = $"zone '{zoneId}'.group_badges[{index}]";
+
+        if (badge.Shows is not ("cards" or "books" or "loose"))
+            problems.Add($"{where}: shows '{badge.Shows}' is not cards, books, or loose.");
+
+        if (badge.Placement is not ("top" or "bottom" or "left" or "right"))
+            problems.Add($"{where}: placement '{badge.Placement}' is not top, bottom, left, or right.");
+
+        if (badge.Orientation is not ("horizontal" or "vertical" or "angled"))
+            problems.Add($"{where}: orientation '{badge.Orientation}' is not horizontal, vertical, or angled.");
+
+        foreach (var (field, value) in new[] { ("color", badge.Color), ("text_color", badge.TextColor) })
+            if (value is not null && !IsHexColor(value))
+                problems.Add($"{where}: {field} '{value}' is not a #RRGGBB colour.");
+
+        if (badge.When is { } when)
+            foreach (var problem in RuleCondition.Validate(when))
+                problems.Add($"{where}.when: {problem}");
+    }
+
+    private static bool IsHexColor(string text)
+        => text.Length is 7 or 9 && text[0] == '#'
+           && text.Skip(1).All(Uri.IsHexDigit);
 
     private static void ValidateDeck(GameDefinition definition, List<string> problems)
     {

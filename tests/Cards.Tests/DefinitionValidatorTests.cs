@@ -227,4 +227,48 @@ public sealed class DefinitionValidatorTests
 
         Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("team_has_meldded"));
     }
+
+    [Fact]
+    public void Well_formed_badges_and_a_rank_layout_pass()
+    {
+        var definition = WithMeldZone("""
+        "group_layout": "by_rank",
+        "group_badges": [
+          { "shows": "loose", "color": "#A5D66F", "zero": "–" },
+          { "shows": "books", "color": "#F28C28", "placement": "right", "when": "team_has_melded" }
+        ]
+        """);
+
+        Assert.Empty(DefinitionValidator.Validate(definition));
+    }
+
+    [Fact]
+    public void A_badge_counting_something_unknown_is_reported()
+    {
+        var definition = WithMeldZone("""
+        "group_badges": [ { "shows": "wilds" } ]
+        """);
+
+        Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("wilds"));
+    }
+
+    [Fact]
+    public void A_badge_colour_that_is_not_hex_is_reported()
+    {
+        var definition = WithMeldZone("""
+        "group_badges": [ { "shows": "cards", "color": "green" } ]
+        """);
+
+        Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("green"));
+    }
+
+    [Fact]
+    public void An_unknown_group_layout_is_reported()
+    {
+        var definition = WithMeldZone("""
+        "group_layout": "by_suit"
+        """);
+
+        Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("by_suit"));
+    }
 }

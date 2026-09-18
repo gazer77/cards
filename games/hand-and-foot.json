@@ -33,8 +33,13 @@
     { "id": "hand",      "type": "hand",   "owner": "each_player", "visibility": "owner" },
     { "id": "foot",      "type": "hand",   "owner": "each_player", "visibility": "none", "locked_until": "hand_empty" },
     { "id": "meld",      "type": "spread", "owner": "each_team",   "visibility": "all",
-      "label":       { "text": "{owner}", "placement": "bottom" },
-      "group_label": { "text": "{rank}s", "placement": "top" } }
+      "arrangement":  "stack",
+      "group_layout": "by_rank",
+      "label":        { "text": "{owner}", "placement": "bottom" },
+      "group_badges": [
+        { "shows": "loose", "color": "#A5D66F", "text_color": "#1B4D1B", "zero": "–" },
+        { "shows": "books", "color": "#F28C28", "text_color": "#FFFFFF" }
+      ] }
   ],
   "phases": [
     {
@@ -86,6 +91,7 @@
     },
     "wild_cards": ["joker", "2"],
     "red_three_penalty": -500,
+    "book_size": 7,
     "natural_canasta_bonus": 500,
     "wild_canasta_bonus": 1000,
     "go_out_bonus": 100,

@@ -378,4 +378,23 @@ public sealed class MeldTests
         Assert.Equal(1, Melds(state).Groups.Count);
         Assert.Single(Hand(state).Cards);
     }
+
+    /// <summary>
+    /// What a book is comes from the definition. Seven was hardcoded in scoring, so a
+    /// game wanting five-card books could declare them and be paid for seven.
+    /// </summary>
+    [Fact]
+    public void Book_size_is_read_from_the_definition()
+    {
+        var (state, _) = HandAndFoot();
+        Assert.Equal(7, ScoringEngine.BookSize(state.Definition));
+
+        var patched = System.Text.Json.JsonSerializer.Deserialize<Cards.Models.GameDefinition>(
+            System.Text.Json.JsonSerializer.Serialize(state.Definition, GameLoader.JsonOptions)
+                .Replace("\"book_size\":7", "\"book_size\":5"),
+            GameLoader.JsonOptions)!;
+        Assert.Equal(5, ScoringEngine.BookSize(patched));
+
+        Assert.Equal(7, ScoringEngine.BookSize(null));   // nothing declared: the classic seven
+    }
 }

@@ -265,15 +265,19 @@ public sealed class SaveRestoreConservationTests
         await Play(vm, 3);
 
         var before = vm.State!.Zones.Values.First(z => z.Id.StartsWith("meld:"));
-        Assert.NotNull(before.GroupLabel);
+        Assert.NotNull(before.Definition);
 
         await vm.SaveAsync();
         var resumed = Vm(loader, saves);
         await resumed.StartAsync("hand-and-foot", 2, resume: true, resumeSlotId: vm.SlotId);
 
+        // The whole declaration comes back, not a hand-picked subset of its fields —
+        // that is what makes the next declared property safe without another test.
         var after = resumed.State!.Zones[before.Id];
-        Assert.Equal(before.GroupLabel!.Text, after.GroupLabel?.Text);
-        Assert.Equal(before.Label!.Text,      after.Label?.Text);
-        Assert.Equal(before.Arrangement,      after.Arrangement);
+        Assert.NotNull(after.Definition);
+        Assert.Equal(before.Definition!.Arrangement,       after.Definition!.Arrangement);
+        Assert.Equal(before.Definition.GroupLayout,        after.Definition.GroupLayout);
+        Assert.Equal(before.Definition.Label?.Text,        after.Definition.Label?.Text);
+        Assert.Equal(before.Definition.GroupBadges.Count,  after.Definition.GroupBadges.Count);
     }
 }

@@ -225,6 +225,42 @@ default caption when omitted; a `group_label` is off unless declared. An unknown
 or orientation, a `{rank}` outside a `group_label`, or an unreadable `when` fails the
 definition.
 
+### `group_badges`
+
+Small coloured counters beside each group — the "cards in the stack / books completed"
+readout a canasta table wants. Each badge shows one quantity; several sit in a row on
+the side they share, in declaration order.
+
+```json
+"group_badges": [
+  { "shows": "loose", "color": "#A5D66F", "text_color": "#1B4D1B", "zero": "–" },
+  { "shows": "books", "color": "#F28C28" }
+]
+```
+
+| Field | Values |
+|---|---|
+| `shows` | `cards` (in the group), `books` (complete sets of `scoring.book_size`), `loose` (cards beyond the last complete book — the working stack) |
+| `color`, `text_color` | `#RRGGBB`. Text colour is picked for contrast when omitted |
+| `zero` | `hide` (default), or text to show instead of `0` — a dash, typically |
+| `placement`, `orientation`, `when` | As for [`label`](#label-and-group_label) |
+
+What a book *is* comes from `scoring.book_size` (default 7), which the canasta bonus
+reads too — so the badge that says "1 book" and the bonus that pays for it can never
+disagree.
+
+### `group_layout`
+
+How groups are placed within a grouped zone:
+
+| Value | Layout |
+|---|---|
+| `"flow"` | In the order laid, wrapping onto rows (default) |
+| `"by_rank"` | Every rank in the deck gets a fixed slot, in deck order, with a wild slot last when the game has wilds. A rank with no meld yet shows as its name — so which melds a side does *not* have is read at a glance |
+
+`by_rank` pairs naturally with `"arrangement": "stack"`, giving one card's width per rank
+with the counts in badges. Slots wrap onto rows as the zone's width allows.
+
 ### Visibility Values
 
 All values are enforced by `GameStateMask` when creating agent snapshots.

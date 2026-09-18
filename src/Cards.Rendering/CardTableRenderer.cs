@@ -696,7 +696,10 @@ public sealed class CardTableRenderer
             canvas.RotateDegrees(layout.RotationDegrees, layout.Bounds.MidX, layout.Bounds.MidY);
         }
 
-        if (layout.Zone.IsEmpty || layout.Hint == ZoneRenderHint.Empty)
+        // A by-rank zone is never "empty": its slots are the picture, melds or not.
+        if (layout.Zone.Definition?.GroupLayout == "by_rank")
+            DrawRankSlots(canvas, layout);
+        else if (layout.Zone.IsEmpty || layout.Hint == ZoneRenderHint.Empty)
             DrawEmptyZone(canvas, layout);
         else
             DrawFilledZone(canvas, layout);
@@ -990,6 +993,13 @@ public sealed class CardTableRenderer
     private void DrawGroupedSpread(SKCanvas canvas, ZoneLayout layout)
     {
         var zone = layout.Zone;
+
+        if (zone.Definition?.GroupLayout == "by_rank")
+        {
+            DrawRankSlots(canvas, layout);
+            return;
+        }
+
         if (zone.Groups.Count == 0) return;
 
         string arrangement = ArrangementFor(zone);
@@ -1075,9 +1085,121 @@ public sealed class CardTableRenderer
                         capSz, caption.Placement, caption.Orientation);
                 }
 
+                DrawGroupBadges(canvas, zone, rect, meld.Count, cardW);
+
                 x += w + groupGap;
             }
             y += cardH + rowGap;
+        }
+    }
+
+    /// <summary>
+    /// Every rank in the deck gets a fixed slot, in deck order, with a wild slot last
+    /// when the game has wilds. A rank with no meld yet shows as its name in the slot,
+    /// so "which melds does this side not have" is read at a glance — the way a
+    /// physical table lays canastas out by rank. Slots wrap onto rows as the zone's
+    /// width allows; the arrangement still governs how each slot's cards sit.
+    /// </summary>
+    private void DrawRankSlots(SKCanvas canvas, ZoneLayout layout)
+    {
+        var zone = layout.Zone;
+        if (_state is null) return;
+
+        var wilds = MeldRules.WildRanks(_state.Definition);
+
+        IReadOnlyList<Rank> deckRanks;
+        int jokers;
+        try
+        {
+            var spec  = DeckSpec.Parse(_state.Definition.Deck, _state.Players.Count);
+            deckRanks = spec.Ranks;
+            jokers    = spec.Jokers;
+        }
+        catch (FormatException) { return; }   // a definition that loaded validated this
+
+        // Natural ranks in deck order; wild ranks are not slots of their own since a
+        // meld of them has no rank to be of — they join the single wild slot.
+        var slotRanks = deckRanks.Where(r => !wilds.Contains(r)).ToList();
+        bool wildSlot = jokers > 0 || wilds.Count > 0;
+        int  slots    = slotRanks.Count + (wildSlot ? 1 : 0);
+        if (slots == 0) return;
+
+        // Which group sits in which slot.
+        var bySlot = new Dictionary<int, IReadOnlyList<Card>>();
+        for (int g = 0; g < zone.Groups.Count; g++)
+        {
+            var meld = zone.GroupCards(g);
+            if (meld.Count == 0) continue;
+            var natural = meld.FirstOrDefault(c => !MeldRules.IsWild(c, wilds));
+            int slot    = natural is null ? slotRanks.Count : slotRanks.IndexOf(natural.Rank);
+            if (slot >= 0 && !bySlot.ContainsKey(slot)) bySlot[slot] = meld;
+        }
+
+        string arrangement = ArrangementFor(zone);
+        const float slotGap = 6f;
+
+        // Badge and caption room per row, as in the flowing layout.
+        var   caption = zone.GroupLabel is { } gl && LabelApplies(gl) ? gl : null;
+        bool  capTB   = caption?.Placement is "top" or "bottom";
+        bool  badgeTB = zone.Definition!.GroupBadges.Any(b => b.Placement is "top" or "bottom");
+
+        // Fit as many slots per row as the width allows at the layout's card width,
+        // shrinking only when even one row of them will not fit.
+        float cardW  = layout.CardWidth;
+        int   perRow = Math.Max(1, (int)((layout.Bounds.Width + slotGap) / (cardW + slotGap)));
+        int   rows   = (slots + perRow - 1) / perRow;
+
+        float cardH  = cardW * 1.4f;
+        float extra  = (capTB ? cardW * 0.16f * 1.6f : 0f) + (badgeTB ? cardW * 0.15f * 1.8f : 0f);
+        float rowH   = cardH + extra;
+        float rowGap = 8f;
+
+        float blockH = rows * rowH + (rows - 1) * rowGap;
+        if (blockH > layout.Bounds.Height)
+        {
+            float shrink = layout.Bounds.Height / blockH;
+            cardW *= shrink; cardH *= shrink; extra *= shrink; rowH = cardH + extra;
+            perRow = Math.Max(1, (int)((layout.Bounds.Width + slotGap) / (cardW + slotGap)));
+            rows   = (slots + perRow - 1) / perRow;
+            blockH = rows * rowH + (rows - 1) * rowGap;
+        }
+
+        float y0 = layout.Bounds.MidY - blockH / 2f
+                 + (caption?.Placement == "top" ? cardW * 0.16f * 1.6f : 0f);
+
+        using var rankPaint = new SKPaint { Color = _theme.ZoneLabelColor, IsAntialias = true };
+        using var rankFont  = new SKFont(SKTypeface.Default, cardW * 0.42f);
+
+        for (int s = 0; s < slots; s++)
+        {
+            int   row  = s / perRow;
+            int   col  = s % perRow;
+            int   inRow = Math.Min(perRow, slots - row * perRow);
+            float rowW = inRow * cardW + (inRow - 1) * slotGap;
+            float x    = layout.Bounds.MidX - rowW / 2f + col * (cardW + slotGap);
+            float y    = y0 + row * (rowH + rowGap);
+            var   rect = new SKRect(x, y, x + cardW, y + cardH);
+
+            string name = s < slotRanks.Count ? MeldRules.RankDisplayName(slotRanks[s]) : "W";
+            if (name.Length > 2) name = name[..1];   // Jack → J in a slot this small
+
+            if (bySlot.TryGetValue(s, out var meld))
+            {
+                DrawCardRun(canvas, meld, rect, cardW, arrangement);
+                if (caption is not null)
+                    DrawPlacedLabel(canvas, rect,
+                        FillLabel(caption.Text, zone, s < slotRanks.Count ? MeldRules.RankDisplayName(slotRanks[s]) : "Wild", meld.Count),
+                        cardW * 0.16f, caption.Placement, caption.Orientation);
+                DrawGroupBadges(canvas, zone, rect, meld.Count, cardW);
+            }
+            else
+            {
+                // An empty slot names its rank, faintly: a promise of where the meld
+                // will go, not a card.
+                float tw = rankFont.MeasureText(name);
+                canvas.DrawText(name, rect.MidX - tw / 2f, rect.MidY + cardW * 0.15f, rankFont, rankPaint);
+                DrawGroupBadges(canvas, zone, rect, 0, cardW);
+            }
         }
     }
 
@@ -1702,6 +1824,89 @@ public sealed class CardTableRenderer
         canvas.RotateDegrees(degrees, cx, cy);
         canvas.DrawText(text, cx - w / 2f, cy + size * 0.35f, font, paint);
         canvas.Restore();
+    }
+
+    /// <summary>
+    /// The definition's counters for one group — cards, books, loose — as small pills
+    /// on the side each asks for. Badges sharing a side sit in a row, in declaration
+    /// order, so "cards | books" reads left to right the way a player thinks of it.
+    /// </summary>
+    private void DrawGroupBadges(SKCanvas canvas, Zone zone, SKRect group, int cardCount, float cardW)
+    {
+        var badges = zone.Definition?.GroupBadges;
+        if (badges is null || badges.Count == 0 || _state is null) return;
+
+        int bookSize = ScoringEngine.BookSize(_state.Definition);
+        float size   = MathF.Max(cardW * 0.15f, 10f);
+
+        // Per side, how far along the row the next badge starts.
+        var cursor = new Dictionary<string, float>();
+
+        foreach (var badge in badges)
+        {
+            if (badge.When is { } when && !RuleCondition.Evaluate(when, _state)) continue;
+
+            int value = badge.Shows switch
+            {
+                "books" => cardCount / bookSize,
+                "loose" => cardCount % bookSize,
+                _       => cardCount,
+            };
+
+            string text;
+            if (value == 0)
+            {
+                if (badge.Zero == "hide") continue;
+                text = badge.Zero;
+            }
+            else text = value.ToString();
+
+            var fill = ParseColor(badge.Color) ?? _theme.PlayerNameColor.WithAlpha(0x66);
+            var ink  = ParseColor(badge.TextColor) ?? ContrastingInk(fill);
+
+            using var font = new SKFont(SKTypeface.Default, size);
+            float textW = font.MeasureText(text);
+            float pillW = MathF.Max(textW + size * 1.2f, size * 1.8f);
+            float pillH = size * 1.4f;
+            float gap   = size * 0.35f;
+
+            float along = cursor.GetValueOrDefault(badge.Placement, 0f);
+
+            // Anchor: the badge row hugs the group's edge on the chosen side and grows
+            // rightwards (top/bottom) or downwards (left/right) as badges accumulate.
+            SKRect pill = badge.Placement switch
+            {
+                "top"   => new SKRect(group.Left + along, group.Top - pillH - gap,
+                                      group.Left + along + pillW, group.Top - gap),
+                "left"  => new SKRect(group.Left - pillW - gap, group.Top + along,
+                                      group.Left - gap, group.Top + along + pillH),
+                "right" => new SKRect(group.Right + gap, group.Top + along,
+                                      group.Right + gap + pillW, group.Top + along + pillH),
+                _       => new SKRect(group.Left + along, group.Bottom + gap,
+                                      group.Left + along + pillW, group.Bottom + gap + pillH),
+            };
+            cursor[badge.Placement] = along + (badge.Placement is "left" or "right" ? pillH : pillW) + gap;
+
+            float degrees = badge.Orientation switch { "vertical" => -90f, "angled" => -30f, _ => 0f };
+
+            canvas.Save();
+            canvas.RotateDegrees(degrees, pill.MidX, pill.MidY);
+            using (var bg = new SKPaint { Color = fill, IsAntialias = true })
+                canvas.DrawRoundRect(pill, pillH * 0.3f, pillH * 0.3f, bg);
+            using (var fg = new SKPaint { Color = ink, IsAntialias = true })
+                canvas.DrawText(text, pill.MidX - textW / 2f, pill.MidY + size * 0.35f, font, fg);
+            canvas.Restore();
+        }
+    }
+
+    private static SKColor? ParseColor(string? hex)
+        => hex is not null && SKColor.TryParse(hex, out var c) ? c : null;
+
+    /// <summary>Black or white, whichever reads against the fill.</summary>
+    private static SKColor ContrastingInk(SKColor fill)
+    {
+        float luma = (0.299f * fill.Red + 0.587f * fill.Green + 0.114f * fill.Blue) / 255f;
+        return luma > 0.6f ? new SKColor(0x1A, 0x1A, 0x1A) : SKColors.White;
     }
 
     private bool LabelApplies(Cards.Models.ZoneLabelDefinition label)

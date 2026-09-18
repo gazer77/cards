@@ -186,6 +186,60 @@ public class ZoneDefinition
     /// </summary>
     [JsonPropertyName("group_label")]
     public ZoneLabelDefinition? GroupLabel { get; set; }
+
+    /// <summary>
+    /// Small coloured counters beside each group — cards held, books completed. Each
+    /// shows one quantity; several may sit side by side.
+    /// </summary>
+    [JsonPropertyName("group_badges")]
+    public List<BadgeDefinition> GroupBadges { get; set; } = [];
+
+    /// <summary>
+    /// How groups are placed within the zone. "flow" (default) lays them in the order
+    /// laid, wrapping; "by_rank" gives every rank a fixed slot, empty ones showing the
+    /// rank, so a player can see at a glance which melds a side does not have yet.
+    /// </summary>
+    [JsonPropertyName("group_layout")]
+    public string GroupLayout { get; set; } = "flow";
+}
+
+/// <summary>
+/// One counter beside a group. Placement, orientation and condition work as they do
+/// for a <see cref="ZoneLabelDefinition"/>; several badges on the same side sit in a
+/// row, in declaration order.
+/// </summary>
+public class BadgeDefinition
+{
+    /// <summary>
+    /// What it counts: "cards" (in the group), "books" (complete sets of book_size),
+    /// or "loose" (cards beyond the last complete book — the working stack).
+    /// </summary>
+    [JsonPropertyName("shows")]
+    public string Shows { get; set; } = "cards";
+
+    /// <summary>Badge background, as #RRGGBB. The theme's default when omitted.</summary>
+    [JsonPropertyName("color")]
+    public string? Color { get; set; }
+
+    /// <summary>Badge text colour, as #RRGGBB. Chosen for contrast when omitted.</summary>
+    [JsonPropertyName("text_color")]
+    public string? TextColor { get; set; }
+
+    /// <summary>
+    /// What to do when the quantity is zero: "hide" the badge, or show this text
+    /// instead of "0" — a dash, typically.
+    /// </summary>
+    [JsonPropertyName("zero")]
+    public string Zero { get; set; } = "hide";
+
+    [JsonPropertyName("placement")]
+    public string Placement { get; set; } = "bottom";
+
+    [JsonPropertyName("orientation")]
+    public string Orientation { get; set; } = "horizontal";
+
+    [JsonPropertyName("when")]
+    public JsonElement? When { get; set; }
 }
 
 /// <summary>
