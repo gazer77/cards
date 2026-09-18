@@ -150,12 +150,31 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 actions.Add(new GameAction("knock", Label: "Knock"));
             if (!owesMeld && _specialActions.Contains("go_out") && GoOutConditionMet(state))
                 actions.Add(new GameAction("go_out", Label: "Go Out"));
-            if (_specialActions.Contains("meld"))
-                actions.Add(new GameAction("meld", Label: "Lay Meld"));
-            if (_specialActions.Contains("add_to_meld"))
-                actions.Add(new GameAction("add_to_meld", Label: "Add to Meld"));
-
             string? sel = state.Metadata.GetValueOrDefault("selected_card");
+
+            // Meld buttons appear only when pressing them would do something. Offering
+            // them unconditionally meant a button whose only job was to say no — and a
+            // player with 3s picked saw "Lay Meld", pressed it, and was scolded. The
+            // reason the selection will not lay goes on the status line instead, so the
+            // absence of a button explains itself.
+            string? whyNot = null;
+            if (_specialActions.Contains("meld"))
+            {
+                if (PlanMeld(state, addToExisting: false, out var meldReason) is not null)
+                    actions.Add(new GameAction("meld", Label: "Lay Meld"));
+                else whyNot ??= meldReason;
+            }
+            if (_specialActions.Contains("add_to_meld"))
+            {
+                if (PlanMeld(state, addToExisting: true, out var addReason) is not null)
+                    actions.Add(new GameAction("add_to_meld", Label: "Add to Meld"));
+                else whyNot ??= addReason;
+            }
+
+            // Only a multi-card selection is an attempted meld; a single card is a
+            // discard in waiting and its "not a meld" reason would just be noise.
+            if (whyNot is not null && !string.IsNullOrEmpty(sel) && sel.Contains(','))
+                state.Metadata["status"] = whyNot;
 
             // Discarding is offered once the selection is the size the definition asks
             // for. In a game that also melds, the same selection means two things, so
@@ -669,8 +688,22 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     /// by any single meld a hand holds, so one-meld-per-action made the requirement
     /// unsatisfiable at exactly the moment it applied.
     /// </summary>
-    private void LayMeld(GameState state, bool addToExisting)
+    /// <summary>A lay the table would accept: which cards, into which melds, joining which group.</summary>
+    private sealed record MeldPlan(
+        List<Card> Cards, List<List<Card>> Melds, int AddTarget, Zone MeldZone, HashSet<Rank> Wilds);
+
+    /// <summary>
+    /// Works out whether the current selection could be laid, and how. Returns the plan,
+    /// or null with <paramref name="reason"/> saying why not — in the player's words,
+    /// since the same text is what the status line shows.
+    ///
+    /// One judgment for two callers: the action list offers Lay Meld only when this
+    /// succeeds, and Apply lays exactly what this planned. Splitting them would let the
+    /// button and the refusal drift apart, so a button appears that then says no.
+    /// </summary>
+    private MeldPlan? PlanMeld(GameState state, bool addToExisting, out string? reason)
     {
+        reason = null;
         string? selectedRaw = state.Metadata.GetValueOrDefault("selected_card");
 
         // A meld action with nothing picked, while a card is owed, assembles the debt
@@ -682,10 +715,10 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             && state.Metadata.TryGetValue("dd_must_meld", out var owedId))
             selectedRaw = AssembleOwedMeld(state, owedId);
 
-        if (string.IsNullOrEmpty(selectedRaw)) return;
+        if (string.IsNullOrEmpty(selectedRaw)) return null;   // nothing picked: no reason to give
 
         var hand = PlayerHand(state, state.CurrentPlayer.Id);
-        if (hand is null) return;
+        if (hand is null) return null;
 
         // Tokens are uids, so two physical fours are two cards here — matching by id
         // collapsed identical copies into one and made a natural pair unmeldable.
@@ -695,15 +728,13 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             .Where(hand.Cards.Contains)
             .Distinct()
             .ToList();
-        if (selectedCards.Count == 0) return;
-        if (selectedCards.Count < 3 && !addToExisting) return; // need at least 3 for a new meld
+        if (selectedCards.Count == 0) return null;
 
-        // Find the player's team meld zone, fall back to player meld zone.
         var team     = state.GetPlayerTeam(state.CurrentPlayer.Id);
         var meldZone = (team is not null ? state.FindZone($"meld:{team.Id}") : null)
                     ?? state.FindZone($"meld:{state.CurrentPlayer.Id}")
                     ?? state.FindZone("meld");
-        if (meldZone is null) return;
+        if (meldZone is null) return null;
 
         // What is wild comes from the definition (scoring.wild_cards), not from the
         // handler: 2s are wild in Hand and Foot because its rules say so, not because
@@ -716,8 +747,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             c => !MeldRules.IsWild(c, wilds) && _unmeldableRanks.Contains(c.Rank));
         if (barred is not null)
         {
-            state.Metadata["status"] = $"{RankName(barred.Rank)}s cannot be melded.";
-            return;
+            reason = $"{RankName(barred.Rank)}s cannot be melded.";
+            return null;
         }
 
         List<List<Card>> melds;
@@ -725,8 +756,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         if (addToExisting)
         {
             // Adding stays one meld per action: the action targets one group.
-            addTarget = FindAdditionTarget(state, meldZone, selectedCards, wilds);
-            if (addTarget < 0) return;   // status already says why
+            addTarget = FindAdditionTarget(state, meldZone, selectedCards, wilds, out reason);
+            if (addTarget < 0) return null;
             melds = [selectedCards];
         }
         // A new lay may hold several melds at once, partitioned by rank with the wilds
@@ -741,24 +772,39 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         }
         else
         {
-            state.Metadata["status"] = "That is not a meld — pick three or more of a rank.";
-            return;
+            reason = "That is not a meld — pick three or more of a rank.";
+            return null;
         }
 
         // A side that has not melded must open with enough in one go. The requirement
         // rises by round in Hand and Foot, which is why it is a table in the definition
-        // rather than a number.
-        int required = RequiredOpeningMeld(state);
+        // rather than a number. Adding to a meld presupposes one is down, so it is
+        // never an opening.
+        int required = addToExisting ? 0 : RequiredOpeningMeld(state);
         if (required > 0)
         {
             int offered = ScoringEngine.CardPointValue(state.Definition, selectedCards);
             if (offered < required)
             {
-                state.Metadata["status"] =
-                    $"Your first meld this round must be worth {required}; that is {offered}.";
-                return;
+                reason = $"Your first meld this round must be worth {required}; that is {offered}.";
+                return null;
             }
         }
+
+        return new MeldPlan(selectedCards, melds, addTarget, meldZone, wilds);
+    }
+
+    private void LayMeld(GameState state, bool addToExisting)
+    {
+        var plan = PlanMeld(state, addToExisting, out var reason);
+        if (plan is null)
+        {
+            if (reason is not null) state.Metadata["status"] = reason;
+            return;
+        }
+
+        var (selectedCards, melds, addTarget, meldZone, wilds) = plan;
+        var hand = PlayerHand(state, state.CurrentPlayer.Id)!;
 
         foreach (var card in selectedCards)
         {
@@ -805,14 +851,16 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     /// once a meld was down.
     /// </summary>
     private static int FindAdditionTarget(
-        GameState state, Zone meldZone, IReadOnlyList<Card> selection, HashSet<Rank> wilds)
+        GameState state, Zone meldZone, IReadOnlyList<Card> selection, HashSet<Rank> wilds,
+        out string? reason)
     {
+        reason = null;
         var naturals   = selection.Where(c => !MeldRules.IsWild(c, wilds)).ToList();
         int wildsAdded = selection.Count - naturals.Count;
 
         if (naturals.Count > 0 && naturals.Any(c => c.Rank != naturals[0].Rank))
         {
-            state.Metadata["status"] = "Pick cards of one rank to add to a meld.";
+            reason = "Pick cards of one rank to add to a meld.";
             return -1;
         }
 
@@ -821,13 +869,12 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             int target = FindGroupOfRank(meldZone, naturals[0].Rank, wilds);
             if (target < 0)
             {
-                state.Metadata["status"] =
-                    $"No meld of {RankName(naturals[0].Rank)}s on the table — lay it as a new meld.";
+                reason = $"No meld of {RankName(naturals[0].Rank)}s on the table — lay it as a new meld.";
                 return -1;
             }
             if (!StaysLegal(meldZone.GroupCards(target), naturals.Count, wildsAdded, wilds))
             {
-                state.Metadata["status"] = "That would leave the meld more wild than real.";
+                reason = "That would leave the meld more wild than real.";
                 return -1;
             }
             return target;
@@ -842,7 +889,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 best = i;
 
         if (best < 0)
-            state.Metadata["status"] = "No meld can take that many wilds.";
+            reason = "No meld can take that many wilds.";
         return best;
 
         static bool StaysLegal(

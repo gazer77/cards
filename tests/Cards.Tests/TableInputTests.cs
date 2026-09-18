@@ -386,4 +386,73 @@ public sealed class TableInputTests
         Assert.True(melds.Groups.Count >= 2);   // fours plus at least one opening mate
         Assert.True(ScoringEngine.CardPointValue(state.Definition, melds.Cards) >= 50);
     }
+
+    // ── Buttons that would only say no ────────────────────────────────────────
+
+    /// <summary>
+    /// Lay Meld is offered only when the selection would actually lay. It used to be
+    /// offered unconditionally, so a player with 3s picked saw a button, pressed it,
+    /// and was scolded. The reason goes on the status line instead.
+    /// </summary>
+    [Fact]
+    public void Lay_meld_is_offered_only_when_the_selection_would_lay()
+    {
+        var (state, logic) = HandAndFoot();
+        state.RoundNumber = 1;
+        logic.Apply(state, new GameAction("draw_from_deck"));
+
+        var hand = state.Zones[$"hand:{state.CurrentPlayer.Id}"];
+        hand.Clear();
+        var threes = new[]
+        {
+            new Card(Suit.Clubs,  Rank.Three) { Uid = 9401 },
+            new Card(Suit.Hearts, Rank.Three) { Uid = 9402 },
+            new Card(Suit.Spades, Rank.Three) { Uid = 9403 },
+        };
+        var aces = new[]
+        {
+            new Card(Suit.Clubs,  Rank.Ace) { Uid = 9404 },
+            new Card(Suit.Hearts, Rank.Ace) { Uid = 9405 },
+            new Card(Suit.Spades, Rank.Ace) { Uid = 9406 },
+        };
+        foreach (var c in threes.Concat(aces)) hand.Add(c);
+
+        // Nothing selected: no meld to offer.
+        Assert.DoesNotContain("meld", ActionTypes(state, logic));
+
+        // 3s cannot be melded — no button, and the status says so.
+        state.Metadata["selected_card"] = string.Join(",", threes.Select(c => c.Uid));
+        Assert.DoesNotContain("meld", ActionTypes(state, logic));
+        Assert.Contains("3s cannot be melded", state.Metadata["status"]);
+
+        // Three aces open at 60 — the button is back.
+        state.Metadata["selected_card"] = string.Join(",", aces.Select(c => c.Uid));
+        Assert.Contains("meld", ActionTypes(state, logic));
+    }
+
+    [Fact]
+    public void Add_to_meld_is_offered_only_when_a_meld_of_that_rank_is_down()
+    {
+        var (state, logic) = HandAndFoot();
+        state.RoundNumber = 1;
+        logic.Apply(state, new GameAction("draw_from_deck"));
+
+        var hand = state.Zones[$"hand:{state.CurrentPlayer.Id}"];
+        hand.Clear();
+        var king = new Card(Suit.Clubs, Rank.King) { Uid = 9501 };
+        hand.Add(king);
+        state.Metadata["selected_card"] = king.Uid.ToString();
+
+        // Nothing on the table: nothing to add to.
+        Assert.DoesNotContain("add_to_meld", ActionTypes(state, logic));
+
+        // A meld of kings appears; now the king has somewhere to go.
+        var melds = state.FindZone($"meld:{state.CurrentPlayer.Id}")!;
+        melds.AddGroup([
+            new Card(Suit.Hearts,   Rank.King) { Uid = 9502 },
+            new Card(Suit.Spades,   Rank.King) { Uid = 9503 },
+            new Card(Suit.Diamonds, Rank.King) { Uid = 9504 },
+        ]);
+        Assert.Contains("add_to_meld", ActionTypes(state, logic));
+    }
 }
