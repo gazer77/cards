@@ -128,6 +128,11 @@ public sealed class CardTableRenderer
         var hand = _lastLayouts.FirstOrDefault(
             l => l.Zone.OwnerId == playerId && l.Zone.Type == "hand");
 
+        // The cards, not the band: a hand pinned to the band's bottom edge sits well
+        // above the band's centre, and a bubble aimed at the band pointed at felt.
+        if (hand is not null && hand.Hint == ZoneRenderHint.Fan && FanExtent(hand) is { } cards)
+            return cards;
+
         var zone = hand ?? _lastLayouts.FirstOrDefault(l => l.Zone.OwnerId == playerId);
         return zone?.Bounds;
     }

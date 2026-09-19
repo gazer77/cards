@@ -336,7 +336,9 @@ public sealed class TableInputTests
         state.Metadata["selected_card"] = string.Join(",", cards.Select(c => c.Uid));
         logic.Apply(state, new GameAction("meld"));
 
-        Assert.Empty(hand.Cards);
+        // All three left the hand. (The hand is not EMPTY — melding its last card
+        // picks the foot up, which is a different rule and its own test.)
+        Assert.DoesNotContain(hand.Cards, c => cards.Contains(c));
     }
 
     /// <summary>

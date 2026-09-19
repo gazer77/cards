@@ -182,4 +182,60 @@ public sealed class HandAndFootRuleTests
 
         Assert.Equal(2, Melds(state).Groups.Count);
     }
+
+    // ── The foot ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Melding away the last card of the hand picks the foot up at once, and the turn
+    /// goes on with it. The pickup only ran after a discard, so a hand emptied by
+    /// melding was offered Go Out — with its foot still lying there untouched.
+    /// </summary>
+    [Fact]
+    public void Melding_the_last_card_picks_up_the_foot_and_the_turn_continues()
+    {
+        var (state, logic) = Table();
+        state.RoundNumber = 1;
+        logic.Apply(state, new GameAction("draw_from_deck"));
+
+        var me   = state.CurrentPlayer.Id;
+        var hand = state.Zones[$"hand:{me}"];
+        var foot = state.Zones[$"foot:{me}"];
+        int footSize = foot.Count;
+        Assert.True(footSize > 0);
+
+        // Hand: exactly one meld's worth, opening at 60.
+        hand.Clear();
+        var aces = new[]
+        {
+            new Card(Suit.Clubs,  Rank.Ace) { Uid = 9601 },
+            new Card(Suit.Hearts, Rank.Ace) { Uid = 9602 },
+            new Card(Suit.Spades, Rank.Ace) { Uid = 9603 },
+        };
+        foreach (var c in aces) hand.Add(c);
+        state.Metadata["selected_card"] = string.Join(",", aces.Select(c => c.Uid));
+
+        logic.Apply(state, new GameAction("meld"));
+
+        Assert.Empty(foot.Cards);                       // picked up
+        Assert.Equal(footSize, hand.Count);             // now in hand
+        Assert.Equal(me, state.CurrentPlayer.Id);       // still my turn
+        Assert.DoesNotContain("go_out", logic.GetValidActions(state).Select(a => a.Type));
+    }
+
+    /// <summary>An empty hand with a full foot is halfway, not out.</summary>
+    [Fact]
+    public void Going_out_needs_the_foot_played_too()
+    {
+        var (state, logic) = Table();
+        logic.Apply(state, new GameAction("draw_from_deck"));
+
+        var me = state.CurrentPlayer.Id;
+        state.Zones[$"hand:{me}"].Clear();
+        Assert.NotEmpty(state.Zones[$"foot:{me}"].Cards);
+
+        Assert.DoesNotContain("go_out", logic.GetValidActions(state).Select(a => a.Type));
+
+        state.Zones[$"foot:{me}"].Clear();
+        Assert.Contains("go_out", logic.GetValidActions(state).Select(a => a.Type));
+    }
 }

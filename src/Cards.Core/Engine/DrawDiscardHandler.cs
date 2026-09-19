@@ -841,6 +841,11 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         state.Metadata["status"] = melds.Count > 1 ? $"{melds.Count} melds laid!"
                                  : joined          ? "Added to meld."
                                                    : "Meld laid!";
+
+        // Melding away the last card of the hand picks the foot up at once, and the
+        // turn goes on with it. The pickup only ran after a discard, so a hand emptied
+        // by melding was offered Go Out with its foot still lying there untouched.
+        PickUpFootIfNeeded(state, state.CurrentPlayer.Id);
     }
     /// <summary>
     /// The group the selection may join, or -1 with the refusal in status.
@@ -1024,8 +1029,16 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     {
         var hand = PlayerHand(state, state.CurrentPlayer.Id);
         bool handEmpty = hand is null || hand.IsEmpty;
-        // Both "hand_empty" and "all_melds_complete_and_hand_empty" use hand-empty as a stub check.
-        return handEmpty;
+
+        // A foot still waiting is cards still to play: an empty hand with a full foot
+        // is halfway, not out. Go Out was offered at exactly that moment, with the
+        // foot never picked up.
+        var  foot      = state.FindZone($"foot:{state.CurrentPlayer.Id}");
+        bool footEmpty = foot is null || foot.IsEmpty;
+
+        // "all_melds_complete" is still a stub: the canastas a side must hold before
+        // going out are not yet expressible. See the schema's not-yet list.
+        return handEmpty && footEmpty;
     }
 
     // ── Condition checks ──────────────────────────────────────────────────────
