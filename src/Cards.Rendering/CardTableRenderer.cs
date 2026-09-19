@@ -1148,7 +1148,7 @@ public sealed class CardTableRenderer
                     string rank = MeldRules.RankDisplayName(MeldRules.MeldRankOf(meld, wilds));
                     DrawPlacedLabel(canvas, rect,
                         FillLabel(caption.Text, zone, rank, meld.Count),
-                        capSz, caption.Placement, caption.Orientation);
+                        capSz, caption);
                 }
 
                 DrawGroupBadges(canvas, zone, rect, meld.Count, cardW);
@@ -1255,7 +1255,7 @@ public sealed class CardTableRenderer
                 if (caption is not null)
                     DrawPlacedLabel(canvas, rect,
                         FillLabel(caption.Text, zone, s < slotRanks.Count ? MeldRules.RankDisplayName(slotRanks[s]) : "Wild", meld.Count),
-                        cardW * 0.16f, caption.Placement, caption.Orientation);
+                        cardW * 0.16f, caption);
                 DrawGroupBadges(canvas, zone, rect, meld.Count, cardW);
             }
             else
@@ -1841,8 +1841,9 @@ public sealed class CardTableRenderer
         {
             if (!LabelApplies(declared)) return;
             string text = FillLabel(declared.Text, layout.Zone, rank: null);
-            DrawPlacedLabel(canvas, layout.Bounds, text, labelSz,
-                            declared.Placement, declared.Orientation);
+            // A zone label is placed against its cards, not its band — the band can be
+            // far larger than the cards in it.
+            DrawPlacedLabel(canvas, ZoneCardsRect(layout), text, labelSz, declared);
             return;
         }
 
@@ -1885,12 +1886,27 @@ public sealed class CardTableRenderer
     /// </summary>
     private void DrawPlacedLabel(
         SKCanvas canvas, SKRect target, string text, float size,
-        string placement, string orientation)
+        Cards.Models.ZoneLabelDefinition label)
     {
+        string placement   = label.Placement;
+        string orientation = label.Orientation;
+
         using var paint = new SKPaint { Color = _theme.PlayerNameColor, IsAntialias = true };
         using var font  = new SKFont(SKTypeface.Default, size);
         float w   = font.MeasureText(text);
         float gap = size * 0.5f;
+
+        // An exact place wins over the four-sided placement.
+        if (label.Place is { } place)
+        {
+            var box = ResolvePlace(place, target, w + size, size * 1.4f);
+            float deg = orientation switch { "vertical" => -90f, "angled" => -30f, _ => 0f };
+            canvas.Save();
+            canvas.RotateDegrees(deg, box.MidX, box.MidY);
+            DrawTextInBox(canvas, text, box, font, paint, size, place.TextAlign, place.VerticalAlign, inset: size * 0.5f);
+            canvas.Restore();
+            return;
+        }
 
         float degrees = orientation switch
         {
@@ -1967,22 +1983,33 @@ public sealed class CardTableRenderer
             float pillH = size * 1.4f;
             float gap   = size * 0.35f;
 
-            float along = cursor.GetValueOrDefault(badge.Placement, 0f);
-
-            // Anchor: the badge row hugs the group's edge on the chosen side and grows
-            // rightwards (top/bottom) or downwards (left/right) as badges accumulate.
-            SKRect pill = badge.Placement switch
+            SKRect pill;
+            var    place = badge.Place;
+            if (place is not null)
             {
-                "top"   => new SKRect(group.Left + along, group.Top - pillH - gap,
-                                      group.Left + along + pillW, group.Top - gap),
-                "left"  => new SKRect(group.Left - pillW - gap, group.Top + along,
-                                      group.Left - gap, group.Top + along + pillH),
-                "right" => new SKRect(group.Right + gap, group.Top + along,
-                                      group.Right + gap + pillW, group.Top + along + pillH),
-                _       => new SKRect(group.Left + along, group.Bottom + gap,
-                                      group.Left + along + pillW, group.Bottom + gap + pillH),
-            };
-            cursor[badge.Placement] = along + (badge.Placement is "left" or "right" ? pillH : pillW) + gap;
+                // An exact position in the cards' proportions. Explicit placement means
+                // explicit: two badges placed on the same spot overlap, by request.
+                pill = ResolvePlace(place, group, pillW, pillH);
+            }
+            else
+            {
+                float along = cursor.GetValueOrDefault(badge.Placement, 0f);
+
+                // Anchor: the badge row hugs the group's edge on the chosen side and grows
+                // rightwards (top/bottom) or downwards (left/right) as badges accumulate.
+                pill = badge.Placement switch
+                {
+                    "top"   => new SKRect(group.Left + along, group.Top - pillH - gap,
+                                          group.Left + along + pillW, group.Top - gap),
+                    "left"  => new SKRect(group.Left - pillW - gap, group.Top + along,
+                                          group.Left - gap, group.Top + along + pillH),
+                    "right" => new SKRect(group.Right + gap, group.Top + along,
+                                          group.Right + gap + pillW, group.Top + along + pillH),
+                    _       => new SKRect(group.Left + along, group.Bottom + gap,
+                                          group.Left + along + pillW, group.Bottom + gap + pillH),
+                };
+                cursor[badge.Placement] = along + (badge.Placement is "left" or "right" ? pillH : pillW) + gap;
+            }
 
             float degrees = badge.Orientation switch { "vertical" => -90f, "angled" => -30f, _ => 0f };
 
@@ -1991,9 +2018,82 @@ public sealed class CardTableRenderer
             using (var bg = new SKPaint { Color = fill, IsAntialias = true })
                 canvas.DrawRoundRect(pill, pillH * 0.3f, pillH * 0.3f, bg);
             using (var fg = new SKPaint { Color = ink, IsAntialias = true })
-                canvas.DrawText(text, pill.MidX - textW / 2f, pill.MidY + size * 0.35f, font, fg);
+                DrawTextInBox(canvas, text, pill, font, fg, size,
+                              place?.TextAlign ?? "center", place?.VerticalAlign ?? "middle",
+                              inset: size * 0.6f);
             canvas.Restore();
         }
+    }
+
+    // ── Placement ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Turns a declared place into a rectangle. (x, y) picks a point on the target in
+    /// its own proportions; the anchor says which point of the box lands there; width
+    /// and height, when given, are proportions of the target too. Everything scales
+    /// with the cards because nothing here is in pixels.
+    /// </summary>
+    private static SKRect ResolvePlace(Cards.Models.PlaceDefinition place, SKRect target, float fitW, float fitH)
+    {
+        float px = target.Left + target.Width  * Percent(place.X, 0.5f);
+        float py = target.Top  + target.Height * Percent(place.Y, 0.5f);
+
+        float w = place.Width  is { } pw ? target.Width  * Percent(pw, 1f) : fitW;
+        float h = place.Height is { } ph ? target.Height * Percent(ph, 1f) : fitH;
+
+        // Which fraction of the box sits left of / above the anchor point.
+        (float ax, float ay) = place.Anchor switch
+        {
+            "top-left"     => (0f,   0f),
+            "top"          => (0.5f, 0f),
+            "top-right"    => (1f,   0f),
+            "left"         => (0f,   0.5f),
+            "right"        => (1f,   0.5f),
+            "bottom-left"  => (0f,   1f),
+            "bottom"       => (0.5f, 1f),
+            "bottom-right" => (1f,   1f),
+            _              => (0.5f, 0.5f),
+        };
+
+        float left = px - w * ax;
+        float top  = py - h * ay;
+        return new SKRect(left, top, left + w, top + h);
+    }
+
+    /// <summary>"10%" → 0.10; a bare number is read as a percent too. Negative is allowed.</summary>
+    private static float Percent(string text, float fallback)
+    {
+        var t = text.Trim().TrimEnd('%');
+        return float.TryParse(t, System.Globalization.NumberStyles.Float,
+                              System.Globalization.CultureInfo.InvariantCulture, out var v)
+            ? v / 100f
+            : fallback;
+    }
+
+    /// <summary>Text laid within a box per the usual alignments, inset from its edges.</summary>
+    private static void DrawTextInBox(
+        SKCanvas canvas, string text, SKRect box, SKFont font, SKPaint paint, float size,
+        string textAlign, string verticalAlign, float inset)
+    {
+        float textW = font.MeasureText(text);
+
+        float x = textAlign switch
+        {
+            "left"  => box.Left + inset,
+            "right" => box.Right - inset - textW,
+            _       => box.MidX - textW / 2f,
+        };
+
+        // Baselines: a cap-height of roughly 0.7 em sits the glyphs where the eye
+        // expects for each alignment.
+        float y = verticalAlign switch
+        {
+            "top"    => box.Top + inset * 0.5f + size * 0.8f,
+            "bottom" => box.Bottom - inset * 0.5f - size * 0.15f,
+            _        => box.MidY + size * 0.35f,
+        };
+
+        canvas.DrawText(text, x, y, font, paint);
     }
 
     private static SKColor? ParseColor(string? hex)

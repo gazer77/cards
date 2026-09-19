@@ -204,12 +204,63 @@ public class ZoneDefinition
 }
 
 /// <summary>
+/// Where something sits relative to the cards it decorates, in the cards' own
+/// proportions so it scales with them.
+///
+/// <c>x</c>/<c>y</c> name a point on the cards as percentages of their width and
+/// height — 0% is the left or top edge, 100% the right or bottom, 50% the middle, and
+/// values outside 0–100 land outside the cards. <c>anchor</c> says which point of the
+/// box lands there. So a badge over the bottom-left corner is
+/// <c>{ "x": "0%", "y": "100%" }</c> (anchor defaults to center); tucked inside the
+/// corner is the same with <c>"anchor": "bottom-left"</c>; a strip across the bottom
+/// edge adds <c>"width": "100%"</c>.
+/// </summary>
+public class PlaceDefinition
+{
+    /// <summary>Percent of the cards' width; "0%" is the left edge.</summary>
+    [JsonPropertyName("x")]
+    public string X { get; set; } = "50%";
+
+    /// <summary>Percent of the cards' height; "0%" is the top edge.</summary>
+    [JsonPropertyName("y")]
+    public string Y { get; set; } = "50%";
+
+    /// <summary>
+    /// Which point of the box lands on (x, y): "center" (default), "top-left", "top",
+    /// "top-right", "left", "right", "bottom-left", "bottom", "bottom-right".
+    /// </summary>
+    [JsonPropertyName("anchor")]
+    public string Anchor { get; set; } = "center";
+
+    /// <summary>Box width as a percent of the cards' width. Omitted, the box fits its text.</summary>
+    [JsonPropertyName("width")]
+    public string? Width { get; set; }
+
+    /// <summary>Box height as a percent of the cards' height. Omitted, the box fits its text.</summary>
+    [JsonPropertyName("height")]
+    public string? Height { get; set; }
+
+    /// <summary>"left" | "center" (default) | "right" — text within the box.</summary>
+    [JsonPropertyName("text_align")]
+    public string TextAlign { get; set; } = "center";
+
+    /// <summary>"top" | "middle" (default) | "bottom" — text within the box.</summary>
+    [JsonPropertyName("vertical_align")]
+    public string VerticalAlign { get; set; } = "middle";
+}
+
+/// <summary>
 /// One counter beside a group. Placement, orientation and condition work as they do
 /// for a <see cref="ZoneLabelDefinition"/>; several badges on the same side sit in a
-/// row, in declaration order.
+/// row, in declaration order. A <see cref="Place"/> overrides <c>placement</c> with an
+/// exact position.
 /// </summary>
 public class BadgeDefinition
 {
+    /// <summary>Exact position, in the cards' proportions. Overrides <c>placement</c>.</summary>
+    [JsonPropertyName("place")]
+    public PlaceDefinition? Place { get; set; }
+
     /// <summary>
     /// What it counts: "cards" (in the group), "books" (complete sets of book_size),
     /// or "loose" (cards beyond the last complete book — the working stack).
@@ -265,6 +316,10 @@ public class ZoneLabelDefinition
     /// <summary>A condition; the label shows only while it holds. Absent means always.</summary>
     [JsonPropertyName("when")]
     public JsonElement? When { get; set; }
+
+    /// <summary>Exact position, in the cards' proportions. Overrides <c>placement</c>.</summary>
+    [JsonPropertyName("place")]
+    public PlaceDefinition? Place { get; set; }
 }
 
 public class PhaseDefinition

@@ -67,6 +67,8 @@ public static class DefinitionValidator
         if (label.When is { } when)
             foreach (var problem in RuleCondition.Validate(when))
                 problems.Add($"zone '{zoneId}'.{field}.when: {problem}");
+
+        ValidatePlace($"zone '{zoneId}'.{field}", label.Place, problems);
     }
 
     private static void ValidateBadge(string zoneId, int index, BadgeDefinition badge, List<string> problems)
@@ -89,7 +91,32 @@ public static class DefinitionValidator
         if (badge.When is { } when)
             foreach (var problem in RuleCondition.Validate(when))
                 problems.Add($"{where}.when: {problem}");
+
+        ValidatePlace(where, badge.Place, problems);
     }
+
+    private static void ValidatePlace(string where, PlaceDefinition? place, List<string> problems)
+    {
+        if (place is null) return;
+
+        foreach (var (field, value) in new[] { ("x", place.X), ("y", place.Y), ("width", place.Width), ("height", place.Height) })
+            if (value is not null && !IsPercent(value))
+                problems.Add($"{where}.place: {field} '{value}' is not a percentage like \"25%\".");
+
+        if (place.Anchor is not ("center" or "top-left" or "top" or "top-right" or "left"
+                               or "right" or "bottom-left" or "bottom" or "bottom-right"))
+            problems.Add($"{where}.place: anchor '{place.Anchor}' is not a known anchor.");
+
+        if (place.TextAlign is not ("left" or "center" or "right"))
+            problems.Add($"{where}.place: text_align '{place.TextAlign}' is not left, center, or right.");
+
+        if (place.VerticalAlign is not ("top" or "middle" or "bottom"))
+            problems.Add($"{where}.place: vertical_align '{place.VerticalAlign}' is not top, middle, or bottom.");
+    }
+
+    private static bool IsPercent(string text)
+        => float.TryParse(text.Trim().TrimEnd('%'), System.Globalization.NumberStyles.Float,
+                          System.Globalization.CultureInfo.InvariantCulture, out _);
 
     private static bool IsHexColor(string text)
         => text.Length is 7 or 9 && text[0] == '#'

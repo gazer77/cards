@@ -271,4 +271,36 @@ public sealed class DefinitionValidatorTests
 
         Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("by_suit"));
     }
+
+    [Fact]
+    public void A_well_formed_place_passes()
+    {
+        var definition = WithMeldZone("""
+        "group_badges": [ { "shows": "cards",
+          "place": { "x": "0%", "y": "100%", "anchor": "bottom-left", "width": "100%",
+                     "text_align": "left", "vertical_align": "bottom" } } ]
+        """);
+
+        Assert.Empty(DefinitionValidator.Validate(definition));
+    }
+
+    [Fact]
+    public void A_place_that_is_not_a_percentage_is_reported()
+    {
+        var definition = WithMeldZone("""
+        "group_badges": [ { "shows": "cards", "place": { "x": "12px" } } ]
+        """);
+
+        Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("12px"));
+    }
+
+    [Fact]
+    public void An_unknown_anchor_is_reported()
+    {
+        var definition = WithMeldZone("""
+        "label": { "text": "x", "place": { "anchor": "middle-ish" } }
+        """);
+
+        Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("middle-ish"));
+    }
 }

@@ -253,6 +253,37 @@ What a book *is* comes from `scoring.book_size` (default 7), which the canasta b
 reads too — so the badge that says "1 book" and the bonus that pays for it can never
 disagree.
 
+### `place` — exact positioning
+
+`placement` picks a side. When that is not enough, a `label`, `group_label` or badge takes
+a `place`: a point on the cards in **the cards' own proportions**, and which point of the
+box lands there. Nothing is in pixels, so it scales with the cards.
+
+```json
+"place": { "x": "0%", "y": "100%", "anchor": "center" }
+```
+
+| Field | Meaning |
+|---|---|
+| `x`, `y` | A point on the cards, as percentages of their width and height. `0%` is the left/top edge, `100%` the right/bottom, `50%` the middle. Outside 0–100 lands outside the cards |
+| `anchor` | Which point of the box sits on (x, y): `center` (default), `top-left`, `top`, `top-right`, `left`, `right`, `bottom-left`, `bottom`, `bottom-right` |
+| `width`, `height` | Box size as percentages of the cards. Omitted, the box fits its text |
+| `text_align` | `left` / `center` (default) / `right`, within the box |
+| `vertical_align` | `top` / `middle` (default) / `bottom`, within the box |
+
+Worked examples:
+
+| Want | Write |
+|---|---|
+| Over the bottom-left corner | `{ "x": "0%", "y": "100%" }` |
+| Tucked inside that corner | `{ "x": "0%", "y": "100%", "anchor": "bottom-left" }` |
+| A strip across the bottom edge | `{ "x": "0%", "y": "100%", "anchor": "bottom-left", "width": "100%" }` |
+| Dead centre of the card | `{ "x": "50%", "y": "50%" }` |
+| Just below, left-aligned | `{ "x": "0%", "y": "110%", "anchor": "top-left" }` |
+
+A `place` overrides `placement`. Explicit means explicit: two badges placed on the same
+spot overlap. Colour (`color`, `text_color`) and `orientation` apply as before.
+
 ### `group_layout`
 
 How groups are placed within a grouped zone:
