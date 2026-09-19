@@ -28,7 +28,8 @@
     "then_flip_top_to": "discard"
   },
   "zones": [
-    { "id": "deck",      "type": "deck",   "visibility": "none" },
+    { "id": "deck",      "type": "deck",   "visibility": "none",
+      "group_badges": [ { "shows": "cards", "color": "#000000", "text_color": "#FFFFFF" } ] },
     { "id": "discard",   "type": "pile",   "visibility": "top" },
     { "id": "hand",      "type": "hand",   "owner": "each_player", "visibility": "owner" },
     { "id": "foot",      "type": "hand",   "owner": "each_player", "visibility": "none", "locked_until": "hand_empty" },

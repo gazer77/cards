@@ -718,8 +718,25 @@ public sealed class CardTableRenderer
 
         if (layout.Label is not null) DrawLabel(canvas, layout);
 
+        // Badges on a zone with no groups count the zone itself — the deck's cards
+        // left, a pile's depth. They were drawn only per group, so a definition could
+        // declare them on the deck, validate cleanly, and see nothing: accepted and
+        // ignored, which is the one outcome the validator exists to prevent.
+        // Keyed on the zone's kind, not on whether it happens to hold groups yet: a meld
+        // zone before anyone has melded has no groups either, and must not report
+        // "0 cards" about itself.
+        if (layout.Zone.Type is "deck" or "pile" or "hand"
+            && layout.Zone.Definition?.GroupBadges is { Count: > 0 })
+            DrawGroupBadges(canvas, layout.Zone, ZoneCardsRect(layout), layout.Zone.Count, layout.CardWidth);
+
         if (rotated) canvas.Restore();
     }
+
+    /// <summary>The rectangle a zone's cards occupy, for anchoring things beside them.</summary>
+    private SKRect ZoneCardsRect(ZoneLayout layout)
+        => layout.Hint == ZoneRenderHint.Fan && FanExtent(layout) is { } fan
+            ? fan
+            : CenterCardRect(layout);
 
     /// <summary>
     /// A soft pool of light under the cards of the seat to act — wider than the fan
@@ -1921,12 +1938,17 @@ public sealed class CardTableRenderer
         {
             if (badge.When is { } when && !RuleCondition.Evaluate(when, _state)) continue;
 
-            int value = badge.Shows switch
-            {
-                "books" => cardCount / bookSize,
-                "loose" => cardCount % bookSize,
-                _       => cardCount,
-            };
+            // Books are a property of a group. On a zone with none — the deck, a pile —
+            // "books" and "loose" have nothing to divide by, so every kind honestly
+            // means the cards that are there.
+            int value = zone.Type == "spread"
+                ? badge.Shows switch
+                {
+                    "books" => cardCount / bookSize,
+                    "loose" => cardCount % bookSize,
+                    _       => cardCount,
+                }
+                : cardCount;
 
             string text;
             if (value == 0)

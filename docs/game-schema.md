@@ -231,6 +231,10 @@ Small coloured counters beside each group — the "cards in the stack / books co
 readout a canasta table wants. Each badge shows one quantity; several sit in a row on
 the side they share, in declaration order.
 
+On a zone that does not group — a `deck`, `pile` or `hand` — the badges count the zone
+itself, and every `shows` means the cards that are there: a deck with
+`{ "shows": "cards" }` reads out how many are left to draw.
+
 ```json
 "group_badges": [
   { "shows": "loose", "color": "#A5D66F", "text_color": "#1B4D1B", "zero": "–" },
