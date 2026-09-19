@@ -40,6 +40,7 @@ public static class RuleCondition
     [
         "hand_count_of_rank",
         "meld_value_at_least",
+        "books_at_least",
     ];
 
     private static readonly string[] Combinators = ["all", "any", "not"];
@@ -119,6 +120,11 @@ public static class RuleCondition
 
         "meld_value_at_least" => MeldValueAtLeast(condition, state),
 
+        // "Does this side hold enough complete books?" — what a canasta game asks
+        // before letting a player go out. `kind` narrows it to natural (no wilds) or
+        // wild books; absent, any book counts.
+        "books_at_least" => BooksAtLeast(condition, state),
+
         _ => false,
     };
 
@@ -156,6 +162,47 @@ public static class RuleCondition
         // Point value, not card count — scored the same way the game scores those cards,
         // so a definition's "worth 120" means the same number everywhere it is written.
         return ScoringEngine.CardPointValue(state.Definition, melds.Cards) >= need;
+    }
+
+    private static bool BooksAtLeast(JsonElement condition, GameState state)
+    {
+        var melds = MeldZone(state);
+        if (melds is null) return false;
+
+        int need = condition.GetProperty("books_at_least").GetInt32();
+        string kind = condition.TryGetProperty("kind", out var k) ? k.GetString() ?? "any" : "any";
+
+        return CountBooks(melds, state, kind) >= need;
+    }
+
+    /// <summary>
+    /// Complete books in a meld zone, by kind. A book is a group of at least
+    /// <c>scoring.book_size</c> cards; natural means no wild in it. Reads the same
+    /// book size scoring pays bonuses by, so "may I go out" and "what am I paid"
+    /// agree on what a book is.
+    /// </summary>
+    public static int CountBooks(Zone melds, GameState state, string kind = "any")
+    {
+        int bookSize = ScoringEngine.BookSize(state.Definition);
+        var wilds    = MeldRules.WildRanks(state.Definition);
+        int count    = 0;
+
+        for (int i = 0; i < melds.Groups.Count; i++)
+        {
+            var group = melds.GroupCards(i);
+            if (group.Count < bookSize) continue;
+
+            bool hasWild = group.Any(c => MeldRules.IsWild(c, wilds));
+            bool counts = kind switch
+            {
+                "natural" => !hasWild,
+                "wild"    => hasWild,
+                _         => true,
+            };
+            if (counts) count++;
+        }
+
+        return count;
     }
 
     // ── Validation ────────────────────────────────────────────────────────────
@@ -204,7 +251,15 @@ public static class RuleCondition
                         return;
                     }
 
-                    if (ObjectTerms.Contains(property.Name)) return;
+                    if (ObjectTerms.Contains(property.Name))
+                    {
+                        // A kind the counter does not know would silently count nothing.
+                        if (property.Name == "books_at_least"
+                            && condition.TryGetProperty("kind", out var kind)
+                            && kind.GetString() is not ("natural" or "wild" or "any"))
+                            problems.Add($"books_at_least: kind '{kind}' is not natural, wild, or any.");
+                        return;
+                    }
                 }
 
                 problems.Add($"No condition named here. Known: {Vocabulary()}.");

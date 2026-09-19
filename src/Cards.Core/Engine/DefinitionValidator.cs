@@ -153,6 +153,12 @@ public static class DefinitionValidator
                     problems.Add($"{phase.Id}.unmeldable_ranks: '{entry}' is not a rank.");
         }
 
+        // go_out_condition is a name or a condition; only the condition needs checking.
+        if (phase.Extra.TryGetValue("go_out_condition", out var goOut)
+            && goOut.ValueKind == JsonValueKind.Object)
+            foreach (var problem in RuleCondition.Validate(goOut))
+                problems.Add($"{phase.Id}.go_out_condition: {problem}");
+
         // Conditions anywhere else a phase declares one.
         foreach (var key in new[] { "requires", "when" })
             if (phase.Extra.TryGetValue(key, out var condition))

@@ -70,7 +70,12 @@
         { "round": 3, "points": 120 },
         { "points": 150 }
       ],
-      "go_out_condition": "all_melds_complete_and_hand_empty",
+      "go_out_condition": {
+        "all": [
+          { "books_at_least": 1, "kind": "natural" },
+          { "books_at_least": 1, "kind": "wild" }
+        ]
+      },
       "round_ends_when": "stock_exhausted",
       "next": "score"
     },

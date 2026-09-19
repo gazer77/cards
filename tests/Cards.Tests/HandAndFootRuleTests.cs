@@ -233,9 +233,77 @@ public sealed class HandAndFootRuleTests
         state.Zones[$"hand:{me}"].Clear();
         Assert.NotEmpty(state.Zones[$"foot:{me}"].Cards);
 
+        // The books the definition asks for are down; only the foot stands in the way.
+        Melds(state).AddGroup(Book(Rank.King, wilds: 0, uidBase: 9900));
+        Melds(state).AddGroup(Book(Rank.Nine, wilds: 2, uidBase: 9920));
         Assert.DoesNotContain("go_out", logic.GetValidActions(state).Select(a => a.Type));
 
         state.Zones[$"foot:{me}"].Clear();
         Assert.Contains("go_out", logic.GetValidActions(state).Select(a => a.Type));
+    }
+
+    // ── Going out ─────────────────────────────────────────────────────────────
+
+    private static void EmptyHands(GameState state)
+    {
+        var me = state.CurrentPlayer.Id;
+        state.Zones[$"hand:{me}"].Clear();
+        state.Zones[$"foot:{me}"].Clear();
+    }
+
+    private static List<Card> Book(Rank rank, int wilds, int uidBase)
+    {
+        var suits = new[] { Suit.Clubs, Suit.Diamonds, Suit.Hearts, Suit.Spades };
+        var cards = new List<Card>();
+        for (int i = 0; i < 7 - wilds; i++)
+            cards.Add(new Card(suits[i % 4], rank) { Uid = uidBase + i });
+        for (int i = 0; i < wilds; i++)
+            cards.Add(new Card(suits[i % 4], Rank.Two) { Uid = uidBase + 10 + i });
+        return cards;
+    }
+
+    private static bool CanGoOut(GameState state, IGameLogic logic)
+        => logic.GetValidActions(state).Any(a => a.Type == "go_out");
+
+    /// <summary>
+    /// The go-out rule, at last read from the definition: one natural book and one
+    /// wild book. "all_melds_complete" had been a name the engine treated as
+    /// "hand empty", so a side could go out with nothing complete at all.
+    /// </summary>
+    [Fact]
+    public void Going_out_needs_a_natural_book_and_a_wild_book()
+    {
+        var (state, logic) = Table();
+        logic.Apply(state, new GameAction("draw_from_deck"));
+        EmptyHands(state);
+
+        // Out of cards, nothing complete: no.
+        Assert.False(CanGoOut(state, logic));
+
+        // One natural book: still no — the wild one is missing.
+        Melds(state).AddGroup(Book(Rank.King, wilds: 0, uidBase: 9700));
+        Assert.False(CanGoOut(state, logic));
+
+        // A second natural book does not stand in for a wild one.
+        Melds(state).AddGroup(Book(Rank.Queen, wilds: 0, uidBase: 9720));
+        Assert.False(CanGoOut(state, logic));
+
+        // Natural plus wild: yes.
+        Melds(state).AddGroup(Book(Rank.Nine, wilds: 2, uidBase: 9740));
+        Assert.True(CanGoOut(state, logic));
+    }
+
+    /// <summary>Six of a rank is a meld, not a book, whatever the definition asks.</summary>
+    [Fact]
+    public void An_incomplete_meld_is_not_a_book()
+    {
+        var (state, logic) = Table();
+        logic.Apply(state, new GameAction("draw_from_deck"));
+        EmptyHands(state);
+
+        Melds(state).AddGroup(Book(Rank.King, wilds: 0, uidBase: 9800).Take(6));
+        Melds(state).AddGroup(Book(Rank.Nine, wilds: 2, uidBase: 9820));
+
+        Assert.False(CanGoOut(state, logic));
     }
 }

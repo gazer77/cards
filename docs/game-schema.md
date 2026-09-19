@@ -488,7 +488,10 @@ One draw + one discard per player turn. Repeats until a special action ends the 
 
 `special_actions`: `["knock","gin","go_out"]` — extra actions shown in discard phase when conditions are met.
 
-`go_out_condition`: `"hand_empty"` | `"all_melds_complete_and_hand_empty"`
+`go_out_condition`: `"hand_empty"` (default), or a [condition](#conditions) that must also
+hold — Hand and Foot asks for one natural book and one wild book. Being out of cards (hand
+and foot both) is required underneath either form; a definition cannot let a player go out
+holding cards.
 
 `round_ends_when`: also accepts `"stock_exhausted"` — the round ends when the draw pile
 runs out, which is how Hand and Foot and Gin Rummy end a round nobody goes out of. Without
@@ -734,6 +737,7 @@ A condition is a term name, an object naming a term, or a combinator:
 | `{ "meld_value_at_least": n }` | This side's melds are worth `n`+ points, valued as scoring values them |
 | `can_open_with_top_discard` | This side has not melded, and could lay an opening worth what this round demands using the top card of the discard |
 | `top_discard_is_meldable` | The discard's top card is not a rank the phase bars from melding — a 3 on top freezes the pile |
+| `{ "books_at_least": n, "kind": "natural" }` | This side has `n`+ complete books (groups of `scoring.book_size`). `kind` is `natural` (no wilds), `wild`, or `any` (default) |
 
 | Combinator | Meaning |
 |---|---|

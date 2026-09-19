@@ -213,4 +213,30 @@ public sealed class RuleConditionTests
         Melds(state).Clear();
         return state;
     }
+
+    [Fact]
+    public void Books_are_counted_by_kind()
+    {
+        var (state, _) = Table();
+        var melds = Melds(state);
+
+        var suits = new[] { Suit.Clubs, Suit.Diamonds, Suit.Hearts, Suit.Spades };
+        melds.AddGroup(Enumerable.Range(0, 7).Select(i => new Card(suits[i % 4], Rank.King) { Uid = 6000 + i }));
+        melds.AddGroup(Enumerable.Range(0, 5).Select(i => new Card(suits[i % 4], Rank.Nine) { Uid = 6100 + i })
+            .Concat(Enumerable.Range(0, 2).Select(i => new Card(suits[i], Rank.Two) { Uid = 6110 + i })));
+        melds.AddGroup(Enumerable.Range(0, 4).Select(i => new Card(suits[i], Rank.Four) { Uid = 6200 + i }));
+
+        Assert.True (Holds("{ \"books_at_least\": 2 }", state));
+        Assert.False(Holds("{ \"books_at_least\": 3 }", state));   // the fours are short
+        Assert.True (Holds("{ \"books_at_least\": 1, \"kind\": \"natural\" }", state));
+        Assert.True (Holds("{ \"books_at_least\": 1, \"kind\": \"wild\" }", state));
+        Assert.False(Holds("{ \"books_at_least\": 2, \"kind\": \"natural\" }", state));
+    }
+
+    [Fact]
+    public void An_unknown_book_kind_fails_validation()
+    {
+        var problems = RuleCondition.Validate(Json("{ \"books_at_least\": 1, \"kind\": \"clean\" }"));
+        Assert.Contains(problems, p => p.Contains("clean"));
+    }
 }

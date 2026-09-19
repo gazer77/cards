@@ -14,7 +14,8 @@ namespace Cards.Engine;
 ///   special_actions   — ["knock","gin","go_out"] — extra action buttons shown when conditions met
 ///   knock_condition   — "deadwood_lte_10" | "deadwood_eq_0" | "deadwood_lte_first_discard"
 ///   gin_condition     — "deadwood_eq_0" (default)
-///   go_out_condition  — "hand_empty" | "all_melds_complete_and_hand_empty" (default hand_empty)
+///   go_out_condition  — "hand_empty" (default), or a condition object that must also hold
+///                       — being out of cards (hand and foot) is required underneath either| "all_melds_complete_and_hand_empty" (default hand_empty)
 ///   round_ends_when   — "any_player_grid_all_face_up": end round when any grid is fully revealed
 ///                       "stock_exhausted": end round when the deck runs out, so a game
 ///                       whose players can no longer draw cannot run forever
@@ -36,6 +37,13 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     private readonly string       _knockCondition;
     private readonly string       _ginCondition;
     private readonly string       _goOutCondition;
+
+    /// <summary>
+    /// What a side must have on the table before going out, when go_out_condition is
+    /// a condition rather than a name — Hand and Foot's two books. Being out of cards
+    /// is required underneath whatever this says.
+    /// </summary>
+    private readonly JsonElement? _goOutRequires;
     private readonly string?      _roundEndsWhen;
     private readonly bool         _remainingGetOneTurn;
 
@@ -100,6 +108,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         _knockCondition  = GetString(def, "knock_condition")   ?? "deadwood_lte_10";
         _ginCondition    = GetString(def, "gin_condition")     ?? "deadwood_eq_0";
         _goOutCondition  = GetString(def, "go_out_condition")  ?? "hand_empty";
+        if (def.Extra?.TryGetValue("go_out_condition", out var goOut) == true
+            && goOut.ValueKind == JsonValueKind.Object)
+            _goOutRequires = goOut.Clone();
         _roundEndsWhen   = GetString(def, "round_ends_when");
         _remainingGetOneTurn = GetBool(def, "remaining_players_get_one_more_turn") ?? false;
     }
@@ -1036,9 +1047,10 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         var  foot      = state.FindZone($"foot:{state.CurrentPlayer.Id}");
         bool footEmpty = foot is null || foot.IsEmpty;
 
-        // "all_melds_complete" is still a stub: the canastas a side must hold before
-        // going out are not yet expressible. See the schema's not-yet list.
-        return handEmpty && footEmpty;
+        // What the definition asks for on top of that — Hand and Foot's two books.
+        bool requiresMet = _goOutRequires is not { } req || RuleCondition.Evaluate(req, state);
+
+        return handEmpty && footEmpty && requiresMet;
     }
 
     // ── Condition checks ──────────────────────────────────────────────────────
