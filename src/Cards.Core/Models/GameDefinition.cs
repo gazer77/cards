@@ -195,6 +195,21 @@ public class ZoneDefinition
     public List<BadgeDefinition> GroupBadges { get; set; } = [];
 
     /// <summary>
+    /// Card size in this zone, relative to the table's base card: 1.5 draws them half
+    /// again as large, 0.75 three-quarters. Melds are read while a deck is merely
+    /// recognised, and a definition knows which is which.
+    /// </summary>
+    [JsonPropertyName("card_scale")]
+    public float CardScale { get; set; } = 1.0f;
+
+    /// <summary>
+    /// Rules that fire as cards arrive here — see <see cref="OnReceiveRule"/>. Settled
+    /// after any arrival: dealt, drawn, or picked up.
+    /// </summary>
+    [JsonPropertyName("on_receive")]
+    public List<OnReceiveRule> OnReceive { get; set; } = [];
+
+    /// <summary>
     /// How groups are placed within the zone. "flow" (default) lays them in the order
     /// laid, wrapping; "by_rank" gives every rank a fixed slot, empty ones showing the
     /// rank, so a player can see at a glance which melds a side does not have yet.
@@ -622,4 +637,43 @@ public class AnteDefinition
 {
     [JsonPropertyName("amount")]
     public int Amount { get; set; } = 1;
+}
+
+/// <summary>
+/// What a card must be for an <see cref="OnReceiveRule"/> to apply. Every field given
+/// must hold; a field omitted does not care.
+/// </summary>
+public class CardMatch
+{
+    [JsonPropertyName("rank")]
+    public string? Rank { get; set; }
+
+    /// <summary>"red" or "black".</summary>
+    [JsonPropertyName("color")]
+    public string? Color { get; set; }
+
+    [JsonPropertyName("suit")]
+    public string? Suit { get; set; }
+
+    /// <summary>Whether the game treats the card as wild.</summary>
+    [JsonPropertyName("wild")]
+    public bool? Wild { get; set; }
+}
+
+/// <summary>
+/// A rule that fires when a matching card arrives in a zone: move it to another zone
+/// and, optionally, draw a replacement.
+/// </summary>
+public class OnReceiveRule
+{
+    [JsonPropertyName("card")]
+    public CardMatch? Card { get; set; }
+
+    /// <summary>Base id of the zone the card goes to, resolved for the receiving zone's owner.</summary>
+    [JsonPropertyName("move_to")]
+    public string MoveTo { get; set; } = string.Empty;
+
+    /// <summary>Zone to draw one replacement from, per card moved. Omitted, no replacement.</summary>
+    [JsonPropertyName("replace_from")]
+    public string? ReplaceFrom { get; set; }
 }

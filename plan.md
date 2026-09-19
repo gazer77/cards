@@ -222,12 +222,10 @@ heuristics, and conservative poker betting; everything else falls through to ran
       share of the space, which side owns which area — so a new game can lay out its
       table without touching the renderer. Needs care not to become a CSS of its own;
       rows with proportional shares would cover every shipped game today.
-- [ ] **Player-settable card size, per zone** — `arrangement` says how cards sit;
-      size is still the renderer's call, with melds hardcoded 50% larger than the
-      deck beside them (`ZoneLayoutEngine.MeldCardScale`). A definition should be
-      able to state a relative size per zone, and the player should be able to
-      scale it further from settings — eyesight and screen size vary more than
-      any default can cover.
+- [ ] **Player-settable card size** — a definition now states a relative size per
+      zone (`card_scale`); the player should be able to scale the whole table
+      further from settings — eyesight and screen size vary more than any
+      default can cover.
 - [ ] **Game manager page** — create, edit, export and import game definitions in the
       app, so the JSON vocabulary is usable without a text editor and a rebuild.
       Depends on the definition validator, which already reports what is wrong with

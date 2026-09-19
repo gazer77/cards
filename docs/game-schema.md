@@ -284,6 +284,45 @@ Worked examples:
 A `place` overrides `placement`. Explicit means explicit: two badges placed on the same
 spot overlap. Colour (`color`, `text_color`) and `orientation` apply as before.
 
+### `card_scale`
+
+Card size in this zone relative to the table's base card: `1.4` draws them larger,
+`0.75` smaller. Melds are *read* while a deck is merely recognised, and the definition
+knows which is which:
+
+```json
+{ "id": "meld",    "type": "spread", "card_scale": 1.4 },
+{ "id": "deck",    "type": "deck",   "card_scale": 0.75 }
+```
+
+Must be positive. The zone's bounds are unchanged; only the cards inside grow or shrink.
+
+### `on_receive` — rules that fire as cards arrive
+
+A zone may declare what happens when a matching card lands in it. Settled after **any**
+arrival — dealt, drawn, or picked up from a foot — so the rule is "when this card reaches
+your hand", not "when it is drawn", and behaves the same by every route in.
+
+```json
+{ "id": "hand", "type": "hand", "owner": "each_player",
+  "on_receive": [
+    { "card": { "rank": "3", "color": "red" }, "move_to": "threes", "replace_from": "deck" }
+  ] }
+```
+
+| Field | Meaning |
+|---|---|
+| `card` | What to match. Any of `rank`, `color` (`red`/`black`), `suit`, `wild` (true/false); every field given must hold. At least one is required |
+| `move_to` | Base id of the zone the card goes to, resolved for the receiving zone's owner: the owner's team's, then their own, then a shared one |
+| `replace_from` | Zone to draw one replacement from per card moved. Omitted, no replacement |
+
+Replacements are themselves subject to the rules, so a red three drawn to replace a red
+three leaves too. A rule matching nothing, or naming a zone the definition does not
+declare, fails the definition.
+
+Cards set aside this way can score: `scoring.pile_bonuses: { "threes": 100 }` pays that
+many points per card in the side's zone of that name.
+
 ### `group_layout`
 
 How groups are placed within a grouped zone:

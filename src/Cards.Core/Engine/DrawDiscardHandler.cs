@@ -15,7 +15,7 @@ namespace Cards.Engine;
 ///   knock_condition   — "deadwood_lte_10" | "deadwood_eq_0" | "deadwood_lte_first_discard"
 ///   gin_condition     — "deadwood_eq_0" (default)
 ///   go_out_condition  — "hand_empty" (default), or a condition object that must also hold
-///                       — being out of cards (hand and foot) is required underneath either| "all_melds_complete_and_hand_empty" (default hand_empty)
+///                       — being out of cards (hand and foot) is required underneath either
 ///   round_ends_when   — "any_player_grid_all_face_up": end round when any grid is fully revealed
 ///                       "stock_exhausted": end round when the deck runs out, so a game
 ///                       whose players can no longer draw cannot run forever
@@ -491,6 +491,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             }
         }
 
+        if (dest is not null) ZoneIntake.Settle(state, dest);
+
         // Claiming a pile can come with a condition attached: in Hand and Foot the card
         // you claimed it for must go down this turn, which is what stops the pickup
         // being a free way to fatten a hand.
@@ -617,6 +619,10 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             c.IsFaceUp = true;
             hand.Add(c);
         }
+        // Revealing the foot is another way cards reach the hand, and the same rules
+        // apply to them: a red three in the foot goes straight to the threes pile.
+        ZoneIntake.Settle(state, hand);
+
         var player = state.Players.FirstOrDefault(p => p.Id == playerId);
         string footMsg = player == state.Players[0] ? "You picked" : $"{player?.Name ?? "Player"} picked";
         state.Metadata["status"] = $"{footMsg} up their foot!";

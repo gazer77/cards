@@ -716,6 +716,8 @@ public static class ScoringEngine
                     pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus, BookSize(state.Definition));
                 }
 
+                pts += ScoreBonusPiles(state, scoring, team.Id);
+
                 // Deduct card values for cards remaining in each player's hand.
                 foreach (var pid in team.PlayerIds)
                 {
@@ -744,6 +746,8 @@ public static class ScoringEngine
                 var meldZone = state.FindZone($"meld:{p.Id}") ?? state.FindZone("meld");
                 if (meldZone is not null)
                     pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus, BookSize(state.Definition));
+
+                pts += ScoreBonusPiles(state, scoring, p.Id);
 
                 var hand = state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand");
                 if (hand is not null)
@@ -866,6 +870,28 @@ public static class ScoringEngine
     /// opening requirement — Hand and Foot's 50, 90, 120, 150 by round — has to price a
     /// proposed meld before allowing it, and must price it exactly as the round will.
     /// </summary>
+    /// <summary>
+    /// Points for cards set aside in bonus piles, declared as
+    /// <c>scoring.pile_bonuses: { "threes": 100 }</c> — so many points per card in the
+    /// side's zone of that name. Hand and Foot's red threes, which score for being
+    /// collected rather than for being melded.
+    /// </summary>
+    private static int ScoreBonusPiles(GameState state, ScoringDefinition scoring, string ownerId)
+    {
+        if (scoring.Extra?.TryGetValue("pile_bonuses", out var piles) != true
+            || piles.ValueKind != JsonValueKind.Object)
+            return 0;
+
+        int pts = 0;
+        foreach (var pile in piles.EnumerateObject())
+        {
+            if (pile.Value.ValueKind != JsonValueKind.Number) continue;
+            var zone = state.FindZone($"{pile.Name}:{ownerId}") ?? state.FindZone(pile.Name);
+            if (zone is not null) pts += zone.Count * pile.Value.GetInt32();
+        }
+        return pts;
+    }
+
     /// <summary>
     /// How many cards make a complete book — a canasta. Declared as scoring.book_size,
     /// seven by default. Read here by scoring and by the table, so the badge that says

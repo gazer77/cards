@@ -42,6 +42,12 @@ public static class DefinitionValidator
 
             for (int i = 0; i < zone.GroupBadges.Count; i++)
                 ValidateBadge(zone.Id, i, zone.GroupBadges[i], problems);
+
+            if (zone.CardScale <= 0f)
+                problems.Add($"zone '{zone.Id}': card_scale must be positive.");
+
+            for (int i = 0; i < zone.OnReceive.Count; i++)
+                ValidateOnReceive(definition, zone.Id, i, zone.OnReceive[i], problems);
         }
 
         foreach (var phase in definition.Phases)
@@ -93,6 +99,33 @@ public static class DefinitionValidator
                 problems.Add($"{where}.when: {problem}");
 
         ValidatePlace(where, badge.Place, problems);
+    }
+
+    private static void ValidateOnReceive(
+        GameDefinition definition, string zoneId, int index, OnReceiveRule rule, List<string> problems)
+    {
+        string where = $"zone '{zoneId}'.on_receive[{index}]";
+        var zoneIds  = definition.Zones.Select(z => z.Id).ToHashSet();
+
+        // A rule matching nothing would fire on every card that arrived.
+        if (rule.Card is null
+            || (rule.Card.Rank is null && rule.Card.Color is null && rule.Card.Suit is null && rule.Card.Wild is null))
+            problems.Add($"{where}: card must say what to match (rank, color, suit, or wild).");
+
+        if (rule.Card?.Rank is { } rank && MeldRules.ParseRank(rank) is null)
+            problems.Add($"{where}: rank '{rank}' is not a rank.");
+
+        if (rule.Card?.Color is { } color && color is not ("red" or "black"))
+            problems.Add($"{where}: color '{color}' is not red or black.");
+
+        if (rule.Card?.Suit is { } suit && !Enum.TryParse<Suit>(suit, ignoreCase: true, out _))
+            problems.Add($"{where}: suit '{suit}' is not a suit.");
+
+        if (rule.MoveTo.Length == 0 || !zoneIds.Contains(rule.MoveTo))
+            problems.Add($"{where}: move_to '{rule.MoveTo}' is not a zone in this definition.");
+
+        if (rule.ReplaceFrom is { } from && !zoneIds.Contains(from))
+            problems.Add($"{where}: replace_from '{from}' is not a zone in this definition.");
     }
 
     private static void ValidatePlace(string where, PlaceDefinition? place, List<string> problems)

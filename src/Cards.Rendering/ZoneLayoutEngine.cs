@@ -6,13 +6,6 @@ namespace Cards.Rendering;
 public static class ZoneLayoutEngine
 {
     /// <summary>
-    /// How much larger meld cards are drawn than the deck and discard beside them.
-    /// Melds are the zone a player reads rather than merely recognises. A placeholder
-    /// for per-zone, player-settable card size — see plan.md.
-    /// </summary>
-    private const float MeldCardScale = 1.5f;
-
-    /// <summary>
     /// Share of the center band given over to meld areas. Melds are where a game like
     /// Hand and Foot is actually read, and they only grow; the deck and discard never
     /// need more than one card of width each.
@@ -25,9 +18,20 @@ public static class ZoneLayoutEngine
     public static IReadOnlyList<ZoneLayout> Compute(GameState state, SKImageInfo canvasInfo)
     {
         int playerCount = state.Players.Count;
-        return playerCount <= 2
+        var layouts = playerCount <= 2
             ? ComputeTwoPlayer(state, canvasInfo)
             : ComputeFourPlayer(state, canvasInfo);
+
+        // A zone's declared card_scale, applied last so every layout path honours it
+        // without each one knowing. Bounds stay put; the cards inside grow or shrink
+        // and the drawers already fit cards to their bounds.
+        return layouts.Select(l =>
+        {
+            float scale = l.Zone.Definition?.CardScale ?? 1f;
+            return scale == 1f
+                ? l
+                : l with { CardWidth = l.CardWidth * scale, CardHeight = l.CardHeight * scale };
+        }).ToList();
     }
 
     // ── 2-player layout ───────────────────────────────────────────────────────
@@ -308,11 +312,14 @@ public static class ZoneLayoutEngine
             .Cast<Zone>()
             .ToList();
 
-        // Per-player spread zones (e.g. books) are placed in the center alongside shared zones
-        foreach (var player in state.Players)
+        // Per-side piles that live beside the shared ones: Go Fish's books, Hand and
+        // Foot's threes. Teams first, then players, as melds resolve.
+        foreach (var baseId in new[] { "books", "threes" })
         {
-            var z = state.FindZone($"books:{player.Id}");
-            if (z is not null) centerZones.Add(z);
+            foreach (var team in state.Teams)
+                if (state.FindZone($"{baseId}:{team.Id}") is { } tz) centerZones.Add(tz);
+            foreach (var player in state.Players)
+                if (state.FindZone($"{baseId}:{player.Id}") is { } pz) centerZones.Add(pz);
         }
 
         // Meld areas get a band of their own further down, so they are collected
@@ -327,7 +334,7 @@ public static class ZoneLayoutEngine
             float meldTop = centerBounds.Top + centerBounds.Height * (1f - MeldBandShare);
             PlaceMeldZones(state, layouts, meldZones,
                 new SKRect(centerBounds.Left, meldTop, centerBounds.Right, centerBounds.Bottom),
-                cardW * MeldCardScale);
+                cardW);
 
             centerBounds = new SKRect(centerBounds.Left, centerBounds.Top,
                                       centerBounds.Right, meldTop - ZonePadding);

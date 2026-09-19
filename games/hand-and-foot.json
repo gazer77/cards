@@ -28,15 +28,24 @@
     "then_flip_top_to": "discard"
   },
   "zones": [
-    { "id": "deck",      "type": "deck",   "visibility": "none",
+    { "id": "deck",      "type": "deck",   "visibility": "none", "card_scale": 0.75,
       "group_badges": [
         { "shows": "cards", "color": "#000000", "text_color": "#FFFFFF",
           "place": { "x": "0%", "y": "100%", "anchor": "center" } }
       ] },
-    { "id": "discard",   "type": "pile",   "visibility": "top" },
-    { "id": "hand",      "type": "hand",   "owner": "each_player", "visibility": "owner" },
+    { "id": "discard",   "type": "pile",   "visibility": "top", "card_scale": 0.75 },
+    { "id": "hand",      "type": "hand",   "owner": "each_player", "visibility": "owner",
+      "on_receive": [
+        { "card": { "rank": "3", "color": "red" }, "move_to": "threes", "replace_from": "deck" }
+      ] },
     { "id": "foot",      "type": "hand",   "owner": "each_player", "visibility": "none", "locked_until": "hand_empty" },
+    { "id": "threes",    "type": "pile",   "owner": "each_team",   "visibility": "all",
+      "arrangement": "compact", "card_scale": 0.75,
+      "label": { "text": "{owner} 3s", "placement": "bottom" },
+      "group_badges": [ { "shows": "cards", "color": "#C62828", "text_color": "#FFFFFF",
+                          "place": { "x": "100%", "y": "0%" } } ] },
     { "id": "meld",      "type": "spread", "owner": "each_team",   "visibility": "all",
+      "card_scale":   1.4,
       "arrangement":  "stack",
       "group_layout": "by_rank",
       "label":        { "text": "{owner}", "placement": "bottom" },
@@ -101,6 +110,7 @@
     "wild_cards": ["joker", "2"],
     "red_three_penalty": -500,
     "book_size": 7,
+    "pile_bonuses": { "threes": 100 },
     "natural_canasta_bonus": 500,
     "wild_canasta_bonus": 1000,
     "go_out_bonus": 100,

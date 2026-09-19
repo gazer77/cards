@@ -139,6 +139,11 @@ public sealed class StandardDealEngine : IDealStrategy
             }
         }
 
+        // The deal is done; now the rules about what may stay in a hand. A red three
+        // dealt to a Hand and Foot hand leaves for the threes pile before play starts.
+        foreach (var zone in state.Zones.Values.ToList())
+            ZoneIntake.Settle(state, zone);
+
         return RecordResult(state, byPlayer, steps, animDelayMs);
     }
 
