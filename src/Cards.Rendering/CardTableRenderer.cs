@@ -696,6 +696,13 @@ public sealed class CardTableRenderer
             canvas.RotateDegrees(layout.RotationDegrees, layout.Bounds.MidX, layout.Bounds.MidY);
         }
 
+        // The seat to act is lit from behind its cards, not boxed. A stroked outline
+        // around the ZONE traced a rectangle the cards did not fill and cut across
+        // whatever labels lay in its path; it also read as an alert rather than a turn.
+        // Drawn first so the cards sit on the light.
+        if (layout.IsCurrentPlayer && layout.Hint == ZoneRenderHint.Fan)
+            DrawTurnGlow(canvas, layout);
+
         // A by-rank zone is never "empty": its slots are the picture, melds or not.
         if (layout.Zone.Definition?.GroupLayout == "by_rank")
             DrawRankSlots(canvas, layout);
@@ -705,9 +712,29 @@ public sealed class CardTableRenderer
             DrawFilledZone(canvas, layout);
 
         if (layout.Label is not null) DrawLabel(canvas, layout);
-        if (layout.IsCurrentPlayer)   DrawHighlight(canvas, layout.Bounds);
 
         if (rotated) canvas.Restore();
+    }
+
+    /// <summary>
+    /// A soft pool of light under the cards of the seat to act — wider than the fan
+    /// and faded at the edges, so it reads as light on the felt rather than a shape.
+    /// </summary>
+    private void DrawTurnGlow(SKCanvas canvas, ZoneLayout layout)
+    {
+        if (FanExtent(layout) is not { } cards) return;
+
+        float padX = cards.Height * 0.35f;
+        float padY = cards.Height * 0.25f;
+        var   pool = new SKRect(cards.Left - padX, cards.Top - padY, cards.Right + padX, cards.Bottom + padY);
+
+        using var paint = new SKPaint
+        {
+            IsAntialias = true,
+            Color       = _theme.CurrentPlayerHighlight.WithAlpha(0x38),
+            MaskFilter  = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, cards.Height * 0.22f),
+        };
+        canvas.DrawRoundRect(pool, cards.Height * 0.3f, cards.Height * 0.3f, paint);
     }
 
     private void DrawEmptyZone(SKCanvas canvas, ZoneLayout layout)
@@ -831,11 +858,10 @@ public sealed class CardTableRenderer
 
     // ── Fan (hand) ────────────────────────────────────────────────────────────
 
-    private void DrawFan(SKCanvas canvas, ZoneLayout layout)
+    /// <summary>Where a fan's cards sit: the geometry the cards and anything drawn behind them share.</summary>
+    private static (float StartX, float Step, float Top, float CardW, float CardH) FanGeometry(ZoneLayout layout)
     {
-        var cards = layout.Zone.Cards;
-        if (cards.Count == 0) return;
-
+        int   count  = layout.Zone.Cards.Count;
         float totalW = layout.Bounds.Width;
         float cardW  = layout.CardWidth;
         float cardH  = layout.CardHeight;
@@ -843,9 +869,37 @@ public sealed class CardTableRenderer
         // Centred in the band, but never hanging past its bottom edge. The player's
         // band sits at the screen edge, and a card clipped there has no visible bottom
         // — so the selection lift read as the card growing taller instead of rising.
-        float top    = MathF.Min(layout.Bounds.MidY - cardH / 2f,
-                                 layout.Bounds.Bottom - cardH);
-        long  now    = NowMs();
+        float top = MathF.Min(layout.Bounds.MidY - cardH / 2f, layout.Bounds.Bottom - cardH);
+
+        // Fan layout uses ALL cards so each card's fly-in destination is its final
+        // resting position, not an intermediate slot in a partially-filled fan.
+        float step = count <= 1
+            ? 0f
+            : MathF.Min((totalW - cardW) / (count - 1), cardW * 0.75f);
+
+        float startX = count <= 1
+            ? layout.Bounds.MidX - cardW / 2f
+            : layout.Bounds.Left + (totalW - (step * (count - 1) + cardW)) / 2f;
+
+        return (startX, step, top, cardW, cardH);
+    }
+
+    /// <summary>The rectangle a fan's cards actually cover, or null for an empty fan.</summary>
+    private static SKRect? FanExtent(ZoneLayout layout)
+    {
+        int count = layout.Zone.Cards.Count;
+        if (count == 0) return null;
+        var (startX, step, top, cardW, cardH) = FanGeometry(layout);
+        return new SKRect(startX, top, startX + step * (count - 1) + cardW, top + cardH);
+    }
+
+    private void DrawFan(SKCanvas canvas, ZoneLayout layout)
+    {
+        var cards = layout.Zone.Cards;
+        if (cards.Count == 0) return;
+
+        var (startX, step, top, cardW, cardH) = FanGeometry(layout);
+        long now = NowMs();
 
         // Draw pending cards (fly-in not yet started) face-down at their source
         // position so the deck appears to still hold them.
@@ -858,16 +912,6 @@ public sealed class CardTableRenderer
                 DrawCardBackCounted(canvas, deckRect, _skin);
             }
         }
-
-        // Fan layout uses ALL cards so each card's fly-in destination is its final
-        // resting position, not an intermediate slot in a partially-filled fan.
-        float step = cards.Count == 1
-            ? 0f
-            : MathF.Min((totalW - cardW) / (cards.Count - 1), cardW * 0.75f);
-
-        float startX = cards.Count == 1
-            ? layout.Bounds.MidX - cardW / 2f
-            : layout.Bounds.Left + (totalW - (step * (cards.Count - 1) + cardW)) / 2f;
 
         for (int i = 0; i < cards.Count; i++)
         {
@@ -1780,11 +1824,37 @@ public sealed class CardTableRenderer
             return;
         }
 
-        float y = layout.Bounds.Bottom + labelSz * 1.4f;
-        using var paint = new SKPaint { Color = _theme.PlayerNameColor, IsAntialias = true };
+        // The seat to act wears its name in the accent, with a pip beside it. This and
+        // the glow under the cards are the whole turn indicator: quiet, and attached
+        // to the player rather than drawn around a box.
+        bool  active = layout.IsCurrentPlayer;
+        var   color  = active ? _theme.CurrentPlayerHighlight : _theme.PlayerNameColor;
+        using var paint = new SKPaint { Color = color, IsAntialias = true };
         using var font  = new SKFont(SKTypeface.Default, labelSz);
         float w = font.MeasureText(layout.Label!);
-        canvas.DrawText(layout.Label!, layout.Bounds.MidX - w / 2f, y, font, paint);
+
+        float x, y;
+        if (layout.Hint == ZoneRenderHint.Fan && FanExtent(layout) is { } cards
+            && cards.Bottom + labelSz * 1.4f > layout.Bounds.Bottom)
+        {
+            // A hand pinned to the band's bottom edge has no room below it, and a name
+            // drawn there was covered by the cards. It sits above the fan instead, at
+            // the left, where nothing else lives.
+            x = cards.Left;
+            y = cards.Top - labelSz * 0.6f;
+        }
+        else
+        {
+            x = layout.Bounds.MidX - w / 2f;
+            y = layout.Bounds.Bottom + labelSz * 1.4f;
+        }
+
+        if (active)
+        {
+            float r = labelSz * 0.28f;
+            canvas.DrawCircle(x - r * 2.2f, y - labelSz * 0.32f, r, paint);
+        }
+        canvas.DrawText(layout.Label!, x, y, font, paint);
     }
 
     /// <summary>
@@ -1927,19 +1997,6 @@ public sealed class CardTableRenderer
             .Replace("{owner}", owner);
     }
 
-    private void DrawHighlight(SKCanvas canvas, SKRect bounds)
-    {
-        float r        = bounds.Width * 0.08f;
-        var   inflated = new SKRect(bounds.Left - 4f, bounds.Top - 4f, bounds.Right + 4f, bounds.Bottom + 4f);
-        using var paint = new SKPaint
-        {
-            Color       = _theme.CurrentPlayerHighlight,
-            Style       = SKPaintStyle.Stroke,
-            StrokeWidth = 2.5f,
-            IsAntialias = true,
-        };
-        canvas.DrawRoundRect(inflated, r + 4f, r + 4f, paint);
-    }
 
     // ── Trick direction indicator ─────────────────────────────────────────────
 
