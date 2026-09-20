@@ -323,6 +323,39 @@ declare, fails the definition.
 Cards set aside this way can score: `scoring.pile_bonuses: { "threes": 100 }` pays that
 many points per card in the side's zone of that name.
 
+### `layout` — where the zone sits on the table
+
+A zone may say where it goes, one of two ways. Any zone declaring a `layout` switches the
+whole definition to declared layout; zones without one then take the default region for
+their kind. A definition with no `layout` anywhere keeps the hand-tuned tables, untouched.
+
+**A region** is a well-known area:
+
+| Shared zones | Owned zones (`each_player` / `each_team`) |
+|---|---|
+| `center`, `center-left`, `center-right`, `center-top`, `center-bottom` | `seat` (the owner's edge — where a hand goes), `seat-front` (the strip inboard of it — melds), `seat-side`, `seat-corner` |
+
+Zones sharing a region sit side by side in declaration order, dividing it between them.
+
+**A place** is exact, in percentages of the table — the same [`place`](#place--exact-positioning)
+model badges and labels use for the cards:
+
+```json
+{ "id": "meld", "type": "spread", "owner": "each_team",
+  "layout": { "place": { "x": "46%", "y": "70%", "anchor": "center", "width": "78%", "height": "26%" } } }
+```
+
+For an **owned** zone, write the place as if for the seat at the bottom of the screen. It is
+turned to each other seat: across the table it is reflected and upside down, on the sides
+it is on its side with width and height traded. One declaration serves every player, and
+a six-seat table needs no more thought than a two-seat one. Seat 0 is always the bottom;
+opponents go right, top, left in turn, extra seats sharing the top.
+
+Defaults when a zone says nothing: shared zones go to `center`; hands to `seat`; a foot to
+`seat-corner`; melds, tables, play areas and grids to `seat-front`; anything else owned to
+`seat-side`. An unknown region, a region of the wrong kind (a shared zone asking for
+`seat`), or a layout naming neither fails the definition.
+
 ### `group_layout`
 
 How groups are placed within a grouped zone:

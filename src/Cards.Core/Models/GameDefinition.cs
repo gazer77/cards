@@ -203,6 +203,14 @@ public class ZoneDefinition
     public float CardScale { get; set; } = 1.0f;
 
     /// <summary>
+    /// Where the zone sits on the table — see <see cref="ZoneLayoutDefinition"/>. Any
+    /// zone declaring one switches the whole definition to declared layout; zones
+    /// without one then take the default region for their kind.
+    /// </summary>
+    [JsonPropertyName("layout")]
+    public ZoneLayoutDefinition? Layout { get; set; }
+
+    /// <summary>
     /// Rules that fire as cards arrive here — see <see cref="OnReceiveRule"/>. Settled
     /// after any arrival: dealt, drawn, or picked up.
     /// </summary>
@@ -676,4 +684,28 @@ public class OnReceiveRule
     /// <summary>Zone to draw one replacement from, per card moved. Omitted, no replacement.</summary>
     [JsonPropertyName("replace_from")]
     public string? ReplaceFrom { get; set; }
+}
+
+/// <summary>
+/// Where a zone sits on the table, one of two ways.
+///
+/// A <c>region</c> is a well-known area. Shared zones use <c>center</c>,
+/// <c>center-left</c>, <c>center-right</c>, <c>center-top</c>, <c>center-bottom</c>;
+/// owned zones use <c>seat</c> (the owner's edge, where a hand goes) or
+/// <c>seat-front</c> (the strip inboard of it, where melds go). Zones sharing a region
+/// sit side by side in declaration order.
+///
+/// A <c>place</c> is exact, in percentages of the table — the same model badges and
+/// labels use for the cards. For an owned zone it is written as if for the seat at the
+/// bottom of the screen and turned to each other seat, so one declaration serves every
+/// player: a meld area at <c>y: 70%</c> for the bottom seat is at <c>y: 30%</c>, upside
+/// down, for the seat across the table.
+/// </summary>
+public class ZoneLayoutDefinition
+{
+    [JsonPropertyName("region")]
+    public string? Region { get; set; }
+
+    [JsonPropertyName("place")]
+    public PlaceDefinition? Place { get; set; }
 }

@@ -48,6 +48,17 @@ public static class DefinitionValidator
 
             for (int i = 0; i < zone.OnReceive.Count; i++)
                 ValidateOnReceive(definition, zone.Id, i, zone.OnReceive[i], problems);
+
+            if (zone.Layout is { } layout)
+            {
+                bool owned = zone.Owner is "each_player" or "each_team";
+                if (layout.Region is { } region && !KnownRegion(region, owned))
+                    problems.Add($"zone '{zone.Id}'.layout: region '{region}' is not a region "
+                               + (owned ? "an owned zone can use." : "a shared zone can use."));
+                if (layout.Region is null && layout.Place is null)
+                    problems.Add($"zone '{zone.Id}'.layout: give a region or a place.");
+                ValidatePlace($"zone '{zone.Id}'.layout", layout.Place, problems);
+            }
         }
 
         foreach (var phase in definition.Phases)
@@ -146,6 +157,10 @@ public static class DefinitionValidator
         if (place.VerticalAlign is not ("top" or "middle" or "bottom"))
             problems.Add($"{where}.place: vertical_align '{place.VerticalAlign}' is not top, middle, or bottom.");
     }
+
+    private static bool KnownRegion(string region, bool owned) => owned
+        ? region is "seat" or "seat-front" or "seat-side" or "seat-corner"
+        : region is "center" or "center-left" or "center-right" or "center-top" or "center-bottom";
 
     private static bool IsPercent(string text)
         => float.TryParse(text.Trim().TrimEnd('%'), System.Globalization.NumberStyles.Float,

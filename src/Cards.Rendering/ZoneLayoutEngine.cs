@@ -17,10 +17,16 @@ public static class ZoneLayoutEngine
 
     public static IReadOnlyList<ZoneLayout> Compute(GameState state, SKImageInfo canvasInfo)
     {
+        // A definition that declares where any zone goes gets the declared engine for
+        // all of them; one that does not keeps the hand-tuned tables, untouched.
+        bool declared = state.Definition.Zones.Any(z => z.Layout is not null);
+
         int playerCount = state.Players.Count;
-        var layouts = playerCount <= 2
-            ? ComputeTwoPlayer(state, canvasInfo)
-            : ComputeFourPlayer(state, canvasInfo);
+        var layouts = declared
+            ? DeclaredLayoutEngine.Compute(state, canvasInfo)
+            : playerCount <= 2
+                ? ComputeTwoPlayer(state, canvasInfo)
+                : ComputeFourPlayer(state, canvasInfo);
 
         // A zone's declared card_scale, applied last so every layout path honours it
         // without each one knowing. Bounds stay put; the cards inside grow or shrink
