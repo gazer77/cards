@@ -942,7 +942,7 @@ name a player) addresses the person at this screen.
 | `added_to_meld` | Added to meld. |
 | `ask_confirm` | Ask {opponent} for {rank}? |
 | `ask_hit` | Got {count} {rank} from {opponent}!{books} Go again. |
-| `blackjack_hand` | You: {value}  |  Dealer shows: {dealer} |
+| `blackjack_hand` | You: {value}  \|  Dealer shows: {dealer} |
 | `book_complete` | 1 book complete! |
 | `books_complete` | {count} books complete! |
 | `books_tally` | (Books — You: {mine} | {opponent}: {theirs}) |
@@ -986,7 +986,7 @@ name a player) addresses the person at this screen.
 | `trick_won` | {player} wins the trick. |
 | `turn` | {player}'s turn |
 | `turn_ask` | Tap a card to ask for its rank.{books} |
-| `turn_bet` | {player}'s turn  |  Pot: {pot}  |  To call: {to_call} |
+| `turn_bet` | {player}'s turn  \|  Pot: {pot}  \|  To call: {to_call} |
 | `turn_bid` | {player}'s bid |
 | `turn_bid_high` | {player}'s bid — current high: {high} |
 | `turn_discard` | {player}'s turn — Discard a card |
@@ -994,7 +994,7 @@ name a player) addresses the person at this screen.
 | `turn_meld` | {player}'s turn — Select cards to meld or tap Done. |
 | `turn_owed` | {player}'s turn — Meld the {card} they took |
 | `turn_swap` | {player}'s turn — Tap a card to swap, or discard the drawn card |
-| `turn_trump` | {player}'s turn  |  Trump: {trump} |
+| `turn_trump` | {player}'s turn  \|  Trump: {trump} |
 | `war_flip` | Tap to flip! |
 
 ### Action keys and their defaults
