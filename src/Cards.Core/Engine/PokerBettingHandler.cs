@@ -69,17 +69,17 @@ public sealed class PokerBettingHandler : IPhaseHandler
         // Allow check whenever player owes nothing (BB option, post-flop free check).
         // _canCheck=false only applies to active bets; it cannot block a free pass.
         if (needed <= 0)
-            actions.Add(new GameAction("check", Label: "Check"));
+            actions.Add(new GameAction("check", Label: GameText.Action(state, "check", "Check")));
         else if (needed > 0 && needed <= myChips)
-            actions.Add(new GameAction("call", Label: $"Call {needed}"));
+            actions.Add(new GameAction("call", Label: GameText.Action(state, "call", "Call {amount}", ("amount", needed))));
 
         if (myChips > needed)
-            actions.Add(new GameAction("raise", Label: "Raise"));
+            actions.Add(new GameAction("raise", Label: GameText.Action(state, "raise", "Raise")));
 
-        actions.Add(new GameAction("fold", Label: "Fold"));
+        actions.Add(new GameAction("fold", Label: GameText.Action(state, "fold", "Fold")));
 
         if (myChips > 0)
-            actions.Add(new GameAction("all_in", Label: "All-In"));
+            actions.Add(new GameAction("all_in", Label: GameText.Action(state, "all_in", "All-In")));
 
         return actions;
     }
@@ -364,9 +364,8 @@ public sealed class PokerBettingHandler : IPhaseHandler
             int pot = int.TryParse(state.Metadata.GetValueOrDefault("pot", "0"), out int p) ? p : 0;
             state.AddScore(active[0].Id, pot);
             state.Metadata["pot"] = "0";
-            state.Metadata["status"] = active[0] == state.Players[0]
-                ? $"Everyone folded. You win the pot ({pot})!"
-                : $"Everyone folded. {active[0].Name} wins the pot ({pot}).";
+            state.Metadata["status"] = GameText.Message(state, "pot_won_by_fold",
+                "Everyone folded. {player} wins the pot ({pot}).", active[0].Id, ("pot", pot));
         }
     }
 
@@ -382,9 +381,8 @@ public sealed class PokerBettingHandler : IPhaseHandler
     {
         int pot    = int.TryParse(state.Metadata.GetValueOrDefault("pot", "0"), out int p) ? p : 0;
         int toCall = GetToCall(state);
-        string player = state.CurrentPlayer == state.Players[0]
-            ? "Your turn" : $"{state.CurrentPlayer.Name}'s turn";
-        state.Metadata["status"] = $"{player}  |  Pot: {pot}  |  To call: {toCall}";
+        state.Metadata["status"] = GameText.Message(state, "turn_bet",
+            "{player}'s turn  |  Pot: {pot}  |  To call: {to_call}", state.CurrentPlayer.Id, ("pot", pot), ("to_call", toCall));
     }
 
     // ── JSON parsing ──────────────────────────────────────────────────────────

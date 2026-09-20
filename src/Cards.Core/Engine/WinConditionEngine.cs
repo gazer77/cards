@@ -69,12 +69,10 @@ public sealed class WinConditionEngine : IWinCondition
             .ToList();
 
         if (ranked.Count > 1 && ranked[0].Count == ranked[1].Count)
-            return new WinResult(null, "It's a draw!");
+            return new WinResult(null, GameText.Message(state, "game_drawn", "It's a tie!"));
 
         var winner = ranked[0].Player;
-        string msg = winner == state.Players[0]
-            ? "You win the game!"
-            : $"{winner.Name} wins the game!";
+        string msg = GameText.Message(state, "game_won", "{player} wins!", winner.Id);
         return new WinResult(winner.Id, msg);
     }
 
@@ -108,10 +106,10 @@ public sealed class WinConditionEngine : IWinCondition
                 : $"{x.Player.Name} books: {x.Score}"));
 
         if (ranked.Count > 1 && ranked[0].Score == ranked[1].Score)
-            return new WinResult(null, "It's a tie!", sub);
+            return new WinResult(null, GameText.Message(state, "game_drawn", "It's a tie!"), sub);
 
         var winner = ranked[0].Player;
-        string msg = winner == state.Players[0] ? "You win!" : $"{winner.Name} wins!";
+        string msg = GameText.Message(state, "game_won", "{player} wins!", winner.Id);
         return new WinResult(winner.Id, msg, sub);
     }
 
@@ -154,10 +152,10 @@ public sealed class WinConditionEngine : IWinCondition
             .ToList();
 
         if (ranked.Count > 1 && ranked[0].Score == ranked[1].Score)
-            return new WinResult(null, "It's a tie!");
+            return new WinResult(null, GameText.Message(state, "game_drawn", "It's a tie!"));
 
         var winner = ranked[0].Player;
-        string msg = winner == state.Players[0] ? "You win!" : $"{winner.Name} wins!";
+        string msg = GameText.Message(state, "game_won", "{player} wins!", winner.Id);
         return new WinResult(winner.Id, msg);
     }
 
@@ -169,12 +167,10 @@ public sealed class WinConditionEngine : IWinCondition
             .ToList();
 
         if (ranked.Count > 1 && ranked[0].Score == ranked[1].Score)
-            return new WinResult(null, "It's a tie!");
+            return new WinResult(null, GameText.Message(state, "game_drawn", "It's a tie!"));
 
         var winner = ranked[0].Team;
-        string msg = IsHumanTeam(state, winner)
-            ? $"Your team wins! ({winner.Name})"
-            : $"{winner.Name} wins!";
+        string msg = GameText.TeamMessage(state, "game_won_team", "{team} wins!", winner);
         return new WinResult(winner.Id, msg);
     }
 
@@ -202,15 +198,13 @@ public sealed class WinConditionEngine : IWinCondition
         {
             var winner = state.Teams.FirstOrDefault(t => state.GetTeamScore(t.Id) >= target);
             if (winner is null) return null;
-            string msg = IsHumanTeam(state, winner)
-                ? $"Your team wins! ({winner.Name})"
-                : $"{winner.Name} wins!";
+            string msg = GameText.TeamMessage(state, "game_won_team", "{team} wins!", winner);
             return new WinResult(winner.Id, msg);
         }
 
         var winnerP = state.Players.FirstOrDefault(p => state.GetScore(p.Id) >= target);
         if (winnerP is null) return null;
-        string msgP = winnerP == state.Players[0] ? "You win!" : $"{winnerP.Name} wins!";
+        string msgP = GameText.Message(state, "game_won", "{player} wins!", winnerP.Id);
         return new WinResult(winnerP.Id, msgP);
     }
 
@@ -222,7 +216,7 @@ public sealed class WinConditionEngine : IWinCondition
         if (withChips.Count != 1) return null;
 
         var winner = withChips[0];
-        string msg = winner == state.Players[0] ? "You win!" : $"{winner.Name} wins!";
+        string msg = GameText.Message(state, "game_won", "{player} wins!", winner.Id);
         return new WinResult(winner.Id, msg);
     }
 
@@ -239,10 +233,10 @@ public sealed class WinConditionEngine : IWinCondition
             .ToList();
 
         if (ranked.Count > 1 && ranked[0].Score == ranked[1].Score)
-            return new WinResult(null, "It's a tie!");
+            return new WinResult(null, GameText.Message(state, "game_drawn", "It's a tie!"));
 
         var winner = ranked[0].Player;
-        string msg = winner == state.Players[0] ? "You win!" : $"{winner.Name} wins!";
+        string msg = GameText.Message(state, "game_won", "{player} wins!", winner.Id);
         return new WinResult(winner.Id, msg);
     }
 
@@ -254,12 +248,10 @@ public sealed class WinConditionEngine : IWinCondition
             .ToList();
 
         if (ranked.Count > 1 && ranked[0].Score == ranked[1].Score)
-            return new WinResult(null, "It's a tie!");
+            return new WinResult(null, GameText.Message(state, "game_drawn", "It's a tie!"));
 
         var winner = ranked[0].Team;
-        string msg = IsHumanTeam(state, winner)
-            ? $"Your team wins! ({winner.Name})"
-            : $"{winner.Name} wins!";
+        string msg = GameText.TeamMessage(state, "game_won_team", "{team} wins!", winner);
         return new WinResult(winner.Id, msg);
     }
 

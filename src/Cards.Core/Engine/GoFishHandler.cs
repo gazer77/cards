@@ -65,8 +65,8 @@ public sealed class GoFishHandler : IPhaseHandler
         string rankName = RankPlural(RankFromCode(sel));
         return
         [
-            new GameAction("ask",      Label: $"Ask for {rankName}"),
-            new GameAction("deselect", Label: "Cancel"),
+            new GameAction("ask",      Label: GameText.Action(state, "ask", "Ask for {rank}", ("rank", rankName))),
+            new GameAction("deselect", Label: GameText.Action(state, "deselect", "Cancel")),
         ];
     }
 
@@ -111,7 +111,8 @@ public sealed class GoFishHandler : IPhaseHandler
         string rankCode = RankCode(cardId);
         state.Metadata["selected_rank"] = rankCode;
         state.Metadata["selected_card"] = cardId;
-        state.Metadata["status"]        = $"Ask the AI for {RankPlural(RankFromCode(rankCode))}?";
+        state.Metadata["status"]        = GameText.Message(state, "ask_confirm", "Ask {opponent} for {rank}?",
+            values: [("opponent", Opponent(state)), ("rank", RankPlural(RankFromCode(rankCode)))]);
     }
 
     private static void Deselect(GameState state)
@@ -146,8 +147,9 @@ public sealed class GoFishHandler : IPhaseHandler
 
             int books    = CheckBooks(state, state.Players[0].Id);
             PruneKnownRanks(state);
-            string bookMsg = books > 0 ? $" {books} book{(books > 1 ? "s" : "")} complete!" : "";
-            state.Metadata["status"] = $"Got {matching.Count} {rankName} from the AI!{bookMsg} Go again.";
+            string bookMsg = BooksNote(state, books);
+            state.Metadata["status"] = GameText.Message(state, "ask_hit", "Got {count} {rank} from {opponent}!{books} Go again.",
+                values: [("count", matching.Count), ("rank", rankName), ("opponent", Opponent(state)), ("books", bookMsg)]);
             CheckWinCondition(state);
         }
         else
@@ -167,22 +169,24 @@ public sealed class GoFishHandler : IPhaseHandler
                 PruneKnownRanks(state);
                 bool goAgain = RankCode(drawn.Id) == rankCode;
                 string drawnRank = RankPlural(RankFromCode(RankCode(drawn.Id)));
-                string bookMsg   = books > 0 ? $" {books} book{(books > 1 ? "s" : "")} complete!" : "";
+                string bookMsg   = BooksNote(state, books);
 
                 if (goAgain)
                 {
                     RecordKnownPlayerRank(state, rankCode);
-                    state.Metadata["status"] = $"Go Fish! Lucky — you drew {drawnRank}.{bookMsg} Go again!";
+                    state.Metadata["status"] = GameText.Message(state, "fish_lucky", "Go Fish! Lucky — you drew {rank}.{books} Go again!",
+                        values: [("rank", drawnRank), ("books", bookMsg)]);
                 }
                 else
                 {
-                    state.Metadata["status"] = $"Go Fish! You drew {drawnRank}.{bookMsg} AI's turn.";
+                    state.Metadata["status"] = GameText.Message(state, "fish_drew", "Go Fish! You drew {rank}.{books} {opponent}'s turn.",
+                        values: [("rank", drawnRank), ("books", bookMsg), ("opponent", Opponent(state))]);
                     EndPlayerTurn(state);
                 }
             }
             else
             {
-                state.Metadata["status"] = "Go Fish! The deck is empty. AI's turn.";
+                state.Metadata["status"] = GameText.Message(state, "fish_deck_empty", "Go Fish! The deck is empty. {opponent}'s turn.", values: ("opponent", Opponent(state)));
                 EndPlayerTurn(state);
             }
 
@@ -204,11 +208,11 @@ public sealed class GoFishHandler : IPhaseHandler
             CheckBooks(state, state.Players[0].Id);
             PruneKnownRanks(state);
             if (p0Hand.Count > 0)
-                state.Metadata["status"] = "You had no cards — drew one from the deck.";
+                state.Metadata["status"] = GameText.Message(state, "no_cards_drew", "You had no cards — drew one from the deck.");
         }
         else
         {
-            state.Metadata["status"] = "You have no cards and the deck is empty. AI's turn.";
+            state.Metadata["status"] = GameText.Message(state, "no_cards_no_deck", "You have no cards and the deck is empty. {opponent}'s turn.", values: ("opponent", Opponent(state)));
             EndPlayerTurn(state);
         }
 
@@ -238,11 +242,11 @@ public sealed class GoFishHandler : IPhaseHandler
                 c.IsFaceUp = false;
                 aiHand.Add(c);
                 CheckBooks(state, aiId);
-                state.Metadata["status"] = "AI has no cards — drew from deck. Your turn!";
+                state.Metadata["status"] = GameText.Message(state, "opponent_no_cards_drew", "{opponent} has no cards — drew from deck. Your turn!", values: ("opponent", Opponent(state)));
             }
             else
             {
-                state.Metadata["status"] = "AI has no cards and the deck is empty. Your turn!";
+                state.Metadata["status"] = GameText.Message(state, "opponent_no_cards_no_deck", "{opponent} has no cards and the deck is empty. Your turn!", values: ("opponent", Opponent(state)));
             }
             EndAiTurn(state);
             CheckWinCondition(state);
@@ -311,8 +315,9 @@ public sealed class GoFishHandler : IPhaseHandler
             }
 
             int books    = CheckBooks(state, aiId);
-            string bookMsg = books > 0 ? $" {books} book{(books > 1 ? "s" : "")} complete!" : "";
-            state.Metadata["status"] = $"AI asked for {rankName} — got {matching.Count}!{bookMsg} AI goes again…";
+            string bookMsg = BooksNote(state, books);
+            state.Metadata["status"] = GameText.Message(state, "opponent_ask_hit", "{opponent} asked for {rank} — got {count}!{books} {opponent} goes again…",
+                values: [("opponent", Opponent(state)), ("rank", rankName), ("count", matching.Count), ("books", bookMsg)]);
         }
         else
         {
@@ -327,19 +332,22 @@ public sealed class GoFishHandler : IPhaseHandler
 
                 int books    = CheckBooks(state, aiId);
                 bool goAgain = RankCode(drawn.Id) == rankCode;
-                string bookMsg = books > 0 ? $" {books} book{(books > 1 ? "s" : "")} complete!" : "";
+                string bookMsg = BooksNote(state, books);
 
                 if (goAgain)
-                    state.Metadata["status"] = $"AI asked for {rankName} — Go Fish, but drew one!{bookMsg} AI goes again…";
+                    state.Metadata["status"] = GameText.Message(state, "opponent_fish_lucky", "{opponent} asked for {rank} — Go Fish, but drew one!{books} {opponent} goes again…",
+                        values: [("opponent", Opponent(state)), ("rank", rankName), ("books", bookMsg)]);
                 else
                 {
-                    state.Metadata["status"] = $"AI asked for {rankName} — Go Fish.{bookMsg} Your turn!";
+                    state.Metadata["status"] = GameText.Message(state, "opponent_fish", "{opponent} asked for {rank} — Go Fish.{books} Your turn!",
+                        values: [("opponent", Opponent(state)), ("rank", rankName), ("books", bookMsg)]);
                     EndAiTurn(state);
                 }
             }
             else
             {
-                state.Metadata["status"] = $"AI asked for {rankName} — Go Fish! Deck is empty. Your turn!";
+                state.Metadata["status"] = GameText.Message(state, "opponent_fish_deck_empty", "{opponent} asked for {rank} — Go Fish! Deck is empty. Your turn!",
+                    values: [("opponent", Opponent(state)), ("rank", rankName)]);
                 EndAiTurn(state);
             }
         }
@@ -488,12 +496,27 @@ public sealed class GoFishHandler : IPhaseHandler
 
     // ── Status ────────────────────────────────────────────────────────────────
 
+    /// <summary>" 2 books complete!" or "" — the plural is the definition's, one key per form.</summary>
+    private static string BooksNote(GameState state, int books) => books switch
+    {
+        0 => "",
+        1 => " " + GameText.Message(state, "book_complete", "1 book complete!"),
+        _ => " " + GameText.Message(state, "books_complete", "{count} books complete!", values: ("count", books)),
+    };
+
+    /// <summary>The other seat's name. Go Fish here is two-handed; "AI" was baked into every line.</summary>
+    private static string Opponent(GameState state)
+        => state.Players.Count > 1 ? state.Players[1].Name : "the opponent";
+
     private static void SetIdleStatus(GameState state)
     {
         int p0 = state.GetScore(state.Players[0].Id);
         int p1 = state.Players.Count > 1 ? state.GetScore(state.Players[1].Id) : 0;
-        string books = (p0 > 0 || p1 > 0) ? $"  (Books — You: {p0} | AI: {p1})" : "";
-        state.Metadata["status"] = $"Tap a card to ask for its rank.{books}";
+        string books = (p0 > 0 || p1 > 0)
+            ? "  " + GameText.Message(state, "books_tally", "(Books — You: {mine} | {opponent}: {theirs})",
+                                     values: [("mine", p0), ("opponent", Opponent(state)), ("theirs", p1)])
+            : "";
+        state.Metadata["status"] = GameText.Message(state, "turn_ask", "Tap a card to ask for its rank.{books}", values: ("books", books));
     }
 
     // ── Rank helpers ──────────────────────────────────────────────────────────

@@ -68,7 +68,7 @@
   "texas-holdem/9p/seed1": "2C3159589F8261CE2C703DF9AE9385FF steps=5000 over=False phase=bet_flop",
   "texas-holdem/9p/seed12648430": "F374928DCE4D4F34347E41D3E6C334D4 steps=5000 over=False phase=bet_flop",
   "texas-holdem/9p/seed20260827": "F8F70C81914EA82ACFBC6ACC1E71EC33 steps=5000 over=False phase=bet_flop",
-  "war/2p/seed1": "BDE6D6B9787AE9EEB67AFB89595D175A steps=1409 over=True phase=game_over",
-  "war/2p/seed12648430": "5CE932E4E43D77C8E32125A3FBD2FB76 steps=1423 over=True phase=game_over",
-  "war/2p/seed20260827": "36A87EBC52A7D0B87892087A62D90A32 steps=257 over=True phase=game_over"
+  "war/2p/seed1": "C5E5202B928F78E84D7EB5F9FF8E9AB9 steps=1409 over=True phase=game_over",
+  "war/2p/seed12648430": "B06284264D431D26D2881D9BA1EE2449 steps=1423 over=True phase=game_over",
+  "war/2p/seed20260827": "6848F03E9E9222B18978DF80D141D140 steps=257 over=True phase=game_over"
 }

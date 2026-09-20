@@ -62,12 +62,12 @@ public sealed class MeldHandler : IPhaseHandler
         // Pinochle: any 1+ card selection is allowed (nines, marriages, flushes, etc.)
         int effectiveMin = _meldTypes.Contains("pinochle") ? 1 : _minMeldSize;
         if (selected.Count >= effectiveMin && IsValidMeld(state, selected))
-            actions.Add(new GameAction("lay_meld", Label: "Lay Meld"));
+            actions.Add(new GameAction("lay_meld", Label: GameText.Action(state, "lay_meld", "Lay Meld")));
 
         if (_layoffAllowed && selected.Count == 1)
-            actions.Add(new GameAction("lay_off", Label: "Lay Off"));
+            actions.Add(new GameAction("lay_off", Label: GameText.Action(state, "lay_off", "Lay Off")));
 
-        actions.Add(new GameAction("meld_done", Label: "Done"));
+        actions.Add(new GameAction("meld_done", Label: GameText.Action(state, "meld_done", "Done")));
         return actions;
     }
 
@@ -291,9 +291,8 @@ public sealed class MeldHandler : IPhaseHandler
 
     private void UpdateStatus(GameState state)
     {
-        string player = state.CurrentPlayer == state.Players[0]
-            ? "Your turn" : $"{state.CurrentPlayer.Name}'s turn";
-        state.Metadata["status"] = $"{player} — Select cards to meld or tap Done.";
+        state.Metadata["status"] = GameText.Message(state, "turn_meld",
+            "{player}'s turn — Select cards to meld or tap Done.", state.CurrentPlayer.Id);
     }
 
     // ── Pinochle meld scoring ─────────────────────────────────────────────────

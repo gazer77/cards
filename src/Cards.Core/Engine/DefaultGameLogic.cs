@@ -57,7 +57,7 @@ public sealed class DefaultGameLogic : GameLogicBase
         state.CurrentPhaseId = _firstPhaseId;
         // Only set a default status if the first phase handler didn't already set one.
         if (!state.Metadata.ContainsKey("status"))
-            state.Metadata["status"] = "Game started!";
+            state.Metadata["status"] = GameText.Message(state, "game_started", "Game started!");
     }
 
     // ── Phase registration ────────────────────────────────────────────────────
@@ -195,7 +195,7 @@ public sealed class DefaultGameLogic : GameLogicBase
                 state.Metadata.Remove($"meld_score:{team.Id}");
 
             state.CurrentPhaseId     = logic._firstPhaseId;
-            state.Metadata["status"] = $"Round {state.RoundNumber}";
+            state.Metadata["status"] = GameText.Message(state, "round_started", "Round {round}", values: ("round", state.RoundNumber));
         }
 
         /// <summary>

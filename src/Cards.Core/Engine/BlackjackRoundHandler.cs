@@ -71,11 +71,11 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
     {
         var hand = CurrentPlayerHand(state);
         if (hand.Count == 2)
-            return [new GameAction("hit", Label: "Hit"),
-                    new GameAction("stand", Label: "Stand"),
-                    new GameAction("double_down", Label: "Double")];
-        return [new GameAction("hit", Label: "Hit"),
-                new GameAction("stand", Label: "Stand")];
+            return [new GameAction("hit", Label: GameText.Action(state, "hit", "Hit")),
+                    new GameAction("stand", Label: GameText.Action(state, "stand", "Stand")),
+                    new GameAction("double_down", Label: GameText.Action(state, "double_down", "Double"))];
+        return [new GameAction("hit", Label: GameText.Action(state, "hit", "Hit")),
+                new GameAction("stand", Label: GameText.Action(state, "stand", "Stand"))];
     }
 
     private void ApplyPlayerAction(GameState state, GameAction action)
@@ -341,16 +341,18 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
     {
         int pv = HandValue(CurrentPlayerHand(state));
         int dv = VisibleDealerValue(DealerHand(state));
-        state.Metadata["status"] = $"You: {pv}  |  Dealer shows: {dv}";
+        state.Metadata["status"] = GameText.Message(state, "blackjack_hand",
+            "You: {value}  |  Dealer shows: {dealer}", values: [("value", pv), ("dealer", dv)]);
         state.Metadata.Remove("sub");
     }
 
     private void UpdateDealerStatus(GameState state)
     {
         var (val, isSoft) = HandInfo(DealerHand(state));
-        string soft   = isSoft ? "soft " : "";
-        string prompt = DealerIsDone(val, isSoft) ? "Tap to see result." : "Tap for next card.";
-        state.Metadata["status"] = $"Dealer: {soft}{val} — {prompt}";
+        string soft = isSoft ? "soft " : "";
+        state.Metadata["status"] = DealerIsDone(val, isSoft)
+            ? GameText.Message(state, "dealer_done", "Dealer: {soft}{value} — Tap to see result.", values: [("soft", soft), ("value", val)])
+            : GameText.Message(state, "dealer_drawing", "Dealer: {soft}{value} — Tap for next card.", values: [("soft", soft), ("value", val)]);
         state.Metadata.Remove("sub");
     }
 

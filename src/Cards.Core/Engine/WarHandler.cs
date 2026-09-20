@@ -126,7 +126,7 @@ public sealed class WarHandler : IPhaseHandler
         var win = WinConditionEngine.Instance.Check(state);
         if (win is not null) { ApplyWinResult(state, win); return; }
 
-        state.Metadata["status"] = "Tap to flip!";
+        state.Metadata["status"] = GameText.Message(state, "war_flip", "Tap to flip!");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

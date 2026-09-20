@@ -30,9 +30,9 @@ public sealed class FreePlayHandler : IPhaseHandler
     {
         var actions = new List<GameAction>();
         if (_endTurn == "manual" && state.Players.Count > 1)
-            actions.Add(new GameAction("end_turn", Label: "End Turn"));
+            actions.Add(new GameAction("end_turn", Label: GameText.Action(state, "end_turn", "End Turn")));
         if (_endGame == "manual")
-            actions.Add(new GameAction("end_game", Label: "End Game"));
+            actions.Add(new GameAction("end_game", Label: GameText.Action(state, "end_game", "End Game")));
         return actions;
     }
 
@@ -60,15 +60,14 @@ public sealed class FreePlayHandler : IPhaseHandler
         if (action.Type == "end_turn")
         {
             state.AdvancePlayer();
-            state.Metadata["status"] = state.CurrentPlayer == state.Players[0]
-                ? "Your turn" : $"{state.CurrentPlayer.Name}'s turn";
+            state.Metadata["status"] = GameText.Message(state, "turn", "{player}'s turn", state.CurrentPlayer.Id);
             return;
         }
 
         if (action.Type == "end_game")
         {
             state.CurrentPhaseId = "game_over";
-            state.Metadata["status"] = "Game ended.";
+            state.Metadata["status"] = GameText.Message(state, "game_ended", "Game ended.");
             return;
         }
 

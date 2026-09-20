@@ -49,7 +49,7 @@ public sealed class ShowdownHandler : IPhaseHandler
 
     public IReadOnlyList<GameAction> GetValidActions(GameState state)
         => state.Metadata.GetValueOrDefault("showdown_revealed") == "true"
-            ? [new GameAction("ready", Label: "✓ Ready")]
+            ? [new GameAction("ready", Label: GameText.Action(state, "ready", "✓ Ready"))]
             : [new GameAction("tap")];
 
     public void Apply(GameState state, GameAction action)
@@ -136,10 +136,9 @@ public sealed class ShowdownHandler : IPhaseHandler
             if (winner is not null && winningCards.Count > 0)
             {
                 string cardList = string.Join(" ", winningCards.Select(CardLabel));
-                string logLine  = winner == state.Players[0]
-                    ? $"You win with {bestRank.Name}: {cardList}"
-                    : $"{winner.Name} wins with {bestRank.Name}: {cardList}";
-                state.GameLog.Add(logLine);
+                state.GameLog.Add(GameText.Message(state, "showdown_won",
+                    "{player} wins with {hand}: {cards}", winner.Id,
+                    ("hand", bestRank.Name), ("cards", cardList)));
             }
         }
         else

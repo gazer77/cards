@@ -257,8 +257,7 @@ public sealed class TrickTakingHandler : IPhaseHandler
             string winnerId = DetermineWinner(state, trump);
             state.Metadata["trick_winner"] = winnerId;
             var winner = state.Players.FirstOrDefault(p => p.Id == winnerId);
-            string winMsg = winner == state.Players[0] ? "You win the trick!" : $"{winner?.Name} wins the trick.";
-            state.Metadata["status"] = winMsg;
+            state.Metadata["status"] = GameText.Message(state, "trick_won", "{player} wins the trick.", winnerId);
         }
     }
 
@@ -529,10 +528,9 @@ public sealed class TrickTakingHandler : IPhaseHandler
     private void UpdateStatus(GameState state)
     {
         string trump   = ResolveTrump(state);
-        string player  = state.CurrentPlayer == state.Players[0]
-            ? "Your turn" : $"{state.CurrentPlayer.Name}'s turn";
-        string trumpStr = string.IsNullOrEmpty(trump) ? "" : $"  |  Trump: {trump}";
-        state.Metadata["status"] = $"{player}{trumpStr}";
+        state.Metadata["status"] = string.IsNullOrEmpty(trump)
+            ? GameText.Message(state, "turn", "{player}'s turn", state.CurrentPlayer.Id)
+            : GameText.Message(state, "turn_trump", "{player}'s turn  |  Trump: {trump}", state.CurrentPlayer.Id, ("trump", trump));
     }
 
     // ── Loner and must-play-higher helpers ───────────────────────────────────

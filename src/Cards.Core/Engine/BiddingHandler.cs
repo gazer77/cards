@@ -98,13 +98,13 @@ public sealed class BiddingHandler : IPhaseHandler
                 foreach (var s in _specialBids)
                     actions.Add(new GameAction($"bid_{s}", Label: Capitalize(s)));
                 if (_passAllowed && !IsLastAndStuck(state))
-                    actions.Add(new GameAction("bid_pass", Label: "Pass"));
+                    actions.Add(new GameAction("bid_pass", Label: GameText.Action(state, "bid_pass", "Pass")));
                 break;
 
             case "accept_or_pass":
-                actions.Add(new GameAction("bid_accept", Label: "Order Up"));
+                actions.Add(new GameAction("bid_accept", Label: GameText.Action(state, "bid_accept", "Order Up")));
                 if (!IsLastAndStuck(state))
-                    actions.Add(new GameAction("bid_pass", Label: "Pass"));
+                    actions.Add(new GameAction("bid_pass", Label: GameText.Action(state, "bid_pass", "Pass")));
                 break;
 
             case "suit_or_pass":
@@ -115,7 +115,7 @@ public sealed class BiddingHandler : IPhaseHandler
                         actions.Add(new GameAction($"bid_{suit}", Label: Capitalize(suit)));
                 }
                 if (!IsLastAndStuck(state))
-                    actions.Add(new GameAction("bid_pass", Label: "Pass"));
+                    actions.Add(new GameAction("bid_pass", Label: GameText.Action(state, "bid_pass", "Pass")));
                 break;
 
             case "number_and_suit":
@@ -123,12 +123,12 @@ public sealed class BiddingHandler : IPhaseHandler
                     foreach (var suit in AllSuits)
                         actions.Add(new GameAction($"bid_{i}_{suit}", Label: $"{i} {Capitalize(suit)}"));
                 if (_passAllowed && !IsLastAndStuck(state))
-                    actions.Add(new GameAction("bid_pass", Label: "Pass"));
+                    actions.Add(new GameAction("bid_pass", Label: GameText.Action(state, "bid_pass", "Pass")));
                 break;
         }
 
         if (_goingAlone)
-            actions.Add(new GameAction("bid_alone", Label: "Go Alone"));
+            actions.Add(new GameAction("bid_alone", Label: GameText.Action(state, "bid_alone", "Go Alone")));
 
         return actions;
     }
@@ -351,13 +351,12 @@ public sealed class BiddingHandler : IPhaseHandler
 
     private void UpdateStatus(GameState state)
     {
-        string player = state.CurrentPlayer == state.Players[0]
-            ? "Your bid" : $"{state.CurrentPlayer.Name}'s bid";
-        if (_competitive && state.Metadata.TryGetValue("bid_high", out var highStr)
-            && int.TryParse(highStr, out int high) && high >= _minBid)
-            state.Metadata["status"] = $"{player} — current high: {high}";
-        else
-            state.Metadata["status"] = player;
+        string me = state.CurrentPlayer.Id;
+        state.Metadata["status"] =
+            _competitive && state.Metadata.TryGetValue("bid_high", out var highStr)
+                && int.TryParse(highStr, out int high) && high >= _minBid
+            ? GameText.Message(state, "turn_bid_high", "{player}'s bid — current high: {high}", me, ("high", high))
+            : GameText.Message(state, "turn_bid", "{player}'s bid", me);
     }
 
     private static string Capitalize(string s)

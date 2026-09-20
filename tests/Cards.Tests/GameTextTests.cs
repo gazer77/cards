@@ -79,4 +79,50 @@ public sealed class GameTextTests
         Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("turn_drawn"));
         definition.Text.Messages.Remove("turn_drawn");
     }
+
+    /// <summary>
+    /// The key table is what the validator checks against and the schema documents; the
+    /// call sites are what the table says. Read the engine's source and hold the two to
+    /// each other: every key a handler says is in the table with the same default, and
+    /// the table names nothing no handler says. A drift either way is a promise broken.
+    /// </summary>
+    [Fact]
+    public void Every_key_the_engine_says_is_in_the_table_with_its_default()
+    {
+        string root = FileSystemGameAssetSource.FindRepoRoot();
+        var files   = Directory.GetFiles(Path.Combine(root, "src", "Cards.Core", "Engine"), "*.cs");
+
+        var said = new Dictionary<string, HashSet<string>>();
+        // key, then the default string — which may hold \" escapes.
+        var call = new System.Text.RegularExpressions.Regex(
+            "GameText\\.(Message|TeamMessage|Action)\\(state,\\s*\"([a-z_{}]+)\",\\s*\"((?:[^\"\\\\]|\\\\.)*)\"",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        foreach (var file in files)
+            foreach (System.Text.RegularExpressions.Match m in call.Matches(File.ReadAllText(file)))
+            {
+                string kind = m.Groups[1].Value == "Action" ? "action" : "message";
+                string key  = m.Groups[2].Value;
+                if (key.StartsWith("draw_from_")) continue;   // open-ended by design
+                said.TryAdd(kind + ":" + key, []);
+                said[kind + ":" + key].Add(m.Groups[3].Value.Replace("\\\"", "\""));
+            }
+
+        Assert.NotEmpty(said);
+
+        foreach (var (kindKey, defaults) in said)
+        {
+            var (kind, key) = (kindKey.Split(':')[0], kindKey.Split(':')[1]);
+            var table = kind == "action" ? GameText.ActionKeys : GameText.MessageKeys;
+
+            Assert.True(table.ContainsKey(key), $"{kind} '{key}' is said by a handler but not in the table.");
+            Assert.True(defaults.Count == 1, $"{kind} '{key}' has {defaults.Count} different defaults across call sites.");
+            Assert.Equal(defaults.Single(), table[key]);
+        }
+
+        foreach (var key in GameText.MessageKeys.Keys)
+            Assert.True(said.ContainsKey("message:" + key), $"message '{key}' is in the table but no handler says it.");
+        foreach (var key in GameText.ActionKeys.Keys.Where(k => !k.Contains('{')))
+            Assert.True(said.ContainsKey("action:" + key), $"action '{key}' is in the table but no handler says it.");
+    }
 }

@@ -42,11 +42,11 @@ public sealed class PassCardsHandler : IPhaseHandler
     {
         EnsureInitialized(state);
 
-        if (IsSkipped(state)) return [new GameAction("tap", Label: "Continue")];
+        if (IsSkipped(state)) return [new GameAction("tap", Label: GameText.Action(state, "continue", "Continue"))];
 
         var selected = GetSelected(state, state.CurrentPlayer.Id);
         if (selected.Count == _count && !IsDone(state, state.CurrentPlayer.Id))
-            return [new GameAction("confirm_pass", Label: "Pass Cards")];
+            return [new GameAction("confirm_pass", Label: GameText.Action(state, "confirm_pass", "Pass Cards"))];
 
         return []; // player uses card taps to select
     }
@@ -190,13 +190,14 @@ public sealed class PassCardsHandler : IPhaseHandler
             selected.Add(cardId);
         state.Metadata[$"pass_selected:{playerId}"] = string.Join(",", selected);
 
-        string need = (_count - selected.Count) switch
+        int left = _count - selected.Count;
+        string direction = state.Metadata["pass_direction"];
+        state.Metadata["status"] = left switch
         {
-            0    => "Tap 'Pass Cards' to confirm",
-            1    => "Select 1 more card",
-            var x => $"Select {x} more cards"
+            0 => GameText.Message(state, "pass_ready", "Passing {direction}: Tap 'Pass Cards' to confirm", values: ("direction", direction)),
+            1 => GameText.Message(state, "pass_one_more", "Passing {direction}: Select 1 more card", values: ("direction", direction)),
+            _ => GameText.Message(state, "pass_more", "Passing {direction}: Select {count} more cards", values: [("direction", direction), ("count", left)]),
         };
-        state.Metadata["status"] = $"Passing {state.Metadata["pass_direction"]}: {need}";
     }
 
     private static List<string> GetSelected(GameState state, string playerId)
@@ -214,8 +215,8 @@ public sealed class PassCardsHandler : IPhaseHandler
     private void UpdateStatus(GameState state, string direction)
     {
         state.Metadata["status"] = direction == "none"
-            ? "No passing this round. Tap to continue."
-            : $"Select {_count} cards to pass {direction}.";
+            ? GameText.Message(state, "pass_none", "No passing this round. Tap to continue.")
+            : GameText.Message(state, "pass_select", "Select {count} cards to pass {direction}.", values: [("count", _count), ("direction", direction)]);
     }
 
     // ── JSON parsing ──────────────────────────────────────────────────────────
