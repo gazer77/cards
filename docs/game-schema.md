@@ -356,9 +356,9 @@ cards out of the zone's meld value so they are not paid twice.
 
 ### `layout` — where the zone sits on the table
 
-A zone may say where it goes, one of two ways. Any zone declaring a `layout` switches the
-whole definition to declared layout; zones without one then take the default region for
-their kind. A definition with no `layout` anywhere keeps the hand-tuned tables, untouched.
+A zone may say where it goes, one of two ways. Zones that say nothing take the default
+region for their kind, so a definition need declare only what it wants placed
+differently.
 
 **A region** is a well-known area:
 
@@ -380,7 +380,15 @@ For an **owned** zone, write the place as if for the seat at the bottom of the s
 turned to each other seat: across the table it is reflected and upside down, on the sides
 it is on its side with width and height traded. One declaration serves every player, and
 a six-seat table needs no more thought than a two-seat one. Seat 0 is always the bottom;
-opponents go right, top, left in turn, extra seats sharing the top.
+opponents go right, top, left in turn, extra seats sharing the top edge in slices.
+
+The regions are laid out so they cannot collide: seats 1–13% and 87–99% of the height,
+fronts 15–35% and 65–85%, the centre 40–60%; seats are 72% wide and the centre 35–65%
+wide, so side seats and their fronts clear the corners and the middle. `center-left` and
+`center-right` sit at 14–28% and 72–86% — clear of side seats, but not of side *fronts*,
+so a game with both side seats and front zones should keep to `center`. A test lays out
+every shipped game at every seat count it advertises and fails if any zone is off the
+table or two overlap.
 
 Defaults when a zone says nothing: shared zones go to `center`; hands to `seat`; a foot to
 `seat-corner`; melds, tables, play areas and grids to `seat-front`; anything else owned to
@@ -1075,8 +1083,6 @@ down and not a surprise:
 - **The colours and typefaces of everything but badges.** Labels, slot names, empty
   slots, the turn glow, card faces and backs come from the theme and skin, chosen in
   settings, not per game.
-- **Fifteen games on the hand-tuned layout.** Every game other than Hand and Foot is
-  still placed by the old engine until its definition declares a `layout`.
 
 ---
 

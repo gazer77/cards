@@ -14,7 +14,7 @@
   "ante": { "amount": 1 },
   "zones": [
     { "id": "deck",  "type": "deck",   "visibility": "none" },
-    { "id": "hand",  "type": "hand",   "owner": "each_player", "visibility": "mixed" },
+    { "id": "hand",  "type": "hand",   "owner": "each_player", "visibility": "mixed", "layout": { "region": "seat" } },
     { "id": "burn",  "type": "pile",   "visibility": "none" },
     { "id": "pot",   "type": "pot",    "visibility": "all" }
   ],

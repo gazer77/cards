@@ -16,11 +16,15 @@
     "big":   { "position": "two_left_of_dealer",   "amount": 2 }
   },
   "zones": [
-    { "id": "deck",      "type": "deck",   "visibility": "none" },
-    { "id": "hand",      "type": "hand",   "owner": "each_player", "visibility": "owner" },
-    { "id": "community", "type": "spread", "visibility": "all" },
-    { "id": "burn",      "type": "pile",   "visibility": "none" },
-    { "id": "pot",       "type": "pot",    "visibility": "all" }
+    { "id": "deck",      "type": "deck",   "visibility": "none",
+      "layout": { "region": "center-left" } },
+    { "id": "hand",      "type": "hand",   "owner": "each_player", "visibility": "owner", "layout": { "region": "seat" } },
+    { "id": "community", "type": "spread", "visibility": "all",
+      "layout": { "region": "center" } },
+    { "id": "burn",      "type": "pile",   "visibility": "none",
+      "layout": { "region": "center-left" } },
+    { "id": "pot",       "type": "pot",    "visibility": "all",
+      "layout": { "region": "center-right" } }
   ],
   "phases": [
     {

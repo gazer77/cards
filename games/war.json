@@ -14,7 +14,7 @@
   },
   "zones": [
     { "id": "deck", "type": "deck",   "visibility": "none" },
-    { "id": "hand", "type": "pile",   "owner": "each_player", "visibility": "none" },
+    { "id": "hand", "type": "pile",   "owner": "each_player", "visibility": "none", "layout": { "region": "seat" } },
     { "id": "play", "type": "spread", "owner": "each_player", "visibility": "all" },
     { "id": "pot",  "type": "pile",                           "visibility": "count_only" }
   ],

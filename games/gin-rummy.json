@@ -20,7 +20,7 @@
   "zones": [
     { "id": "deck",    "type": "deck",   "visibility": "none" },
     { "id": "discard", "type": "pile",   "visibility": "top" },
-    { "id": "hand",    "type": "hand",   "owner": "each_player", "visibility": "owner" },
+    { "id": "hand",    "type": "hand",   "owner": "each_player", "visibility": "owner", "layout": { "region": "seat" } },
     { "id": "meld",    "type": "spread", "owner": "each_player", "visibility": "all" }
   ],
   "phases": [

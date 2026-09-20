@@ -217,8 +217,7 @@ heuristics, and conservative poker betting; everything else falls through to ran
 - [ ] *Future:* iOS build when Mac access is available
 - [x] **Declarative zone layout** — a zone declares a `layout`: a named region or an
       exact `place` in table percentages, written for the bottom seat and turned to
-      every other. Hand and Foot is on it; the other games keep the hand-tuned
-      engine until each is migrated, which is now a definition edit per game.
+      every other. Every shipped game is on it and the hand-tuned engine is gone.
 - [ ] **Player-settable card size** — a definition now states a relative size per
       zone (`card_scale`); the player should be able to scale the whole table
       further from settings — eyesight and screen size vary more than any
@@ -266,7 +265,6 @@ Only the unbuilt work; everything above marked `[x]` is settled.
 | Table themes + custom backgrounds | High | `ITableTheme` already abstracts it; needs more implementations, a picker, and image storage |
 | Game manager page (create/edit/export/import) | Medium | Definitions are already data and validated on load, so the engine side is done; the work is an editor UI, file import/export on each platform, and deciding where user-authored games live alongside the shipped ones |
 | Player-settable card size per zone | Low-Medium | Zone layout already computes per-zone card width, so the plumbing exists; needs a definition field, a settings multiplier, and a decision about how the two compose |
-| Migrate the remaining games to declared layout | Low | The engine exists and Hand and Foot proves it; each game is a definition edit and a look at the table. Retire the hand-tuned engine once the last is over |
 | Accessibility | High | Colorblind palette and font scaling; touches `CardRenderer` and every XAML page |
 | Learn-to-play mode | High | Content work on top of the existing help framework |
 | Android release prep | Medium | Signing, store listing, device testing |

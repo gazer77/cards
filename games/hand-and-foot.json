@@ -39,17 +39,17 @@
       "layout": { "region": "center" },
       "label":  { "text": "DISCARD", "placement": "bottom" } },
     { "id": "hand",      "type": "hand",   "owner": "each_player", "visibility": "owner",
-      "layout": { "region": "seat" },
+      "layout": { "place": { "x": "50%", "y": "93%", "anchor": "center", "width": "80%", "height": "12%" } },
       "on_receive": [
         { "card": { "rank": "3", "color": "red" }, "move_to": "meld", "replace_from": "deck" }
       ] },
     { "id": "foot",      "type": "hand",   "owner": "each_player", "visibility": "none", "locked_until": "hand_empty",
       "arrangement": "stack", "card_scale": 0.6,
-      "layout": { "place": { "x": "4%", "y": "93%", "anchor": "center", "width": "7%", "height": "12%" } },
+      "layout": { "place": { "x": "5%", "y": "93%", "anchor": "center", "width": "8%", "height": "12%" } },
       "label":  { "text": "" } },
     { "id": "meld",      "type": "spread", "owner": "each_team",   "visibility": "all",
       "card_scale":   1.4,
-      "layout":       { "place": { "x": "50%", "y": "70%", "anchor": "center", "width": "86%", "height": "26%" } },
+      "layout":       { "place": { "x": "50%", "y": "75%", "anchor": "center", "width": "88%", "height": "20%" } },
       "arrangement":  "stack",
       "group_layout": "slots",
       "slots": [

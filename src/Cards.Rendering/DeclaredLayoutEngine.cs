@@ -14,9 +14,9 @@ namespace Cards.Rendering;
 /// turned to each other seat: one declaration serves every player, and a six-seat table
 /// needs no more thought than a two-seat one.
 ///
-/// Reached only when a definition declares at least one zone layout. The hand-tuned
-/// engine remains for the games that have not, so switching one game over changes no
-/// other's table.
+/// Every shipped game declares its layout; the hand-tuned engine that preceded this
+/// is gone. A definition that declares nothing still gets a table, from the defaults
+/// for each zone's kind.
 /// </summary>
 public static class DeclaredLayoutEngine
 {
@@ -24,7 +24,8 @@ public static class DeclaredLayoutEngine
     private sealed record Spot(Zone Zone, PlaceDefinition Place, Seat Seat, string? Region);
 
     /// <summary>Which edge a player sits at, and how their content is turned to face them.</summary>
-    private sealed record Seat(int Index, string Side, float Rotation);
+    /// <param name="Slot">Which share of the edge, of <paramref name="Slots"/>, when several seats sit along it.</param>
+    private sealed record Seat(int Index, string Side, float Rotation, int Slot = 0, int Slots = 1);
 
     public static IReadOnlyList<ZoneLayout> Compute(GameState state, SKImageInfo info)
     {
@@ -53,6 +54,19 @@ public static class DeclaredLayoutEngine
                 var spot   = members[i];
                 var seatPx = ToSeatSpace(spot.Place, spot.Seat);
                 var bounds = ResolveTable(seatPx, table);
+
+                // A side seat's zones, turned, run the table's full height and would cross
+                // the bottom and top seats' own zones in the corners — four fronts around
+                // one centre cannot each span their whole side. Side seats keep the band
+                // between the fronts of the seats above and below them.
+                if (spot.Seat.Side is "left" or "right")
+                {
+                    bool topSeated = seats.Any(s => s.Side == "top");
+                    float yMin = H * (topSeated ? 0.36f : 0.02f);
+                    float yMax = H * 0.64f;
+                    bounds = new SKRect(bounds.Left, MathF.Max(bounds.Top, yMin),
+                                        bounds.Right, MathF.Min(bounds.Bottom, yMax));
+                }
 
                 // Sharing: split the region along its longer axis, in declaration order.
                 if (members.Count > 1)
@@ -89,11 +103,17 @@ public static class DeclaredLayoutEngine
             4    => ["right", "top", "left"],
             _    => ["right", .. Enumerable.Repeat("top", players - 3), "left"],
         };
+        int tops = order.Count(s => s == "top"), topSlot = 0;
         for (int i = 0; i < order.Length; i++)
-            seats.Add(new Seat(i + 1, order[i], order[i] switch
-            {
-                "top" => 180f, "right" => 90f, "left" => 270f, _ => 0f,
-            }));
+        {
+            string side = order[i];
+            float rotation = side switch { "top" => 180f, "right" => 90f, "left" => 270f, _ => 0f };
+            // Extra seats share the top edge, each taking its slice of it — in seating
+            // order from the right, which is how they come round the table.
+            seats.Add(side == "top"
+                ? new Seat(i + 1, side, rotation, Slot: tops - 1 - topSlot++, Slots: tops)
+                : new Seat(i + 1, side, rotation));
+        }
         return seats;
     }
 
@@ -115,20 +135,28 @@ public static class DeclaredLayoutEngine
     /// <summary>
     /// The regions a definition may name, as places in bottom-seat space. Owned regions
     /// are turned to the owner's seat; shared ones stay put.
+    ///
+    /// The bands are disjoint by construction: seat 1–13% and 87–99%, seat-front 15–35%
+    /// and 65–85%, center 40–60%. Seats are 72% wide so a side seat's band (turned, it
+    /// runs 14–86% tall) clears the corners the bottom and top seats occupy, and the
+    /// centre is 35–65% wide so side seats' fronts (turned, x 15–35% and 65–85%) clear
+    /// it, and center-left and center-right (14–28%, 72–86%) clear the side seats'
+    /// bands (1–13%, 87–99%). They do not clear side fronts: a game with side seats
+    /// AND front zones should not use them, and the layout test says so per game.
     /// </summary>
     private static readonly Dictionary<string, PlaceDefinition> Regions = new()
     {
         // Shared
-        ["center"]        = P("50%", "50%", "center", "44%", "24%"),
-        ["center-left"]   = P("28%", "50%", "center", "24%", "24%"),
-        ["center-right"]  = P("72%", "50%", "center", "24%", "24%"),
-        ["center-top"]    = P("50%", "30%", "center", "60%", "16%"),
-        ["center-bottom"] = P("50%", "70%", "center", "60%", "16%"),
+        ["center"]        = P("50%", "50%", "center", "30%", "20%"),
+        ["center-left"]   = P("21%", "50%", "center", "14%", "20%"),
+        ["center-right"]  = P("79%", "50%", "center", "14%", "20%"),
+        ["center-top"]    = P("50%", "45%", "center", "60%", "10%"),
+        ["center-bottom"] = P("50%", "55%", "center", "60%", "10%"),
         // Owned (bottom-seat space)
-        ["seat"]          = P("50%", "93%", "center", "96%", "12%"),
-        ["seat-front"]    = P("50%", "72%", "center", "80%", "24%"),
-        ["seat-side"]     = P("88%", "80%", "center", "18%", "20%"),
-        ["seat-corner"]   = P("5%",  "93%", "center", "8%",  "12%"),
+        ["seat"]          = P("50%", "93%", "center", "72%", "12%"),
+        ["seat-front"]    = P("50%", "75%", "center", "56%", "20%"),
+        ["seat-side"]     = P("89%", "75%", "center", "18%", "20%"),
+        ["seat-corner"]   = P("6%",  "93%", "center", "10%", "12%"),
     };
 
     private static PlaceDefinition P(string x, string y, string anchor, string w, string h)
@@ -153,7 +181,7 @@ public static class DeclaredLayoutEngine
         {
             "hand" or "hand2" or "hand3"           => "seat",
             "foot"                                 => "seat-corner",
-            "meld" or "table" or "play" or "grid"  => "seat-front",
+            "meld" or "table" or "play" or "grid" or "trick" => "seat-front",
             _                                       => "seat-side",
         };
     }
@@ -174,6 +202,13 @@ public static class DeclaredLayoutEngine
             case "top":
                 (x, y) = (1f - x, 1f - y);
                 anchor = FlipAnchor(anchor);
+                // Several seats along the top each get a slice of the edge.
+                if (seat.Slots > 1)
+                {
+                    float slice = 1f / seat.Slots;
+                    x = seat.Slot * slice + x * slice;
+                    if (w is { } sliceW) w = sliceW * slice;
+                }
                 break;
             case "right":
                 // Seated at the right edge, facing left: the bottom seat's near edge

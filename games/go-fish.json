@@ -17,7 +17,7 @@
   },
   "zones": [
     { "id": "deck",  "type": "deck",   "visibility": "none" },
-    { "id": "hand",  "type": "hand",   "owner": "each_player", "visibility": "owner" },
+    { "id": "hand",  "type": "hand",   "owner": "each_player", "visibility": "owner", "layout": { "region": "seat" } },
     { "id": "books", "type": "spread", "owner": "each_player", "visibility": "all" }
   ],
   "phases": [

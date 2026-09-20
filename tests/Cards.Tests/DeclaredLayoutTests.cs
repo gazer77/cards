@@ -67,12 +67,12 @@ public sealed class DeclaredLayoutTests
         var state   = HandAndFoot(2);
         var layouts = ZoneLayoutEngine.Compute(state, Canvas);
 
-        // The meld area is declared at x 50%, y 70%, 86% wide, 26% high — for the bottom seat.
+        // The meld area is declared at x 50%, y 75%, 88% wide, 20% high — for the bottom seat.
         var meld = Layout(layouts, "meld:player0").Bounds;
         Assert.Equal(0.50f * Canvas.Width,  meld.MidX,   1f);
-        Assert.Equal(0.70f * Canvas.Height, meld.MidY,   1f);
-        Assert.Equal(0.86f * Canvas.Width,  meld.Width,  1f);
-        Assert.Equal(0.26f * Canvas.Height, meld.Height, 1f);
+        Assert.Equal(0.75f * Canvas.Height, meld.MidY,   1f);
+        Assert.Equal(0.88f * Canvas.Width,  meld.Width,  1f);
+        Assert.Equal(0.20f * Canvas.Height, meld.Height, 1f);
 
         // The same declaration, turned for the seat across: x and y both reflected.
         var across = Layout(layouts, "meld:player1").Bounds;
@@ -111,5 +111,52 @@ public sealed class DeclaredLayoutTests
 
         // A seat band on the side is tall and narrow — width and height traded places.
         Assert.True(right.Bounds.Height > right.Bounds.Width);
+    }
+
+    public static TheoryData<string, int> EveryTable
+    {
+        get
+        {
+            var data   = new TheoryData<string, int>();
+            var loader = new GameLoader(new EmbeddedGameAssetSource());
+            foreach (var def in loader.LoadAllAsync().GetAwaiter().GetResult())
+                for (int seats = def.MinPlayers; seats <= def.MaxPlayers; seats++)
+                    data.Add(def.Id, seats);
+            return data;
+        }
+    }
+
+    /// <summary>
+    /// Every shipped game, at every seat count it advertises, on the declared engine:
+    /// every zone the state holds is on the table, inside the canvas, and no two zones
+    /// overlap. The hand-tuned engine placed only the zones it knew by name and let
+    /// the rest fall off; this is the check that nothing does now.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryTable))]
+    public void Every_zone_is_on_the_table_and_none_overlap(string gameId, int seats)
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync(gameId).GetAwaiter().GetResult()!;
+        Assert.True(definition.Zones.Any(z => z.Layout is not null), $"{gameId} is not on the declared engine.");
+
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(1) };
+        LogicRegistry.Create(definition).Initialize(state, seats, []);
+
+        var layouts = ZoneLayoutEngine.Compute(state, Canvas);
+        Assert.Equal(state.Zones.Count, layouts.Count);
+
+        var canvas = new SKRect(0, 0, Canvas.Width, Canvas.Height);
+        foreach (var l in layouts)
+            Assert.True(canvas.Contains(l.Bounds), $"{gameId}/{seats}p: {l.Zone.Id} at {l.Bounds} is off the table.");
+
+        for (int i = 0; i < layouts.Count; i++)
+            for (int j = i + 1; j < layouts.Count; j++)
+            {
+                var a = layouts[i].Bounds; var b = layouts[j].Bounds;
+                a.Inflate(-1f, -1f); b.Inflate(-1f, -1f);
+                Assert.False(a.IntersectsWith(b),
+                    $"{gameId}/{seats}p: {layouts[i].Zone.Id} {layouts[i].Bounds} overlaps {layouts[j].Zone.Id} {layouts[j].Bounds}.");
+            }
     }
 }
