@@ -425,7 +425,7 @@ public sealed class TableInputTests
         // 3s cannot be melded — no button, and the status says so.
         state.Metadata["selected_card"] = string.Join(",", threes.Select(c => c.Uid));
         Assert.DoesNotContain("meld", ActionTypes(state, logic));
-        Assert.Contains("3s cannot be melded", state.Metadata["status"]);
+        Assert.Contains("3s are never melded", state.Metadata["status"]);   // the definition's own words
 
         // Three aces open at 60 — the button is back.
         state.Metadata["selected_card"] = string.Join(",", aces.Select(c => c.Uid));

@@ -81,6 +81,13 @@ public class GameDefinition
     [JsonPropertyName("ui")]
     public GameUiConfig? Ui { get; set; }
 
+    /// <summary>
+    /// The words on the table — every message and button label, by key. Anything not
+    /// declared keeps its default wording. See <see cref="TextDefinition"/>.
+    /// </summary>
+    [JsonPropertyName("text")]
+    public TextDefinition? Text { get; set; }
+
     // Helpers
     public string DeckType => Deck.ValueKind == JsonValueKind.String
         ? Deck.GetString() ?? "standard-52"
@@ -234,6 +241,10 @@ public class ZoneDefinition
     /// </summary>
     [JsonPropertyName("slots")]
     public List<SlotDefinition> Slots { get; set; } = [];
+
+    /// <summary>Where every empty slot's label sits unless the slot says otherwise. Omitted, centred.</summary>
+    [JsonPropertyName("slot_label_place")]
+    public PlaceDefinition? SlotLabelPlace { get; set; }
 }
 
 /// <summary>
@@ -736,4 +747,36 @@ public class SlotDefinition
     /// <summary>Shown in the slot while it is empty. Omitted, the slot shows nothing.</summary>
     [JsonPropertyName("label")]
     public string? Label { get; set; }
+
+    /// <summary>
+    /// Where the empty-slot label sits, in the slot's proportions. Omitted, centred.
+    /// Set once on the zone's <c>slot_label_place</c> to position every slot's label
+    /// the same way; a slot's own place overrides it.
+    /// </summary>
+    [JsonPropertyName("place")]
+    public PlaceDefinition? Place { get; set; }
+}
+
+/// <summary>
+/// Overrides for what the table says. Keys are named by the engine — the schema lists
+/// them with their default wording — and a definition replaces any it likes:
+///
+/// <code>
+/// "text": {
+///   "actions":  { "meld": "Lay Books", "draw_from_deck": "Draw" },
+///   "messages": { "turn_draw": "{player} to draw", "turn_draw_you": "Draw two" }
+/// }
+/// </code>
+///
+/// A message key may have a <c>_you</c> variant, used when the player concerned is the
+/// one at this screen. Placeholders: <c>{player}</c>, <c>{card}</c>, <c>{rank}</c>,
+/// <c>{count}</c>, <c>{required}</c>, <c>{offered}</c>, <c>{zone}</c>.
+/// </summary>
+public class TextDefinition
+{
+    [JsonPropertyName("actions")]
+    public Dictionary<string, string> Actions { get; set; } = [];
+
+    [JsonPropertyName("messages")]
+    public Dictionary<string, string> Messages { get; set; } = [];
 }

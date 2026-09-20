@@ -53,7 +53,8 @@ public static class ZoneIntake
                     zone.Add(replacement);
                 }
 
-                state.GameLog.Add($"{OwnerName(state, zone)}: {Describe(card)} to {rule.MoveTo}");
+                state.GameLog.Add(GameText.Message(state, "card_filed", "{player}: {card} to {zone}",
+                    zone.OwnerId, ("card", Describe(card)), ("zone", rule.MoveTo)));
                 break;   // re-scan from the top, the replacement may match too
             }
 

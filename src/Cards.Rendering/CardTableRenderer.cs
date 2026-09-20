@@ -1252,8 +1252,20 @@ public sealed class CardTableRenderer
                 // will go, not a card.
                 if (name.Length > 0)
                 {
-                    float tw = rankFont.MeasureText(name);
-                    canvas.DrawText(name, rect.MidX - tw / 2f, rect.MidY + cardW * 0.15f, rankFont, rankPaint);
+                    if (slotDefs[s].LabelPlace is { } lp)
+                    {
+                        // Positioned like any other label: in the slot's proportions,
+                        // turned to the seat.
+                        var place = TurnPlace(lp);
+                        var box   = ResolvePlace(place, rect, rankFont.MeasureText(name) + cardW * 0.2f, cardW * 0.5f);
+                        DrawTextInBox(canvas, name, box, rankFont, rankPaint, cardW * 0.42f,
+                                      place.TextAlign, place.VerticalAlign, inset: cardW * 0.1f);
+                    }
+                    else
+                    {
+                        float tw = rankFont.MeasureText(name);
+                        canvas.DrawText(name, rect.MidX - tw / 2f, rect.MidY + cardW * 0.15f, rankFont, rankPaint);
+                    }
                 }
                 DrawGroupBadges(canvas, zone, rect, 0, cardW);
             }

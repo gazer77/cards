@@ -70,6 +70,17 @@ public static class DefinitionValidator
         foreach (var phase in definition.Phases)
             ValidatePhase(phase, problems);
 
+        // A misspelt text key would override nothing and say nothing about it.
+        if (definition.Text is { } text)
+        {
+            foreach (var key in text.Messages.Keys)
+                if (!GameText.IsMessageKey(key))
+                    problems.Add($"text.messages: '{key}' is not a message the engine says. Known: {string.Join(", ", GameText.MessageKeys.Keys)}.");
+            foreach (var key in text.Actions.Keys)
+                if (!GameText.IsActionKey(key))
+                    problems.Add($"text.actions: '{key}' is not an action the engine offers. Known: {string.Join(", ", GameText.ActionKeys.Keys)}.");
+        }
+
         return problems;
     }
 

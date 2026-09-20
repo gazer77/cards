@@ -136,6 +136,33 @@
     "count_by": "team"
   },
   "win_condition": { "type": "target_score", "score": 10000, "winner": "first" },
+  "text": {
+    "actions": {
+      "draw_from_deck":    "Draw Two",
+      "draw_from_discard": "Take the Pile",
+      "meld":              "Lay Books",
+      "add_to_meld":       "Add to Book",
+      "go_out":            "Go Out",
+      "discard":           "Discard",
+      "clear_selection":   "Clear"
+    },
+    "messages": {
+      "turn_draw_you":     "Your turn — draw two, or take the pile",
+      "turn_draw":         "{player} to draw",
+      "turn_discard_you":  "Your turn — meld, then discard",
+      "turn_discard":      "{player} to discard",
+      "turn_owed_you":     "Meld the {card} you took from the pile",
+      "turn_owed":         "{player} must meld the {card}",
+      "foot_picked_up_you":"Into your foot!",
+      "foot_picked_up":    "{player} is into their foot",
+      "rank_unmeldable":   "{rank}s are never melded — they are for discarding.",
+      "opening_too_low_you":"You need {required} to open this round; that is {offered}.",
+      "melds_laid":        "{count} books started!",
+      "meld_laid":         "Book started!",
+      "added_to_meld":     "Added to the book.",
+      "card_filed":        "{player}: red 3 set aside"
+    }
+  },
   "house_rules": [
     {
       "id": "no_teams_4p",

@@ -305,7 +305,9 @@ the **first** slot whose match fits its *defining natural rank* — a meld of 4s
 wilds in it is a meld of 4s, and goes where 4s go, so a slot for 4s needs no mention of
 wilds. A group with no natural card matches by `wild: true`; that is how a wilds-only slot
 is declared. A group no slot claims is not drawn in the strip. `label` is shown while the
-slot is empty; omitted, an empty slot shows nothing.
+slot is empty; omitted, an empty slot shows nothing. Position it with a `place` on the
+slot, or on the zone as `slot_label_place` for all of them — the same `place` every
+label and badge takes.
 
 A slot may hold cards that are not melds. Hand and Foot's red threes are filed into the
 `3` slot by an `on_receive` rule on the hand and scored by `scoring.bonus_cards`; a group
@@ -912,6 +914,56 @@ An expression that will not parse, or names something unknown, fails the definit
 
 ---
 
+## Text
+
+Every message and button label the table shows is keyed, and a definition may replace
+any of them under `text`. Anything not declared keeps its default wording.
+
+```json
+"text": {
+  "actions":  { "draw_from_deck": "Draw Two", "meld": "Lay Books" },
+  "messages": { "turn_draw": "{player} to draw", "turn_draw_you": "Your turn — draw two" }
+}
+```
+
+A message key may have a **`_you` variant**, used when the player concerned is the one at
+this screen — "Your turn" rather than "Player 1's turn". Placeholders: `{player}`,
+`{card}`, `{rank}`, `{count}`, `{required}`, `{offered}`, `{zone}`.
+
+### Message keys and their defaults
+
+| Key | Default |
+|---|---|
+| `turn_draw` | `{player}'s turn — Draw a card` |
+| `turn_discard` | `{player}'s turn — Discard a card` |
+| `turn_swap` | `{player}'s turn — Tap a card to swap, or discard the drawn card` |
+| `turn_owed` | `{player}'s turn — Meld the {card} they took` |
+| `foot_picked_up` | `{player} picked up their foot!` |
+| `must_meld_first` | `The {card} taken must be melded before discarding.` |
+| `rank_unmeldable` | `{rank}s cannot be melded.` |
+| `not_a_meld` | `That is not a meld — pick three or more of a rank.` |
+| `opening_too_low` | `{player}'s first meld this round must be worth {required}; that is {offered}.` |
+| `melds_laid` / `meld_laid` / `added_to_meld` | `{count} melds laid!` / `Meld laid!` / `Added to meld.` |
+| `add_one_rank` | `Pick cards of one rank to add to a meld.` |
+| `no_meld_of_rank` | `No meld of {rank}s on the table — lay it as a new meld.` |
+| `too_many_wilds` / `no_meld_takes_wilds` | `That would leave the meld more wild than real.` / `No meld can take that many wilds.` |
+| `card_filed` | `{player}: {card} to {zone}` (game log) |
+
+### Action keys and their defaults
+
+| Key | Default |
+|---|---|
+| `draw_from_{zone}` | `Draw from {Zone}` — one per draw source, e.g. `draw_from_deck` |
+| `gin` / `knock` / `go_out` | `Gin!` / `Knock` / `Go Out` |
+| `meld` / `add_to_meld` | `Lay Meld` / `Add to Meld` |
+| `discard` / `clear_selection` | `Discard` / `Clear` |
+
+A key the engine never says fails the definition, since overriding it would change
+nothing and say nothing about it. The keys above are the draw-and-discard phase's; other
+phase types still speak from code — see below.
+
+---
+
 ## Not Yet Expressible
 
 Honest limits, so the vocabulary is judged on what it does rather than assumed complete.
@@ -939,10 +991,10 @@ The rule is that the whole game lives in the definition and only the computer pl
 live in code. Where the table still falls short of that, by name, so it is a list to work
 down and not a surprise:
 
-- **Status and log text.** "Your turn — Draw a card", "Meld laid!", "3s cannot be
-  melded", the game-log lines. Every message a phase handler produces is C# text.
-- **Action button labels.** "Lay Meld", "Add to Meld", "Discard", "Draw from Deck",
-  "Go Out" are named by the handlers that offer them.
+- **Text in the other phase types.** The draw-and-discard phase speaks through `text`;
+  trick-taking, bidding, poker, war, go fish, showdown and the rest still produce
+  their messages and button labels in C#. Same mechanism, not yet threaded through.
+- **Game-over and scoring summaries.** "Player 1 wins", the round score lines.
 - **Player names.** "Player 1" and so on when `players.names` is not given; the seat
   the person at the screen takes (always seat 0, always the bottom edge).
 - **Region geometry.** What `center`, `seat`, `seat-front` mean in percentages is a

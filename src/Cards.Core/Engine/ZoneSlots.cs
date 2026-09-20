@@ -11,7 +11,7 @@ namespace Cards.Engine;
 public static class ZoneSlots
 {
     /// <summary>A resolved slot: what it holds and what it says while empty.</summary>
-    public sealed record Slot(CardMatch Match, string? Label);
+    public sealed record Slot(CardMatch Match, string? Label, PlaceDefinition? LabelPlace = null);
 
     /// <summary>The zone's slots in order, or empty for a zone that flows.</summary>
     public static IReadOnlyList<Slot> For(Zone zone, GameState state)
@@ -20,7 +20,7 @@ public static class ZoneSlots
         if (def is null) return [];
 
         if (def.GroupLayout == "slots")
-            return def.Slots.Select(s => new Slot(s.Match, s.Label)).ToList();
+            return def.Slots.Select(s => new Slot(s.Match, s.Label, s.Place ?? def.SlotLabelPlace)).ToList();
 
         if (def.GroupLayout != "by_rank") return [];
 
@@ -39,10 +39,10 @@ public static class ZoneSlots
         catch (FormatException) { return []; }
 
         var slots = ranks.Where(r => !wilds.Contains(r))
-            .Select(r => new Slot(new CardMatch { Rank = RankToken(r) }, MeldRules.RankDisplayName(r)))
+            .Select(r => new Slot(new CardMatch { Rank = RankToken(r) }, MeldRules.RankDisplayName(r), def.SlotLabelPlace))
             .ToList();
         if (jokers > 0 || wilds.Count > 0)
-            slots.Add(new Slot(new CardMatch { Wild = true }, "W"));
+            slots.Add(new Slot(new CardMatch { Wild = true }, "W", def.SlotLabelPlace));
         return slots;
     }
 

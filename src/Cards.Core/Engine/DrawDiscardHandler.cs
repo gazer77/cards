@@ -145,7 +145,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                     && !RuleCondition.Evaluate(requires, state))
                     continue;
 
-                actions.Add(new GameAction($"draw_from_{zoneName}", Label: $"Draw from {Capitalize(zoneName)}"));
+                actions.Add(new GameAction($"draw_from_{zoneName}",
+                    Label: GameText.Action(state, $"draw_from_{zoneName}", $"Draw from {Capitalize(zoneName)}")));
             }
         }
         else // discard
@@ -156,11 +157,11 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
             // Special actions available after drawing (before discarding)
             if (_specialActions.Contains("gin") && ConditionMet(state, _ginCondition))
-                actions.Add(new GameAction("gin", Label: "Gin!"));
+                actions.Add(new GameAction("gin", Label: GameText.Action(state, "gin", "Gin!")));
             if (_specialActions.Contains("knock") && ConditionMet(state, _knockCondition))
-                actions.Add(new GameAction("knock", Label: "Knock"));
+                actions.Add(new GameAction("knock", Label: GameText.Action(state, "knock", "Knock")));
             if (!owesMeld && _specialActions.Contains("go_out") && GoOutConditionMet(state))
-                actions.Add(new GameAction("go_out", Label: "Go Out"));
+                actions.Add(new GameAction("go_out", Label: GameText.Action(state, "go_out", "Go Out")));
             string? sel = state.Metadata.GetValueOrDefault("selected_card");
 
             // Meld buttons appear only when pressing them would do something. Offering
@@ -172,13 +173,13 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             if (_specialActions.Contains("meld"))
             {
                 if (PlanMeld(state, addToExisting: false, out var meldReason) is not null)
-                    actions.Add(new GameAction("meld", Label: "Lay Meld"));
+                    actions.Add(new GameAction("meld", Label: GameText.Action(state, "meld", "Lay Meld")));
                 else whyNot ??= meldReason;
             }
             if (_specialActions.Contains("add_to_meld"))
             {
                 if (PlanMeld(state, addToExisting: true, out var addReason) is not null)
-                    actions.Add(new GameAction("add_to_meld", Label: "Add to Meld"));
+                    actions.Add(new GameAction("add_to_meld", Label: GameText.Action(state, "add_to_meld", "Add to Meld")));
                 else whyNot ??= addReason;
             }
 
@@ -194,11 +195,11 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 ? 0
                 : sel.Split(',', StringSplitOptions.RemoveEmptyEntries).Length;
             if (!owesMeld && selectedCount == _discardCount && _targetZone != "grid")
-                actions.Add(new GameAction("discard", Label: "Discard"));
+                actions.Add(new GameAction("discard", Label: GameText.Action(state, "discard", "Discard")));
 
             // Clear selection when cards are multi-selected for melding
             if (!string.IsNullOrEmpty(sel) && sel.Contains(','))
-                actions.Add(new GameAction("clear_selection", Label: "Clear"));
+                actions.Add(new GameAction("clear_selection", Label: GameText.Action(state, "clear_selection", "Clear")));
         }
 
         return actions;
@@ -512,8 +513,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         // the "one card selected" fallback all arrive here.
         if (state.Metadata.TryGetValue("dd_must_meld", out var owed))
         {
-            state.Metadata["status"] =
-                $"You must meld the {CardName(state, owed)} you took before discarding.";
+            state.Metadata["status"] = GameText.Message(state, "must_meld_first",
+                "The {card} taken must be melded before discarding.",
+                state.CurrentPlayer.Id, ("card", CardName(state, owed)));
             return;
         }
 
@@ -623,9 +625,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         // apply to them: a red three in the foot goes straight to the threes pile.
         ZoneIntake.Settle(state, hand);
 
-        var player = state.Players.FirstOrDefault(p => p.Id == playerId);
-        string footMsg = player == state.Players[0] ? "You picked" : $"{player?.Name ?? "Player"} picked";
-        state.Metadata["status"] = $"{footMsg} up their foot!";
+        state.Metadata["status"] = GameText.Message(state, "foot_picked_up",
+            "{player} picked up their foot!", forPlayerId: playerId);
     }
 
     private bool CheckRoundEnd(GameState state)
@@ -764,7 +765,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             c => !MeldRules.IsWild(c, wilds) && _unmeldableRanks.Contains(c.Rank));
         if (barred is not null)
         {
-            reason = $"{RankName(barred.Rank)}s cannot be melded.";
+            reason = GameText.Message(state, "rank_unmeldable", "{rank}s cannot be melded.",
+                values: ("rank", RankName(barred.Rank)));
             return null;
         }
 
@@ -789,7 +791,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         }
         else
         {
-            reason = "That is not a meld — pick three or more of a rank.";
+            reason = GameText.Message(state, "not_a_meld", "That is not a meld — pick three or more of a rank.");
             return null;
         }
 
@@ -803,7 +805,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             int offered = ScoringEngine.CardPointValue(state.Definition, selectedCards);
             if (offered < required)
             {
-                reason = $"Your first meld this round must be worth {required}; that is {offered}.";
+                reason = GameText.Message(state, "opening_too_low",
+                    "{player}'s first meld this round must be worth {required}; that is {offered}.",
+                    forPlayerId: state.CurrentPlayer.Id, ("required", required), ("offered", offered));
                 return null;
             }
         }
@@ -855,9 +859,11 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             state.Metadata.Remove("dd_must_meld");
 
         state.Metadata.Remove("selected_card");
-        state.Metadata["status"] = melds.Count > 1 ? $"{melds.Count} melds laid!"
-                                 : joined          ? "Added to meld."
-                                                   : "Meld laid!";
+        state.Metadata["status"] = melds.Count > 1
+            ? GameText.Message(state, "melds_laid", "{count} melds laid!", values: ("count", melds.Count))
+            : joined
+                ? GameText.Message(state, "added_to_meld", "Added to meld.")
+                : GameText.Message(state, "meld_laid", "Meld laid!");
 
         // Melding away the last card of the hand picks the foot up at once, and the
         // turn goes on with it. The pickup only ran after a discard, so a hand emptied
@@ -882,7 +888,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
         if (naturals.Count > 0 && naturals.Any(c => c.Rank != naturals[0].Rank))
         {
-            reason = "Pick cards of one rank to add to a meld.";
+            reason = GameText.Message(state, "add_one_rank", "Pick cards of one rank to add to a meld.");
             return -1;
         }
 
@@ -891,12 +897,14 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             int target = FindGroupOfRank(meldZone, naturals[0].Rank, wilds);
             if (target < 0)
             {
-                reason = $"No meld of {RankName(naturals[0].Rank)}s on the table — lay it as a new meld.";
+                reason = GameText.Message(state, "no_meld_of_rank",
+                    "No meld of {rank}s on the table — lay it as a new meld.",
+                    values: ("rank", RankName(naturals[0].Rank)));
                 return -1;
             }
             if (!StaysLegal(meldZone.GroupCards(target), naturals.Count, wildsAdded, wilds))
             {
-                reason = "That would leave the meld more wild than real.";
+                reason = GameText.Message(state, "too_many_wilds", "That would leave the meld more wild than real.");
                 return -1;
             }
             return target;
@@ -911,7 +919,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 best = i;
 
         if (best < 0)
-            reason = "No meld can take that many wilds.";
+            reason = GameText.Message(state, "no_meld_takes_wilds", "No meld can take that many wilds.");
         return best;
 
         static bool StaysLegal(
@@ -1095,19 +1103,18 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
     private void UpdateStatus(GameState state)
     {
-        string phase;
-        if (state.Metadata.TryGetValue("dd_must_meld", out var owed))
-            phase = $"Meld the {CardName(state, owed)} you took";
-        else if (TurnState(state) == "draw")
-            phase = "Draw a card";
-        else if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_drawn_card"))
-            phase = "Tap a card to swap, or discard the drawn card";
-        else
-            phase = "Discard a card";
+        string me = state.CurrentPlayer.Id;
 
-        string player = state.CurrentPlayer == state.Players[0]
-            ? "Your turn" : $"{state.CurrentPlayer.Name}'s turn";
-        state.Metadata["status"] = $"{player} — {phase}";
+        // One key per situation; the _you form is picked for the person at this screen.
+        state.Metadata["status"] =
+            state.Metadata.TryGetValue("dd_must_meld", out var owed)
+                ? GameText.Message(state, "turn_owed", "{player}'s turn — Meld the {card} they took",
+                                   me, ("card", CardName(state, owed)))
+            : TurnState(state) == "draw"
+                ? GameText.Message(state, "turn_draw", "{player}'s turn — Draw a card", me)
+            : _targetZone == "grid" && state.Metadata.ContainsKey("dd_drawn_card")
+                ? GameText.Message(state, "turn_swap", "{player}'s turn — Tap a card to swap, or discard the drawn card", me)
+                : GameText.Message(state, "turn_discard", "{player}'s turn — Discard a card", me);
     }
 
     private static string Capitalize(string s)
