@@ -4,7 +4,8 @@ namespace Cards.Tests;
 
 /// <summary>
 /// Rules that fire as cards arrive in a zone — Hand and Foot's red threes, which go to
-/// the threes pile the moment they reach a hand, by any route, and are replaced.
+/// the 3s slot of the meld strip the moment they reach a hand, by any route, and are
+/// replaced.
 /// </summary>
 public sealed class ZoneIntakeTests
 {
@@ -25,6 +26,10 @@ public sealed class ZoneIntakeTests
 
     private static bool IsRedThree(Card c) => c.Rank == Rank.Three && c.IsRed;
 
+    /// <summary>The red threes filed into a side's meld strip.</summary>
+    private static int FiledThrees(GameState state, string playerId)
+        => ZoneIntake.SideZone(state, "meld", playerId)!.Cards.Count(IsRedThree);
+
     /// <summary>The rule is "when it reaches your hand", so a fresh deal has none in any hand.</summary>
     [Theory]
     [InlineData(1UL)] [InlineData(7UL)] [InlineData(42UL)] [InlineData(20260919UL)]
@@ -41,15 +46,13 @@ public sealed class ZoneIntakeTests
     }
 
     [Fact]
-    public void A_drawn_red_three_goes_to_the_pile_and_is_replaced()
+    public void A_drawn_red_three_is_filed_and_replaced()
     {
         var (state, logic) = HandAndFoot();
         var me     = state.CurrentPlayer.Id;
         var hand   = state.Zones[$"hand:{me}"];
         var deck   = state.Zones["deck"];
-        var threes = ZoneIntake.SideZone(state, "threes", me)!;
-
-        int threesBefore = threes.Count;
+        int threesBefore = FiledThrees(state, me);
         int handBefore   = hand.Count;
 
         // Stack the deck: the next two draws are a red three and a plain card.
@@ -60,14 +63,14 @@ public sealed class ZoneIntakeTests
 
         logic.Apply(state, new GameAction("draw_from_deck"));
 
-        Assert.Equal(threesBefore + 1, threes.Count);
-        Assert.Contains(threes.Cards, c => c.Uid == 7002);
+        Assert.Equal(threesBefore + 1, FiledThrees(state, me));
+        Assert.Contains(ZoneIntake.SideZone(state, "meld", me)!.Cards, c => c.Uid == 7002);
         Assert.DoesNotContain(hand.Cards, IsRedThree);
         Assert.Equal(handBefore + 2, hand.Count);   // two drawn, one replaced: still +2 in hand
     }
 
     [Fact]
-    public void A_red_three_revealed_from_the_foot_goes_to_the_pile()
+    public void A_red_three_revealed_from_the_foot_is_filed()
     {
         var (state, logic) = HandAndFoot();
         state.RoundNumber = 1;
@@ -76,7 +79,6 @@ public sealed class ZoneIntakeTests
         var me     = state.CurrentPlayer.Id;
         var hand   = state.Zones[$"hand:{me}"];
         var foot   = state.Zones[$"foot:{me}"];
-        var threes = ZoneIntake.SideZone(state, "threes", me)!;
 
         foot.Clear();
         foot.Add(new Card(Suit.Diamonds, Rank.Three) { Uid = 7101 });
@@ -92,11 +94,11 @@ public sealed class ZoneIntakeTests
         };
         foreach (var c in aces) hand.Add(c);
         state.Metadata["selected_card"] = string.Join(",", aces.Select(c => c.Uid));
-        int threesBefore = threes.Count;
+        int threesBefore = FiledThrees(state, me);
 
         logic.Apply(state, new GameAction("meld"));
 
-        Assert.Equal(threesBefore + 1, threes.Count);
+        Assert.Equal(threesBefore + 1, FiledThrees(state, me));
         Assert.DoesNotContain(hand.Cards, IsRedThree);
         Assert.Contains(hand.Cards, c => c.Uid == 7102);   // the rest of the foot arrived
     }

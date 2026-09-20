@@ -37,8 +37,14 @@ public static class DefinitionValidator
             ValidateLabel(zone.Id, "label", zone.Label, problems);
             ValidateLabel(zone.Id, "group_label", zone.GroupLabel, problems);
 
-            if (zone.GroupLayout is not ("flow" or "by_rank"))
-                problems.Add($"zone '{zone.Id}': group_layout '{zone.GroupLayout}' is not flow or by_rank.");
+            if (zone.GroupLayout is not ("flow" or "by_rank" or "slots"))
+                problems.Add($"zone '{zone.Id}': group_layout '{zone.GroupLayout}' is not flow, by_rank, or slots.");
+
+            if (zone.GroupLayout == "slots" && zone.Slots.Count == 0)
+                problems.Add($"zone '{zone.Id}': group_layout slots needs a slots list.");
+
+            for (int i = 0; i < zone.Slots.Count; i++)
+                ValidateCardMatch($"zone '{zone.Id}'.slots[{i}].match", zone.Slots[i].Match, problems);
 
             for (int i = 0; i < zone.GroupBadges.Count; i++)
                 ValidateBadge(zone.Id, i, zone.GroupBadges[i], problems);
@@ -119,24 +125,31 @@ public static class DefinitionValidator
         var zoneIds  = definition.Zones.Select(z => z.Id).ToHashSet();
 
         // A rule matching nothing would fire on every card that arrived.
-        if (rule.Card is null
-            || (rule.Card.Rank is null && rule.Card.Color is null && rule.Card.Suit is null && rule.Card.Wild is null))
+        if (rule.Card is null)
             problems.Add($"{where}: card must say what to match (rank, color, suit, or wild).");
-
-        if (rule.Card?.Rank is { } rank && MeldRules.ParseRank(rank) is null)
-            problems.Add($"{where}: rank '{rank}' is not a rank.");
-
-        if (rule.Card?.Color is { } color && color is not ("red" or "black"))
-            problems.Add($"{where}: color '{color}' is not red or black.");
-
-        if (rule.Card?.Suit is { } suit && !Enum.TryParse<Suit>(suit, ignoreCase: true, out _))
-            problems.Add($"{where}: suit '{suit}' is not a suit.");
+        else
+            ValidateCardMatch($"{where}.card", rule.Card, problems);
 
         if (rule.MoveTo.Length == 0 || !zoneIds.Contains(rule.MoveTo))
             problems.Add($"{where}: move_to '{rule.MoveTo}' is not a zone in this definition.");
 
         if (rule.ReplaceFrom is { } from && !zoneIds.Contains(from))
             problems.Add($"{where}: replace_from '{from}' is not a zone in this definition.");
+    }
+
+    private static void ValidateCardMatch(string where, CardMatch m, List<string> problems)
+    {
+        if (m.Rank is null && m.Color is null && m.Suit is null && m.Wild is null)
+            problems.Add($"{where}: must say what to match (rank, color, suit, or wild).");
+
+        if (m.Rank is { } rank && MeldRules.ParseRank(rank) is null)
+            problems.Add($"{where}: rank '{rank}' is not a rank.");
+
+        if (m.Color is { } color && color is not ("red" or "black"))
+            problems.Add($"{where}: color '{color}' is not red or black.");
+
+        if (m.Suit is { } suit && !Enum.TryParse<Suit>(suit, ignoreCase: true, out _))
+            problems.Add($"{where}: suit '{suit}' is not a suit.");
     }
 
     private static void ValidatePlace(string where, PlaceDefinition? place, List<string> problems)

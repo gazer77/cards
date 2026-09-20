@@ -220,8 +220,10 @@ A caption the definition places beside a zone, or beside **each group** in a gro
 | `orientation` | `horizontal` (default), `vertical` (reads like a book spine), `angled` (leans 30°) |
 | `when` | A [condition](#conditions); the caption shows only while it holds. Absent means always |
 
-Pluralisation lives in the text (`"{rank}s"`), not in code. A `label` keeps the renderer's
-default caption when omitted; a `group_label` is off unless declared. An unknown placement
+Pluralisation lives in the text (`"{rank}s"`), not in code. What the table says about a
+zone is the definition's to say: with no `label` declared, an owned zone falls back to its
+owner's name and a shared zone to nothing, and a declared `{ "text": "" }` means *no label*
+— the definer chose none rather than forgot one. A `group_label` is off unless declared. An unknown placement
 or orientation, a `{rank}` outside a `group_label`, or an unreadable `when` fails the
 definition.
 
@@ -284,6 +286,31 @@ Worked examples:
 A `place` overrides `placement`. Explicit means explicit: two badges placed on the same
 spot overlap. Colour (`color`, `text_color`) and `orientation` apply as before.
 
+#### `slots`
+
+With `"group_layout": "slots"`, the definition writes the strip out: which slots, in what
+order, holding what, saying what while empty.
+
+```json
+"slots": [
+  { "match": { "rank": "3", "color": "red" }, "label": "3" },
+  { "match": { "rank": "4" },  "label": "4" },
+  { "match": { "rank": "A" },  "label": "A" },
+  { "match": { "wild": true }, "label": "W" }
+]
+```
+
+`match` is a [card match](#on_receive--rules-that-fire-as-cards-arrive). A group goes in
+the **first** slot whose match fits its *defining natural rank* — a meld of 4s with two
+wilds in it is a meld of 4s, and goes where 4s go, so a slot for 4s needs no mention of
+wilds. A group with no natural card matches by `wild: true`; that is how a wilds-only slot
+is declared. A group no slot claims is not drawn in the strip. `label` is shown while the
+slot is empty; omitted, an empty slot shows nothing.
+
+A slot may hold cards that are not melds. Hand and Foot's red threes are filed into the
+`3` slot by an `on_receive` rule on the hand and scored by `scoring.bonus_cards`; a group
+of a rank the phase bars from melding is never a meld and never a book, whatever its size.
+
 ### `card_scale`
 
 Card size in this zone relative to the table's base card: `1.4` draws them larger,
@@ -320,8 +347,10 @@ Replacements are themselves subject to the rules, so a red three drawn to replac
 three leaves too. A rule matching nothing, or naming a zone the definition does not
 declare, fails the definition.
 
-Cards set aside this way can score: `scoring.pile_bonuses: { "threes": 100 }` pays that
-many points per card in the side's zone of that name.
+Cards set aside this way can score, for where they are rather than for being melded:
+`scoring.bonus_cards: [ { "card": { "rank": "3", "color": "red" }, "in": "meld", "points": 100 } ]`
+pays that many points per matching card in the side's zone of that name, and leaves those
+cards out of the zone's meld value so they are not paid twice.
 
 ### `layout` — where the zone sits on the table
 
@@ -363,7 +392,8 @@ How groups are placed within a grouped zone:
 | Value | Layout |
 |---|---|
 | `"flow"` | In the order laid, wrapping onto rows (default) |
-| `"by_rank"` | Every rank in the deck gets a fixed slot, in deck order, with a wild slot last when the game has wilds. A rank with no meld yet shows as its name — so which melds a side does *not* have is read at a glance |
+| `"by_rank"` | Shorthand for `slots`: one slot per natural rank in the deck, in deck order, labelled with the rank, and a `W` slot last when the game has wilds |
+| `"slots"` | The strip as the definition writes it — see below |
 
 `by_rank` pairs naturally with `"arrangement": "stack"`, giving one card's width per rank
 with the counts in badges. Slots wrap onto rows as the zone's width allows.
@@ -902,6 +932,29 @@ should be added when a game actually calls for it — not before.
   "meld_top_card"`, but the obligation vocabulary has exactly that one entry. "You must
   discard a card of the suit led", "you must pass three cards" would each need another.
 - **Continuous or simultaneous play.** Every phase assumes turns.
+
+### Still decided in code
+
+The rule is that the whole game lives in the definition and only the computer players
+live in code. Where the table still falls short of that, by name, so it is a list to work
+down and not a surprise:
+
+- **Status and log text.** "Your turn — Draw a card", "Meld laid!", "3s cannot be
+  melded", the game-log lines. Every message a phase handler produces is C# text.
+- **Action button labels.** "Lay Meld", "Add to Meld", "Discard", "Draw from Deck",
+  "Go Out" are named by the handlers that offer them.
+- **Player names.** "Player 1" and so on when `players.names` is not given; the seat
+  the person at the screen takes (always seat 0, always the bottom edge).
+- **Region geometry.** What `center`, `seat`, `seat-front` mean in percentages is a
+  table in the layout engine. An exact `place` sidesteps it; the presets themselves are
+  not yet declarable.
+- **Default arrangements and hints.** A deck stacks, a hand fans, a spread lays out
+  full, when the zone does not say. Sensible, but a decision.
+- **The colours and typefaces of everything but badges.** Labels, slot names, empty
+  slots, the turn glow, card faces and backs come from the theme and skin, chosen in
+  settings, not per game.
+- **Fifteen games on the hand-tuned layout.** Every game other than Hand and Foot is
+  still placed by the old engine until its definition declares a `layout`.
 
 ---
 

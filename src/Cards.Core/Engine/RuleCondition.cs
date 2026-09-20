@@ -183,14 +183,16 @@ public static class RuleCondition
     /// </summary>
     public static int CountBooks(Zone melds, GameState state, string kind = "any")
     {
-        int bookSize = ScoringEngine.BookSize(state.Definition);
-        var wilds    = MeldRules.WildRanks(state.Definition);
-        int count    = 0;
+        int bookSize   = ScoringEngine.BookSize(state.Definition);
+        var wilds      = MeldRules.WildRanks(state.Definition);
+        var unmeldable = MeldRules.UnmeldableRanks(state);
+        int count      = 0;
 
         for (int i = 0; i < melds.Groups.Count; i++)
         {
             var group = melds.GroupCards(i);
             if (group.Count < bookSize) continue;
+            if (!MeldRules.IsMeldGroup(group, wilds, unmeldable)) continue;   // filed cards, not a meld
 
             bool hasWild = group.Any(c => MeldRules.IsWild(c, wilds));
             bool counts = kind switch

@@ -42,7 +42,7 @@ public static class ZoneIntake
 
                 zone.Remove(card);
                 card.IsFaceUp = true;
-                to.Add(card);
+                FileInto(state, to, card, wilds);
                 moved = true;
 
                 if (rule.ReplaceFrom is { } fromId
@@ -59,6 +59,37 @@ public static class ZoneIntake
 
             if (!moved) return;
         }
+    }
+
+    /// <summary>
+    /// Puts a card where the target zone keeps things. A zone with slots or groups
+    /// takes it as a group — joining the group already in its slot, or opening one —
+    /// so red threes sent to the meld strip pile up in the 3s slot instead of lying
+    /// loose in a zone that thinks in melds. A plain pile just takes the card.
+    /// </summary>
+    private static void FileInto(GameState state, Zone to, Card card, HashSet<Rank> wilds)
+    {
+        var slots = ZoneSlots.For(to, state);
+        if (slots.Count == 0 && !to.HasGroups)
+        {
+            to.Add(card);
+            return;
+        }
+
+        int slot = ZoneSlots.SlotOf(slots, card, wilds);
+        for (int g = 0; g < to.Groups.Count; g++)
+        {
+            var group = to.GroupCards(g);
+            bool sameHome = slots.Count > 0
+                ? ZoneSlots.SlotOf(slots, group, wilds) == slot && slot >= 0
+                : group.Count > 0 && group[0].Rank == card.Rank;
+            if (sameHome)
+            {
+                to.AddToGroup(g, card);
+                return;
+            }
+        }
+        to.AddGroup([card]);
     }
 
     /// <summary>

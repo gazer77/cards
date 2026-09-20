@@ -713,10 +713,10 @@ public static class ScoringEngine
                 var meldZone = state.FindZone($"meld:{team.Id}");
                 if (meldZone is not null)
                 {
-                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus, BookSize(state.Definition));
+                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus, BookSize(state.Definition), scoring, MeldRules.UnmeldableRanks(state));
                 }
 
-                pts += ScoreBonusPiles(state, scoring, team.Id);
+                pts += ScoreBonusCards(state, scoring, team.Id);
 
                 // Deduct card values for cards remaining in each player's hand.
                 foreach (var pid in team.PlayerIds)
@@ -745,9 +745,9 @@ public static class ScoringEngine
 
                 var meldZone = state.FindZone($"meld:{p.Id}") ?? state.FindZone("meld");
                 if (meldZone is not null)
-                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus, BookSize(state.Definition));
+                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus, BookSize(state.Definition), scoring, MeldRules.UnmeldableRanks(state));
 
-                pts += ScoreBonusPiles(state, scoring, p.Id);
+                pts += ScoreBonusCards(state, scoring, p.Id);
 
                 var hand = state.FindZone($"hand:{p.Id}") ?? state.FindZone("hand");
                 if (hand is not null)
@@ -797,9 +797,11 @@ public static class ScoringEngine
     /// </summary>
     private static int ScoreMeldZone(
         Zone zone, MeldCardValues values, HashSet<string> wildCards,
-        int natCanBonus, int wildCanBonus, int bookSize)
+        int natCanBonus, int wildCanBonus, int bookSize, ScoringDefinition scoring,
+        HashSet<Rank> unmeldable)
     {
-        int pts = zone.Cards.Sum(c => values.GetValue(c));
+        // Cards a bonus rule pays for are not meld value as well.
+        int pts = zone.Cards.Where(c => !IsBonusCard(scoring, zone, c)).Sum(c => values.GetValue(c));
 
         bool IsWildCard(Card c) =>
             c.IsWild ||
@@ -818,6 +820,8 @@ public static class ScoringEngine
             {
                 var meld = zone.GroupCards(i);
                 if (meld.Count < bookSize) continue;
+                // A group of filed cards (red threes in their slot) is not a meld, so not a book.
+                if (!meld.Any(c => !IsWildCard(c) && !unmeldable.Contains(c.Rank))) continue;
 
                 int wildsInMeld = meld.Count(IsWildCard);
                 if (wildsInMeld > maxWildsPerCanasta) continue;
@@ -871,25 +875,58 @@ public static class ScoringEngine
     /// proposed meld before allowing it, and must price it exactly as the round will.
     /// </summary>
     /// <summary>
-    /// Points for cards set aside in bonus piles, declared as
-    /// <c>scoring.pile_bonuses: { "threes": 100 }</c> — so many points per card in the
-    /// side's zone of that name. Hand and Foot's red threes, which score for being
-    /// collected rather than for being melded.
+    /// Cards that score for where they ARE rather than for being melded, declared as
+    /// <c>scoring.bonus_cards: [ { "card": {...}, "in": "meld", "points": 100 } ]</c>
+    /// — Hand and Foot's red threes, filed into the meld strip and worth 100 each
+    /// there. A card that scores this way is left out of the zone's meld value, or it
+    /// would be paid twice, once as a bonus and once at its card value.
     /// </summary>
-    private static int ScoreBonusPiles(GameState state, ScoringDefinition scoring, string ownerId)
+    private static int ScoreBonusCards(GameState state, ScoringDefinition scoring, string ownerId)
     {
-        if (scoring.Extra?.TryGetValue("pile_bonuses", out var piles) != true
-            || piles.ValueKind != JsonValueKind.Object)
-            return 0;
-
         int pts = 0;
-        foreach (var pile in piles.EnumerateObject())
+        foreach (var (match, zoneBase, points) in BonusCardRules(scoring))
         {
-            if (pile.Value.ValueKind != JsonValueKind.Number) continue;
-            var zone = state.FindZone($"{pile.Name}:{ownerId}") ?? state.FindZone(pile.Name);
-            if (zone is not null) pts += zone.Count * pile.Value.GetInt32();
+            var zone = state.FindZone($"{zoneBase}:{ownerId}") ?? state.FindZone(zoneBase);
+            if (zone is null) continue;
+            pts += zone.Cards.Count(c => Fits(match, c)) * points;
         }
         return pts;
+    }
+
+    private static List<(CardMatch Match, string Zone, int Points)> BonusCardRules(ScoringDefinition scoring)
+    {
+        var rules = new List<(CardMatch, string, int)>();
+        if (scoring.Extra?.TryGetValue("bonus_cards", out var list) != true
+            || list.ValueKind != JsonValueKind.Array)
+            return rules;
+
+        foreach (var entry in list.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object) continue;
+            var match = entry.TryGetProperty("card", out var c)
+                ? JsonSerializer.Deserialize<CardMatch>(c.GetRawText()) ?? new CardMatch()
+                : new CardMatch();
+            string zone = entry.TryGetProperty("in", out var z) ? z.GetString() ?? "" : "";
+            int points  = entry.TryGetProperty("points", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetInt32() : 0;
+            if (zone.Length > 0) rules.Add((match, zone, points));
+        }
+        return rules;
+    }
+
+    /// <summary>Whether a card is one a bonus rule pays for in this zone — and so not meld value.</summary>
+    private static bool IsBonusCard(ScoringDefinition scoring, Zone zone, Card card)
+    {
+        string baseId = zone.Id.Split(':')[0];
+        return BonusCardRules(scoring).Any(r => r.Zone == baseId && Fits(r.Match, card));
+    }
+
+    private static bool Fits(CardMatch m, Card card)
+    {
+        if (m.Rank is { } rank && MeldRules.ParseRank(rank) != card.Rank) return false;
+        if (m.Color is { } color && card.IsRed != color.Equals("red", StringComparison.OrdinalIgnoreCase)) return false;
+        if (m.Suit is { } suit && !card.Suit.ToString().Equals(suit, StringComparison.OrdinalIgnoreCase)) return false;
+        if (m.Wild is { } wild && card.IsWild != wild) return false;
+        return true;
     }
 
     /// <summary>

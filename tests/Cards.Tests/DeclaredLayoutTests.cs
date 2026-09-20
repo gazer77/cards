@@ -67,11 +67,11 @@ public sealed class DeclaredLayoutTests
         var state   = HandAndFoot(2);
         var layouts = ZoneLayoutEngine.Compute(state, Canvas);
 
-        // The meld area is declared at x 46%, y 70%, 78% wide, 26% high — for the bottom seat.
+        // The meld area is declared at x 50%, y 70%, 86% wide, 26% high — for the bottom seat.
         var meld = Layout(layouts, "meld:player0").Bounds;
-        Assert.Equal(0.46f * Canvas.Width,  meld.MidX,   1f);
+        Assert.Equal(0.50f * Canvas.Width,  meld.MidX,   1f);
         Assert.Equal(0.70f * Canvas.Height, meld.MidY,   1f);
-        Assert.Equal(0.78f * Canvas.Width,  meld.Width,  1f);
+        Assert.Equal(0.86f * Canvas.Width,  meld.Width,  1f);
         Assert.Equal(0.26f * Canvas.Height, meld.Height, 1f);
 
         // The same declaration, turned for the seat across: x and y both reflected.

@@ -21,5 +21,11 @@ public sealed record ZoneLayout(
     bool FaceUp,
     float RotationDegrees,    // 0, 90, 180, or 270 for side players
     string? Label,
-    bool IsCurrentPlayer
+    bool IsCurrentPlayer,
+    /// <summary>
+    /// Quarter turns from the bottom seat to the seat this zone faces: 0 bottom, 1 right,
+    /// 2 top, 3 left. Decorations declared relative to the cards ("bottom" = toward the
+    /// player) are turned by this, so a label under my melds is over the opponent's.
+    /// </summary>
+    int SeatQuarterTurns = 0
 );

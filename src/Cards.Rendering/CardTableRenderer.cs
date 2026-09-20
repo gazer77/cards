@@ -694,6 +694,7 @@ public sealed class CardTableRenderer
     {
         bool rotated = layout.RotationDegrees != 0f;
         _recordCardRects = !rotated;
+        _seatTurns       = layout.SeatQuarterTurns;
 
         if (rotated)
         {
@@ -760,7 +761,7 @@ public sealed class CardTableRenderer
     }
 
     private void DrawEmptyZone(SKCanvas canvas, ZoneLayout layout)
-        => CardRenderer.DrawEmptySlot(canvas, CenterCardRect(layout), _theme, layout.Zone.Id.ToUpper());
+        => CardRenderer.DrawEmptySlot(canvas, CenterCardRect(layout), _theme);   // the label, if any, is drawn with the zone
 
     private void DrawFilledZone(SKCanvas canvas, ZoneLayout layout)
     {
@@ -1173,31 +1174,19 @@ public sealed class CardTableRenderer
 
         var wilds = MeldRules.WildRanks(_state.Definition);
 
-        IReadOnlyList<Rank> deckRanks;
-        int jokers;
-        try
-        {
-            var spec  = DeckSpec.Parse(_state.Definition.Deck, _state.Players.Count);
-            deckRanks = spec.Ranks;
-            jokers    = spec.Jokers;
-        }
-        catch (FormatException) { return; }   // a definition that loaded validated this
-
-        // Natural ranks in deck order; wild ranks are not slots of their own since a
-        // meld of them has no rank to be of — they join the single wild slot.
-        var slotRanks = deckRanks.Where(r => !wilds.Contains(r)).ToList();
-        bool wildSlot = jokers > 0 || wilds.Count > 0;
-        int  slots    = slotRanks.Count + (wildSlot ? 1 : 0);
+        // The strip is the definition's: which slots, in what order, holding what,
+        // saying what while empty. by_rank is the shorthand for one of each.
+        var slotDefs = ZoneSlots.For(zone, _state);
+        int slots    = slotDefs.Count;
         if (slots == 0) return;
 
-        // Which group sits in which slot.
+        // Which group sits in which slot — the same resolver intake files cards by.
         var bySlot = new Dictionary<int, IReadOnlyList<Card>>();
         for (int g = 0; g < zone.Groups.Count; g++)
         {
             var meld = zone.GroupCards(g);
             if (meld.Count == 0) continue;
-            var natural = meld.FirstOrDefault(c => !MeldRules.IsWild(c, wilds));
-            int slot    = natural is null ? slotRanks.Count : slotRanks.IndexOf(natural.Rank);
+            int slot = ZoneSlots.SlotOf(slotDefs, meld, wilds);
             if (slot >= 0 && !bySlot.ContainsKey(slot)) bySlot[slot] = meld;
         }
 
@@ -1246,15 +1235,14 @@ public sealed class CardTableRenderer
             float y    = y0 + row * (rowH + rowGap);
             var   rect = new SKRect(x, y, x + cardW, y + cardH);
 
-            string name = s < slotRanks.Count ? MeldRules.RankDisplayName(slotRanks[s]) : "W";
-            if (name.Length > 2) name = name[..1];   // Jack → J in a slot this small
+            string name = slotDefs[s].Label ?? "";
 
             if (bySlot.TryGetValue(s, out var meld))
             {
                 DrawCardRun(canvas, meld, rect, cardW, arrangement);
                 if (caption is not null)
                     DrawPlacedLabel(canvas, rect,
-                        FillLabel(caption.Text, zone, s < slotRanks.Count ? MeldRules.RankDisplayName(slotRanks[s]) : "Wild", meld.Count),
+                        FillLabel(caption.Text, zone, slotDefs[s].Label ?? "", meld.Count),
                         cardW * 0.16f, caption);
                 DrawGroupBadges(canvas, zone, rect, meld.Count, cardW);
             }
@@ -1262,8 +1250,11 @@ public sealed class CardTableRenderer
             {
                 // An empty slot names its rank, faintly: a promise of where the meld
                 // will go, not a card.
-                float tw = rankFont.MeasureText(name);
-                canvas.DrawText(name, rect.MidX - tw / 2f, rect.MidY + cardW * 0.15f, rankFont, rankPaint);
+                if (name.Length > 0)
+                {
+                    float tw = rankFont.MeasureText(name);
+                    canvas.DrawText(name, rect.MidX - tw / 2f, rect.MidY + cardW * 0.15f, rankFont, rankPaint);
+                }
                 DrawGroupBadges(canvas, zone, rect, 0, cardW);
             }
         }
@@ -1505,6 +1496,51 @@ public sealed class CardTableRenderer
     }
 
     private bool? _allSelectable;
+
+    /// <summary>
+    /// Quarter turns to the seat the zone being drawn faces. Placements and places are
+    /// declared relative to the cards as their owner sees them, and turned by this on
+    /// the way to the screen — so "bottom" is toward the player at every seat.
+    /// </summary>
+    private int _seatTurns;
+
+    private string TurnSide(string side)
+    {
+        string[] ring = ["bottom", "left", "top", "right"];   // clockwise from the player
+        int i = Array.IndexOf(ring, side);
+        return i < 0 ? side : ring[(i + _seatTurns) % 4];
+    }
+
+    /// <summary>Turns a card-relative place the way the seat is turned. Percent maths only.</summary>
+    private Cards.Models.PlaceDefinition TurnPlace(Cards.Models.PlaceDefinition p)
+    {
+        if (_seatTurns == 0) return p;
+        float x = Percent(p.X, 0.5f), y = Percent(p.Y, 0.5f);
+        string? w = p.Width, h = p.Height;
+        string anchor = p.Anchor;
+        for (int t = 0; t < _seatTurns; t++)
+        {
+            // One quarter turn clockwise about the card centre.
+            (x, y) = (1f - y, x);
+            (w, h) = (h, w);
+            anchor = TurnAnchor(anchor);
+        }
+        return new Cards.Models.PlaceDefinition
+        {
+            X = Pct(x), Y = Pct(y), Anchor = anchor, Width = w, Height = h,
+            TextAlign = p.TextAlign, VerticalAlign = p.VerticalAlign,
+        };
+    }
+
+    private static string TurnAnchor(string anchor) => anchor switch
+    {
+        "top-left" => "top-right", "top" => "right", "top-right" => "bottom-right",
+        "right" => "bottom", "bottom-right" => "bottom-left", "bottom" => "left",
+        "bottom-left" => "top-left", "left" => "top", _ => anchor,
+    };
+
+    private static string Pct(float f)
+        => (f * 100f).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "%";
 
     private void DrawCardInteractiveHint(SKCanvas canvas, SKRect rect, string cardId, int uid = -1)
     {
@@ -1839,7 +1875,9 @@ public sealed class CardTableRenderer
         // A declared caption wins over the renderer's default, and may decline to show.
         if (layout.Zone.Label is { } declared)
         {
-            if (!LabelApplies(declared)) return;
+            // A declared empty caption is a way of saying "none": the definer chose no
+            // label rather than forgetting one, and gets no fallback.
+            if (declared.Text.Length == 0 || !LabelApplies(declared)) return;
             string text = FillLabel(declared.Text, layout.Zone, rank: null);
             // A zone label is placed against its cards, not its band — the band can be
             // far larger than the cards in it.
@@ -1888,7 +1926,7 @@ public sealed class CardTableRenderer
         SKCanvas canvas, SKRect target, string text, float size,
         Cards.Models.ZoneLabelDefinition label)
     {
-        string placement   = label.Placement;
+        string placement   = TurnSide(label.Placement);
         string orientation = label.Orientation;
 
         using var paint = new SKPaint { Color = _theme.PlayerNameColor, IsAntialias = true };
@@ -1897,8 +1935,9 @@ public sealed class CardTableRenderer
         float gap = size * 0.5f;
 
         // An exact place wins over the four-sided placement.
-        if (label.Place is { } place)
+        if (label.Place is { } declaredPlace)
         {
+            var place = TurnPlace(declaredPlace);
             var box = ResolvePlace(place, target, w + size, size * 1.4f);
             float deg = orientation switch { "vertical" => -90f, "angled" => -30f, _ => 0f };
             canvas.Save();
@@ -1984,7 +2023,8 @@ public sealed class CardTableRenderer
             float gap   = size * 0.35f;
 
             SKRect pill;
-            var    place = badge.Place;
+            var    place = badge.Place is { } declaredPlace ? TurnPlace(declaredPlace) : null;
+            string side  = TurnSide(badge.Placement);
             if (place is not null)
             {
                 // An exact position in the cards' proportions. Explicit placement means
@@ -1993,11 +2033,11 @@ public sealed class CardTableRenderer
             }
             else
             {
-                float along = cursor.GetValueOrDefault(badge.Placement, 0f);
+                float along = cursor.GetValueOrDefault(side, 0f);
 
                 // Anchor: the badge row hugs the group's edge on the chosen side and grows
                 // rightwards (top/bottom) or downwards (left/right) as badges accumulate.
-                pill = badge.Placement switch
+                pill = side switch
                 {
                     "top"   => new SKRect(group.Left + along, group.Top - pillH - gap,
                                           group.Left + along + pillW, group.Top - gap),
@@ -2008,7 +2048,7 @@ public sealed class CardTableRenderer
                     _       => new SKRect(group.Left + along, group.Bottom + gap,
                                           group.Left + along + pillW, group.Bottom + gap + pillH),
                 };
-                cursor[badge.Placement] = along + (badge.Placement is "left" or "right" ? pillH : pillW) + gap;
+                cursor[side] = along + (side is "left" or "right" ? pillH : pillW) + gap;
             }
 
             float degrees = badge.Orientation switch { "vertical" => -90f, "angled" => -30f, _ => 0f };

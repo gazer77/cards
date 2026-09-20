@@ -266,14 +266,12 @@ public static class DeclaredLayoutEngine
                      || (zone.Visibility is "owner" or "mixed" && mine)
                      || revealed;
 
+        // What the table says about a zone is the definition's to say. With no label
+        // declared, an owned zone falls back to its owner's name and a shared zone to
+        // nothing — the renderer invents no words of its own.
         string? label = owned
             ? (owner?.Name ?? state.Teams.FirstOrDefault(t => t.Id == zone.OwnerId)?.Name)
-            : DefaultLabel(zone.Id);
-
-        // Hands are the only zone whose label is the seat name; other owned zones say
-        // what they are, unless the definition captions them itself.
-        if (owned && zone.Type != "hand" && zone.Definition?.Label is null)
-            label = $"{label} {zone.Id.Split(':')[0].ToUpperInvariant()}";
+            : null;
 
         bool current = owner is not null && state.CurrentPlayer.Id == owner.Id;
 
@@ -282,7 +280,8 @@ public static class DeclaredLayoutEngine
             FaceUp: faceUp,
             RotationDegrees: revealed ? 0f : (zone.Type == "hand" ? seat.Rotation : 0f),
             Label: label,
-            IsCurrentPlayer: current && zone.Type == "hand");
+            IsCurrentPlayer: current && zone.Type == "hand",
+            SeatQuarterTurns: owned ? (int)(seat.Rotation / 90f) : 0);
     }
 
     private static bool IsShowdownRevealed(GameState state, string playerId)
@@ -298,10 +297,5 @@ public static class DeclaredLayoutEngine
         "hand"  => ZoneRenderHint.Fan,
         "trick" or "spread" or "grid" => ZoneRenderHint.Spread,
         _       => ZoneRenderHint.Stack,
-    };
-
-    private static string? DefaultLabel(string zoneId) => zoneId switch
-    {
-        "deck" => "DECK", "discard" => "DISCARD", "won_tricks" => "TRICKS", _ => null,
     };
 }

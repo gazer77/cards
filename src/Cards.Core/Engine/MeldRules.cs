@@ -101,6 +101,30 @@ public static class MeldRules
     public static Rank MeldRankOf(IReadOnlyList<Card> meld, HashSet<Rank> wildRanks)
         => meld.First(c => !IsWild(c, wildRanks)).Rank;
 
+    /// <summary>
+    /// Ranks the current phase bars from melding, read off the definition so that
+    /// scoring and conditions — which see only the state — agree with the handler. A
+    /// group of such cards (red threes filed into the meld strip) is never a meld and
+    /// never a book, whatever its size.
+    /// </summary>
+    public static HashSet<Rank> UnmeldableRanks(GameState state)
+    {
+        var ranks = new HashSet<Rank>();
+        var phase = state.Definition?.Phases.FirstOrDefault(p => p.Id == state.CurrentPhaseId)
+                 ?? state.Definition?.Phases.FirstOrDefault();
+        if (phase?.Extra?.TryGetValue("unmeldable_ranks", out var el) == true
+            && el.ValueKind == System.Text.Json.JsonValueKind.Array)
+            foreach (var item in el.EnumerateArray())
+                if (item.ValueKind == System.Text.Json.JsonValueKind.String
+                    && ParseRank(item.GetString() ?? "") is { } r)
+                    ranks.Add(r);
+        return ranks;
+    }
+
+    /// <summary>Whether a group is a meld at all: it has a natural card of a rank that may be melded.</summary>
+    public static bool IsMeldGroup(IReadOnlyList<Card> group, HashSet<Rank> wilds, HashSet<Rank> unmeldable)
+        => group.Any(c => !IsWild(c, wilds) && !unmeldable.Contains(c.Rank));
+
     /// <summary>A rank the way a player says it: "4", "Jack", "Ace".</summary>
     public static string RankDisplayName(Rank rank) => rank switch
     {

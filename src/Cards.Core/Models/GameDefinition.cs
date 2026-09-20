@@ -219,11 +219,21 @@ public class ZoneDefinition
 
     /// <summary>
     /// How groups are placed within the zone. "flow" (default) lays them in the order
-    /// laid, wrapping; "by_rank" gives every rank a fixed slot, empty ones showing the
-    /// rank, so a player can see at a glance which melds a side does not have yet.
+    /// laid, wrapping; "by_rank" gives every rank in the deck a fixed slot, wild slot
+    /// last — shorthand for a <see cref="Slots"/> list the definition did not want to
+    /// write out; "slots" uses the list.
     /// </summary>
     [JsonPropertyName("group_layout")]
     public string GroupLayout { get; set; } = "flow";
+
+    /// <summary>
+    /// The fixed slots of a grouped zone, in order, when <c>group_layout</c> is
+    /// "slots": which cards each holds and what it says while empty. Written out, a
+    /// definition controls the whole strip — order, which ranks exist, where the wilds
+    /// go, a slot for cards set aside like red threes.
+    /// </summary>
+    [JsonPropertyName("slots")]
+    public List<SlotDefinition> Slots { get; set; } = [];
 }
 
 /// <summary>
@@ -708,4 +718,22 @@ public class ZoneLayoutDefinition
 
     [JsonPropertyName("place")]
     public PlaceDefinition? Place { get; set; }
+}
+
+/// <summary>
+/// One fixed slot in a grouped zone, and which cards belong in it.
+///
+/// A group is matched by its defining natural rank — a meld of 4s with two wilds in it
+/// is a meld of 4s, and goes where 4s go. A group with no natural card is matched by
+/// <c>wild: true</c>; that is how a wilds-only slot is declared, and why a slot for
+/// "4s" needs no mention of wilds. The first slot whose match fits wins.
+/// </summary>
+public class SlotDefinition
+{
+    [JsonPropertyName("match")]
+    public CardMatch Match { get; set; } = new();
+
+    /// <summary>Shown in the slot while it is empty. Omitted, the slot shows nothing.</summary>
+    [JsonPropertyName("label")]
+    public string? Label { get; set; }
 }

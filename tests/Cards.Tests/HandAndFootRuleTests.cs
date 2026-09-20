@@ -22,6 +22,17 @@ public sealed class HandAndFootRuleTests
         };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, seats, []);
+
+        // The deal files red threes into the meld strip, and melding a whole stacked
+        // hand picks the foot up, filing its red threes too. Both are right and tested
+        // in ZoneIntakeTests; here they would put groups in the strip these rule tests
+        // did not lay. Strips start clear, and feet hold no red threes.
+        foreach (var zone in state.Zones.Values.Where(z => z.Id.StartsWith("meld")))
+            zone.Clear();
+        foreach (var foot in state.Zones.Values.Where(z => z.Id.StartsWith("foot")))
+            foreach (var three in foot.Cards.Where(c => c.Rank == Rank.Three && c.IsRed).ToList())
+                foot.Remove(three);
+
         return (state, logic);
     }
 

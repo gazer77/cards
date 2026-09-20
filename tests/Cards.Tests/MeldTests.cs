@@ -35,6 +35,15 @@ public sealed class MeldTests
 
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, seats, []);
+
+        // These tests are about melding. The deal files any red threes into the meld
+        // strip as a group of their own, which is correct and tested elsewhere; here
+        // it would make every count off by one, so the strips start clear.
+        // Feet too: stacking and melding a whole hand picks the foot up, and a red
+        // three in it would file itself into the strip mid-test.
+        foreach (var zone in state.Zones.Values.Where(z => z.Id.StartsWith("meld") || z.Id.StartsWith("foot")))
+            zone.Clear();
+
         return (state, logic);
     }
 
@@ -104,6 +113,8 @@ public sealed class MeldTests
 
     /// <summary>Melds laid since the table was opened.</summary>
     private static int MeldsLaid(GameState state) => Melds(state).Groups.Count - 1;
+
+    private static int MeldGroups(GameState state) => Melds(state).Groups.Count;
 
     [Fact]
     public void Three_of_a_rank_is_a_meld()
@@ -182,7 +193,7 @@ public sealed class MeldTests
 
         // Two melds, not one pile of six — which is what add-to-meld and canasta
         // detection both depend on.
-        Assert.Equal(3, Melds(state).Groups.Count);   // aces, sevens, kings
+        Assert.Equal(3, MeldGroups(state));   // aces, sevens, kings
         Assert.All(Melds(state).Groups, g => Assert.Equal(3, g.Count));
     }
 
@@ -257,12 +268,12 @@ public sealed class MeldTests
         // Tens are 10 each: 30 alone, refused. With queens it is 60.
         Lay(state, logic, Stack(state,
             (Rank.Ten, Suit.Clubs), (Rank.Ten, Suit.Hearts), (Rank.Ten, Suit.Spades)));
-        Assert.Equal(0, Melds(state).Groups.Count);
+        Assert.Equal(0, MeldGroups(state));
 
         Lay(state, logic, Stack(state,
             (Rank.Ten, Suit.Clubs), (Rank.Ten, Suit.Hearts), (Rank.Ten, Suit.Spades),
             (Rank.Queen, Suit.Clubs), (Rank.Queen, Suit.Hearts), (Rank.Queen, Suit.Spades)));
-        Assert.Equal(2, Melds(state).Groups.Count);
+        Assert.Equal(2, MeldGroups(state));
     }
 
     [Fact]
@@ -304,7 +315,7 @@ public sealed class MeldTests
             (Rank.Ace, Suit.Diamonds), (Rank.Ace, Suit.Clubs), (Rank.Ace, Suit.Hearts)));
 
         // One meld of six aces, not two meld groups of the same rank.
-        Assert.Equal(1, Melds(state).Groups.Count);
+        Assert.Equal(1, MeldGroups(state));
         Assert.Equal(6, Melds(state).GroupCards(0).Count);
     }
 
@@ -337,7 +348,7 @@ public sealed class MeldTests
         state.Metadata["selected_card"] = wild[0].Id;
         logic.Apply(state, new GameAction("add_to_meld"));
 
-        Assert.Equal(1, Melds(state).Groups.Count);
+        Assert.Equal(1, MeldGroups(state));
         Assert.Equal(4, Melds(state).GroupCards(0).Count);
         Assert.Empty(Hand(state).Cards);
     }
@@ -375,7 +386,7 @@ public sealed class MeldTests
         logic.Apply(state, new GameAction("add_to_meld"));
 
         // The old path quietly created a one-card "meld".
-        Assert.Equal(1, Melds(state).Groups.Count);
+        Assert.Equal(1, MeldGroups(state));
         Assert.Single(Hand(state).Cards);
     }
 
