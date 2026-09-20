@@ -696,6 +696,20 @@ public sealed class CardTableRenderer
         _recordCardRects = !rotated;
         _seatTurns       = layout.SeatQuarterTurns;
 
+        // A zone turned a quarter draws in its own frame, so its bounds must be its own
+        // too: a side seat's band is tall and narrow on screen and wide and short to the
+        // player sitting there. Without this a side hand fanned across 168 px and looked
+        // like a stack, and its label landed wherever "above" happened to point.
+        if (layout.RotationDegrees is 90f or 270f)
+        {
+            var b = layout.Bounds;
+            layout = layout with
+            {
+                Bounds = new SKRect(b.MidX - b.Height / 2f, b.MidY - b.Width / 2f,
+                                    b.MidX + b.Height / 2f, b.MidY + b.Width / 2f),
+            };
+        }
+
         if (rotated)
         {
             canvas.Save();
@@ -712,6 +726,11 @@ public sealed class CardTableRenderer
         // A by-rank zone is never "empty": its slots are the picture, melds or not.
         if (layout.Zone.Definition?.GroupLayout == "by_rank")
             DrawRankSlots(canvas, layout);
+        else if (layout.Zone.Type == "pot")
+        {
+            // A pot holds chips, not cards. The status line carries the amount; an empty
+            // card slot where no card will ever go says nothing.
+        }
         else if (layout.Zone.IsEmpty || layout.Hint == ZoneRenderHint.Empty)
             DrawEmptyZone(canvas, layout);
         else
@@ -1912,7 +1931,8 @@ public sealed class CardTableRenderer
         {
             // A hand pinned to the band's bottom edge has no room below it, and a name
             // drawn there was covered by the cards. It sits above the fan instead, at
-            // the left, where nothing else lives.
+            // the left, where nothing else lives. In a turned zone's own frame "above"
+            // is toward the table, so this holds at every seat.
             x = cards.Left;
             y = cards.Top - labelSz * 0.6f;
         }

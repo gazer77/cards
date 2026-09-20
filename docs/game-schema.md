@@ -364,7 +364,7 @@ differently.
 
 | Shared zones | Owned zones (`each_player` / `each_team`) |
 |---|---|
-| `center`, `center-left`, `center-right`, `center-top`, `center-bottom` | `seat` (the owner's edge — where a hand goes), `seat-front` (the strip inboard of it — melds), `seat-side`, `seat-corner` |
+| `center`, `center-left`, `center-right`, `center-top`, `center-bottom` | `seat` (the owner's edge — where a hand goes), `seat-front` (the strip inboard of it — melds), `seat-play` (a spot in the compass around the centre — a trick), `seat-side`, `seat-corner` |
 
 Zones sharing a region sit side by side in declaration order, dividing it between them.
 
@@ -386,13 +386,19 @@ The regions are laid out so they cannot collide: seats 1–13% and 87–99% of t
 fronts 15–35% and 65–85%, the centre 40–60%; seats are 72% wide and the centre 35–65%
 wide, so side seats and their fronts clear the corners and the middle. `center-left` and
 `center-right` sit at 14–28% and 72–86% — clear of side seats, but not of side *fronts*,
-so a game with both side seats and front zones should keep to `center`. A test lays out
-every shipped game at every seat count it advertises and fails if any zone is off the
-table or two overlap.
+so a game with both side seats and front zones should keep to `center`.
+
+A side seat's zones, turned, run the table's full height and would cross the bottom and
+top seats' zones in the corners. Each side seat is squeezed only as far as what is
+actually in its way requires — one band per seat, from the zones above and below it in
+the same columns — so a hand at the very edge keeps nearly its full run while a meld strip
+in the front band stops at the bottom seat's melds. A test lays out every shipped game at
+every seat count it advertises and fails if any zone is off the table or two overlap; a
+`TABLE_SHEET=1` test run renders every table to PNG for looking at.
 
 Defaults when a zone says nothing: shared zones go to `center`; hands to `seat`; a foot to
-`seat-corner`; melds, tables, play areas and grids to `seat-front`; anything else owned to
-`seat-side`. An unknown region, a region of the wrong kind (a shared zone asking for
+`seat-corner`; melds, tables and grids to `seat-front`; tricks and play spots to
+`seat-play`; anything else owned to `seat-side`. An unknown region, a region of the wrong kind (a shared zone asking for
 `seat`), or a layout naming neither fails the definition.
 
 ### `group_layout`

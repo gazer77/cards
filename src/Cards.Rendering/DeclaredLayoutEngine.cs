@@ -45,7 +45,7 @@ public static class DeclaredLayoutEngine
         }
 
         // Zones sharing a region (and, for owned ones, a seat) divide it between them.
-        var layouts = new List<ZoneLayout>();
+        var placed = new List<(Spot Spot, SKRect Bounds)>();
         foreach (var group in spots.GroupBy(s => (s.Region, s.Region is null ? s.Zone.Id : "", s.Seat.Index)))
         {
             var members = group.ToList();
@@ -54,19 +54,6 @@ public static class DeclaredLayoutEngine
                 var spot   = members[i];
                 var seatPx = ToSeatSpace(spot.Place, spot.Seat);
                 var bounds = ResolveTable(seatPx, table);
-
-                // A side seat's zones, turned, run the table's full height and would cross
-                // the bottom and top seats' own zones in the corners — four fronts around
-                // one centre cannot each span their whole side. Side seats keep the band
-                // between the fronts of the seats above and below them.
-                if (spot.Seat.Side is "left" or "right")
-                {
-                    bool topSeated = seats.Any(s => s.Side == "top");
-                    float yMin = H * (topSeated ? 0.36f : 0.02f);
-                    float yMax = H * 0.64f;
-                    bounds = new SKRect(bounds.Left, MathF.Max(bounds.Top, yMin),
-                                        bounds.Right, MathF.Min(bounds.Bottom, yMax));
-                }
 
                 // Sharing: split the region along its longer axis, in declaration order.
                 if (members.Count > 1)
@@ -79,8 +66,48 @@ public static class DeclaredLayoutEngine
                     bounds.Inflate(-4f, -4f);
                 }
 
-                layouts.Add(Describe(state, spot, bounds, baseCardW));
+                placed.Add((spot, bounds));
             }
+        }
+
+        // A side seat's zones, turned, run the table's full height, and would cross the
+        // bottom and top seats' zones in the corners — four fronts around one centre
+        // cannot each span their whole side. Each side zone is squeezed only as far as
+        // what is actually in its column requires: a hand at the very edge, with
+        // nothing above or below it but a small pile, keeps nearly its full run; a
+        // meld strip in the front band stops at the bottom seat's melds. The same
+        // treatment for regions and declared places, since the collision is the same.
+        var fixedObstacles = placed.Where(p => p.Spot.Seat.Side is "bottom" or "top").Select(p => p.Bounds).ToList();
+
+        // One band per side seat — the tightest any of its zones needs — so the seat's
+        // own zones keep their arrangement relative to each other. Per-zone bands let a
+        // hand and its foot land on one another.
+        var bands = new Dictionary<int, (float Min, float Max)>();
+        foreach (var (spot, bounds) in placed.Where(p => p.Spot.Seat.Side is "left" or "right"))
+        {
+            var (yMin, yMax) = bands.GetValueOrDefault(spot.Seat.Index, (0f, H));
+            foreach (var ob in fixedObstacles)
+            {
+                if (ob.Right <= bounds.Left || ob.Left >= bounds.Right) continue;   // not in this column
+                if (ob.MidY < H / 2f) yMin = MathF.Max(yMin, ob.Bottom + 4f);
+                else                  yMax = MathF.Min(yMax, ob.Top - 4f);
+            }
+            bands[spot.Seat.Index] = (yMin, yMax);
+        }
+
+        var layouts = new List<ZoneLayout>();
+        foreach (var (spot, bounds) in placed)
+        {
+            var final = bounds;
+            if (bands.TryGetValue(spot.Seat.Index, out var band)
+                && spot.Seat.Side is "left" or "right"
+                && placed.Where(p => p.Spot.Seat.Index == spot.Seat.Index)
+                         .Any(p => p.Bounds.Top < band.Min || p.Bounds.Bottom > band.Max))
+            {
+                float k = (band.Max - band.Min) / H;
+                final = new SKRect(bounds.Left, band.Min + bounds.Top * k, bounds.Right, band.Min + bounds.Bottom * k);
+            }
+            layouts.Add(Describe(state, spot, final, baseCardW));
         }
 
         return layouts;
@@ -139,15 +166,15 @@ public static class DeclaredLayoutEngine
     /// The bands are disjoint by construction: seat 1–13% and 87–99%, seat-front 15–35%
     /// and 65–85%, center 40–60%. Seats are 72% wide so a side seat's band (turned, it
     /// runs 14–86% tall) clears the corners the bottom and top seats occupy, and the
-    /// centre is 35–65% wide so side seats' fronts (turned, x 15–35% and 65–85%) clear
-    /// it, and center-left and center-right (14–28%, 72–86%) clear the side seats'
-    /// bands (1–13%, 87–99%). They do not clear side fronts: a game with side seats
+    /// centre is 37–63% wide so side seats' fronts (turned, x 15–35% and 65–85%) and the
+    /// compass of play spots around it (x 64–76% and 24–36%) clear it, and center-left
+    /// and center-right (14–28%, 72–86%) clear the side seats' bands (1–13%, 87–99%). They do not clear side fronts: a game with side seats
     /// AND front zones should not use them, and the layout test says so per game.
     /// </summary>
     private static readonly Dictionary<string, PlaceDefinition> Regions = new()
     {
         // Shared
-        ["center"]        = P("50%", "50%", "center", "30%", "20%"),
+        ["center"]        = P("50%", "50%", "center", "26%", "20%"),
         ["center-left"]   = P("21%", "50%", "center", "14%", "20%"),
         ["center-right"]  = P("79%", "50%", "center", "14%", "20%"),
         ["center-top"]    = P("50%", "45%", "center", "60%", "10%"),
@@ -157,6 +184,7 @@ public static class DeclaredLayoutEngine
         ["seat-front"]    = P("50%", "75%", "center", "56%", "20%"),
         ["seat-side"]     = P("89%", "75%", "center", "18%", "20%"),
         ["seat-corner"]   = P("6%",  "93%", "center", "10%", "12%"),
+        ["seat-play"]     = P("50%", "70%", "center", "12%", "12%"),
     };
 
     private static PlaceDefinition P(string x, string y, string anchor, string w, string h)
@@ -181,7 +209,8 @@ public static class DeclaredLayoutEngine
         {
             "hand" or "hand2" or "hand3"           => "seat",
             "foot"                                 => "seat-corner",
-            "meld" or "table" or "play" or "grid" or "trick" => "seat-front",
+            "meld" or "table" or "grid"           => "seat-front",
+            "play" or "trick"                      => "seat-play",
             _                                       => "seat-side",
         };
     }
@@ -290,7 +319,12 @@ public static class DeclaredLayoutEngine
         bool mine  = owned && seat.Index == 0;
 
         // Cards are sized to the bounds they must fit, never larger than the table's base.
-        float cardW = MathF.Min(baseCardW, MathF.Min(bounds.Width, bounds.Height / 1.4f));
+        // A zone turned a quarter is drawn in its own frame, where its width and height
+        // trade places — a side seat's band is tall on screen and wide to its player.
+        bool onSide = zone.Type == "hand" && seat.Side is "left" or "right";
+        float fitW = onSide ? bounds.Height : bounds.Width;
+        float fitH = onSide ? bounds.Width  : bounds.Height;
+        float cardW = MathF.Min(baseCardW, MathF.Min(fitW, fitH / 1.4f));
         float cardH = cardW * 1.4f;
 
         // Face-up if the zone lets everyone see, or lets its owner see and the owner is
@@ -302,9 +336,9 @@ public static class DeclaredLayoutEngine
                      || revealed;
 
         // What the table says about a zone is the definition's to say. With no label
-        // declared, an owned zone falls back to its owner's name and a shared zone to
-        // nothing — the renderer invents no words of its own.
-        string? label = owned
+        // declared, a hand falls back to its owner's name — the seat is named once — and
+        // every other zone to nothing. The renderer invents no words of its own.
+        string? label = owned && zone.Type == "hand"
             ? (owner?.Name ?? state.Teams.FirstOrDefault(t => t.Id == zone.OwnerId)?.Name)
             : null;
 
