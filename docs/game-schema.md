@@ -179,7 +179,7 @@ Zones are named areas where cards reside.
 | `hand` | Player's held cards |
 | `spread` | Face-up fan of cards (melds, community, table) |
 | `trick` | Cards played to the current trick; cleared after each trick |
-| `grid` | Fixed N×M grid of cards (Golf). `rows`/`cols` define layout. `peek_count`: after dealing, flip this many cards face-up per player (Golf's "peek at 2"). |
+| `grid` | Fixed N×M grid of cards (Golf), drawn in `rows` × `cols`, row-major, each card in a fixed cell. `peek_count`: after dealing, flip this many cards face-up per player (Golf's "peek at 2"). |
 | `pot` | Virtual zone for chips/point tracking |
 
 ### `arrangement`

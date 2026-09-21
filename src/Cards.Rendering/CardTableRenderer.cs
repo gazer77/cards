@@ -1065,10 +1065,54 @@ public sealed class CardTableRenderer
             return;
         }
 
+        if (layout.Zone.Type == "grid")
+        {
+            DrawGrid(canvas, layout);
+            return;
+        }
+
         var cards = layout.Zone.Cards;
         if (cards.Count == 0) return;
 
         DrawCardRun(canvas, cards, layout.Bounds, layout.CardWidth, ArrangementFor(layout.Zone));
+    }
+
+    /// <summary>
+    /// A grid zone's cards in the rows and columns its definition declares, row-major,
+    /// each card in a fixed cell. The definition has said <c>rows</c> and <c>cols</c>
+    /// since Golf was written and no renderer ever read them: six cards in a 2×3 grid
+    /// drew as a row of six. A cell keeps its place whether or not a card is in it, so
+    /// a swap does not shuffle the others along.
+    /// </summary>
+    private void DrawGrid(SKCanvas canvas, ZoneLayout layout)
+    {
+        var zone  = layout.Zone;
+        var cards = zone.Cards;
+        int cols  = Math.Max(1, zone.Definition?.Cols ?? 3);
+        int rows  = Math.Max(1, zone.Definition?.Rows ?? 2);
+        if (cards.Count == 0) return;
+
+        const float gap = 6f;
+
+        // The largest card that lets the whole grid fit the zone.
+        float cardW = MathF.Min(layout.CardWidth,
+            MathF.Min((layout.Bounds.Width  - gap * (cols - 1)) / cols,
+                      (layout.Bounds.Height - gap * (rows - 1)) / rows / 1.4f));
+        float cardH = cardW * 1.4f;
+
+        float gridW = cols * cardW + (cols - 1) * gap;
+        float gridH = rows * cardH + (rows - 1) * gap;
+        float left  = layout.Bounds.MidX - gridW / 2f;
+        float top   = layout.Bounds.MidY - gridH / 2f;
+        long  now   = NowMs();
+
+        for (int i = 0; i < cards.Count && i < rows * cols; i++)
+        {
+            int   r = i / cols, c = i % cols;
+            float x = left + c * (cardW + gap);
+            float y = top  + r * (cardH + gap);
+            DrawSpreadCard(canvas, cards[i], new SKRect(x, y, x + cardW, y + cardH), cardH, now);
+        }
     }
 
     /// <summary>
