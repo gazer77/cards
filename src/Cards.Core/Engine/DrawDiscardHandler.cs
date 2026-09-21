@@ -256,6 +256,25 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             return;
         }
 
+        // A flip owed after discarding the drawn card. An agent sends play_card, a tap
+        // sends select_card; both must answer the obligation, or the AI's turn — its
+        // play_card having fallen through to a discard from an empty hand — never ends.
+        if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_must_flip")
+            && action.Type is "select_card" or "play_card" && action.CardId is not null)
+        {
+            var grid = PlayerGrid(state, state.CurrentPlayer.Id);
+            var toFlip = action.CardUid is int flipUid
+                ? grid?.Cards.FirstOrDefault(c => c.Uid == flipUid)
+                : grid?.Cards.FirstOrDefault(c => c.Id == action.CardId && !c.IsFaceUp);
+            if (toFlip is null || toFlip.IsFaceUp) return;
+            toFlip.IsFaceUp = true;
+            state.Metadata.Remove("dd_must_flip");
+            state.Metadata.Remove("selected_card");
+            state.Metadata.Remove("dd_turn_state");
+            AdvanceTurn(state);
+            return;
+        }
+
         if (action.Type == "select_card" && action.CardId is { } selectId)
         {
             var current = (state.Metadata.GetValueOrDefault("selected_card") ?? "")
@@ -279,19 +298,6 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 state.Metadata.GetValueOrDefault("dd_drawn_card") == chosen.Id)
             {
                 DiscardCard(state, token);
-                return;
-            }
-
-            // A flip owed after discarding the drawn card: the tapped face-down grid
-            // card turns over and the turn ends.
-            if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_must_flip"))
-            {
-                if (chosen.IsFaceUp) return;
-                chosen.IsFaceUp = true;
-                state.Metadata.Remove("dd_must_flip");
-                state.Metadata.Remove("selected_card");
-                state.Metadata.Remove("dd_turn_state");
-                AdvanceTurn(state);
                 return;
             }
 

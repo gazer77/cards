@@ -113,4 +113,27 @@ public sealed class GolfTurnTests
         Assert.Equal(3, grid.Cards.Count(c => c.IsFaceUp));
         Assert.NotEqual(me, state.CurrentPlayer.Id);
     }
+
+    /// <summary>
+    /// As reported: "It should be my turn but I have no options." The AI seat had
+    /// discarded its draw and owed a flip; its play_card fell through to a discard from
+    /// an empty hand, and the table stopped on "Player 2's turn — Tap a face-down card".
+    /// </summary>
+    [Fact]
+    public void An_ai_seat_that_owes_a_flip_flips_and_the_turn_passes()
+    {
+        var (state, logic, grid) = InPlay();
+        var me = state.CurrentPlayer.Id;
+        state.PlayerAgents[me] = new SmartDefaultAiAgent(me, state.Rng);
+        logic.Apply(state, new GameAction("draw_from_deck"));
+        var drawn = state.Zones[$"hand:{me}"].Cards.Single();
+        logic.Apply(state, new GameAction("play_card", CardId: drawn.Id));
+        Assert.True(state.Metadata.ContainsKey("dd_must_flip"));
+
+        logic.Apply(state, logic.GetAutoAction(state));
+
+        Assert.False(state.Metadata.ContainsKey("dd_must_flip"));
+        Assert.Equal(3, grid.Cards.Count(c => c.IsFaceUp));
+        Assert.NotEqual(me, state.CurrentPlayer.Id);
+    }
 }
