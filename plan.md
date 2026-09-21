@@ -239,6 +239,14 @@ heuristics, and conservative poker betting; everything else falls through to ran
       deal and whose face/orientation is driven by the score, so the definition — not
       code — says which cards, how many points each configuration shows, and where they
       sit on the table. Would also cover Cribbage-style peg boards drawn as cards later.
+- [ ] **Collapsible table elements — detail and total** — anything placed on the
+      table that can grow (the score card first, meld spreads and badges later) should
+      declare a collapsed and an expanded form, with a tap to switch. For scores that
+      means two views of the same figures: *total* — one number per player, always in
+      view — and *detail* — a column per round with the total at the end. Golf shows
+      why: nine holes per player is too much to leave open, yet the running total alone
+      hides who won which hole. The definition names both views and which one a game
+      starts in; the choice is per-viewer, and the collapsed form still has a `place`.
 
 ---
 
