@@ -227,6 +227,18 @@ heuristics, and conservative poker betting; everything else falls through to ran
       Depends on the definition validator, which already reports what is wrong with
       a definition and why; an editor is mostly a UI over that. Export/import also
       gives players a way to share a game they wrote.
+- [ ] **Score card zone** — a declared table element that shows running scores during
+      play (Golf's nine holes, Hearts' running total, Hand and Foot's rounds), placed
+      with `place` like any label or badge and styled from the definition: per-player
+      or per-team rows, a column per round, a total, and an option to show only the
+      current standing. Scores exist in `state.Scores` and per-round in metadata; only
+      the end-of-game list shows them today, so a player mid-game has nothing to look at.
+- [ ] **Scoring with cards** — the Euchre way: a side keeps score by exposing pips on
+      a pair of low cards (a 6 and a 4, say), turning and covering them as points come.
+      Declared as a scoring zone per team whose cards are set aside from the deck at the
+      deal and whose face/orientation is driven by the score, so the definition — not
+      code — says which cards, how many points each configuration shows, and where they
+      sit on the table. Would also cover Cribbage-style peg boards drawn as cards later.
 
 ---
 
