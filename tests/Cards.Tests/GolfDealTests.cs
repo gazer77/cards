@@ -12,19 +12,33 @@ public sealed class GolfDealTests
 {
     [Theory]
     [InlineData(2)] [InlineData(4)] [InlineData(8)]
-    public void Each_grid_is_dealt_face_down_with_two_cards_peeked(int seats)
+    public void Each_grid_is_dealt_face_down_and_each_player_turns_two_of_their_choosing(int seats)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
         var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(4) };
-        LogicRegistry.Create(definition).Initialize(state, seats, []);
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, seats, []);
 
+        // Dealt face-down, every card. The choice of what to turn is the player's.
         foreach (var p in state.Players)
+            Assert.Equal(0, state.Zones[$"grid:{p.Id}"].Cards.Count(c => c.IsFaceUp));
+        Assert.Equal("peek", state.CurrentPhaseId);
+
+        // Each seat turns the two it picks — here the LAST two, which the deal's old
+        // "first two" could never have produced.
+        for (int seat = 0; seat < seats; seat++)
         {
-            var grid = state.Zones[$"grid:{p.Id}"];
-            Assert.Equal(6, grid.Count);
+            Assert.Equal(seat, state.CurrentPlayerIndex);
+            var grid = state.Zones[$"grid:{state.CurrentPlayer.Id}"];
+            foreach (var pick in new[] { grid.Cards[5], grid.Cards[4] })
+                logic.Apply(state, new GameAction("select_card", CardId: pick.Id, CardUid: pick.Uid));
             Assert.Equal(2, grid.Cards.Count(c => c.IsFaceUp));
+            Assert.True(grid.Cards[4].IsFaceUp && grid.Cards[5].IsFaceUp);
         }
+
+        Assert.Equal("play", state.CurrentPhaseId);
+        Assert.Equal(0, state.CurrentPlayerIndex);
 
         // And the seat count is the seat count.
         Assert.Equal(seats, state.Players.Count);

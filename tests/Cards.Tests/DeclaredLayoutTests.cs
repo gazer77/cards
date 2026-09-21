@@ -159,4 +159,43 @@ public sealed class DeclaredLayoutTests
                     $"{gameId}/{seats}p: {layouts[i].Zone.Id} {layouts[i].Bounds} overlaps {layouts[j].Zone.Id} {layouts[j].Bounds}.");
             }
     }
+
+    /// <summary>
+    /// The deal animation flies each card to where the table will draw it. It only knew
+    /// fans, so a grid game's cards had no destination and simply appeared after the
+    /// shuffle. Every dealt card in every game now has a target, and for a grid it is
+    /// the cell the card will occupy.
+    /// </summary>
+    [Theory]
+    [InlineData("golf", 2)] [InlineData("golf", 4)] [InlineData("hearts", 4)] [InlineData("hand-and-foot", 2)]
+    public void Every_dealt_card_has_somewhere_to_fly_to(string gameId, int seats)
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync(gameId).GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(2) };
+        LogicRegistry.Create(definition).Initialize(state, seats, []);
+
+        var dealt = state.LastDealResult!.CardsByPlayerIndex.Values.SelectMany(u => u).ToList();
+        Assert.NotEmpty(dealt);
+
+        var renderer = new CardTableRenderer(new NoDriver()) { GameState = state };
+        using var surface = SKSurface.Create(Canvas);
+        renderer.Paint(surface.Canvas, Canvas);   // so the renderer has a canvas size
+        var targets = renderer.ComputeHandSlotCenters(state, dealt);
+
+        foreach (int uid in dealt)
+        {
+            Assert.True(targets.ContainsKey(uid), $"{gameId}/{seats}p: dealt card {uid} has no destination.");
+            var t = targets[uid];
+            Assert.True(t.X >= 0 && t.X <= Canvas.Width && t.Y >= 0 && t.Y <= Canvas.Height,
+                $"{gameId}/{seats}p: card {uid} would fly to {t}, off the table.");
+        }
+    }
+
+    private sealed class NoDriver : IAnimationDriver
+    {
+        public event Action? Tick;
+        public void RequestFrames() { }
+        public void StopFrames() { }
+    }
 }

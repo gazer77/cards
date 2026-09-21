@@ -418,10 +418,10 @@ public sealed class CardTableRenderer
     }
 
     /// <summary>
-    /// Computes the center pixel of every fan-slot for the given card IDs in
-    /// <paramref name="state"/>, using <paramref name="info"/> for canvas dimensions.
-    /// Only hand zones (rendered as fans) are considered; cards in other zone types
-    /// are omitted from the result.
+    /// The screen centre of every card in <paramref name="cardUids"/> as the table will
+    /// draw it — fans and grids, at every seat — so a dealt card flies to exactly where
+    /// it will land. The same geometry the drawers use, turned the way the zone is.
+    /// Cards in zones with no per-card place (a stack, a spread) are omitted.
     /// </summary>
     private static Dictionary<int, SKPoint> ComputeFanSlotCenters(
         GameState state, IEnumerable<int> cardUids, SKImageInfo info)
@@ -430,32 +430,54 @@ public sealed class CardTableRenderer
         var idSet  = cardUids.ToHashSet();
         if (idSet.Count == 0) return result;
 
-        var layouts = ZoneLayoutEngine.Compute(state, info);
-
-        foreach (var layout in layouts)
+        foreach (var placed in ZoneLayoutEngine.Compute(state, info))
         {
-            if (layout.Hint != ZoneRenderHint.Fan) continue;
+            var layout = placed;
+            var screenBounds = layout.Bounds;
 
-            var cards  = layout.Zone.Cards;
-            float totalW = layout.Bounds.Width;
-            float cardW  = layout.CardWidth;
-            float cardH  = layout.CardHeight;
+            // Drawn in its own frame: a quarter-turned zone has its bounds transposed
+            // and everything rotated about the centre. Mirror that here.
+            if (layout.RotationDegrees is 90f or 270f)
+            {
+                var b = layout.Bounds;
+                layout = layout with
+                {
+                    Bounds = new SKRect(b.MidX - b.Height / 2f, b.MidY - b.Width / 2f,
+                                        b.MidX + b.Height / 2f, b.MidY + b.Width / 2f),
+                };
+            }
 
-            float step = cards.Count == 1
-                ? 0f
-                : MathF.Min((totalW - cardW) / (cards.Count - 1), cardW * 0.75f);
-            float startX = cards.Count == 1
-                ? layout.Bounds.MidX - cardW / 2f
-                : layout.Bounds.Left + (totalW - (step * (cards.Count - 1) + cardW)) / 2f;
-            float midY = layout.Bounds.MidY;
-
+            var cards = layout.Zone.Cards;
             for (int i = 0; i < cards.Count; i++)
             {
-                if (idSet.Contains(cards[i].Uid))
-                    result[cards[i].Uid] = new SKPoint(startX + i * step + cardW / 2f, midY);
+                if (!idSet.Contains(cards[i].Uid)) continue;
+
+                SKPoint? local = null;
+                if (layout.Hint == ZoneRenderHint.Fan)
+                {
+                    var (startX, step, top, cardW, cardH) = FanGeometry(layout);
+                    local = new SKPoint(startX + i * step + cardW / 2f, top + cardH / 2f);
+                }
+                else if (layout.Zone.Type == "grid" && GridCellRect(layout, i) is { } cell)
+                {
+                    local = new SKPoint(cell.MidX, cell.MidY);
+                }
+                if (local is null) continue;
+
+                result[cards[i].Uid] = Rotate(local.Value, screenBounds.MidX, screenBounds.MidY, layout.RotationDegrees);
             }
         }
         return result;
+    }
+
+    private static SKPoint Rotate(SKPoint p, float cx, float cy, float degrees)
+    {
+        if (degrees == 0f) return p;
+        double rad = degrees * Math.PI / 180.0;
+        float dx = p.X - cx, dy = p.Y - cy;
+        return new SKPoint(
+            cx + (float)(dx * Math.Cos(rad) - dy * Math.Sin(rad)),
+            cy + (float)(dx * Math.Sin(rad) + dy * Math.Cos(rad)));
     }
 
     /// <summary>
@@ -1086,11 +1108,26 @@ public sealed class CardTableRenderer
     /// </summary>
     private void DrawGrid(SKCanvas canvas, ZoneLayout layout)
     {
-        var zone  = layout.Zone;
-        var cards = zone.Cards;
-        int cols  = Math.Max(1, zone.Definition?.Cols ?? 3);
-        int rows  = Math.Max(1, zone.Definition?.Rows ?? 2);
+        var cards = layout.Zone.Cards;
         if (cards.Count == 0) return;
+
+        long now = NowMs();
+        for (int i = 0; i < cards.Count; i++)
+            if (GridCellRect(layout, i) is { } cell)
+                DrawSpreadCard(canvas, cards[i], cell, cell.Height, now);
+    }
+
+    /// <summary>
+    /// Where the i-th card of a grid zone sits. One piece of geometry for the drawer and
+    /// for the deal animation, so a dealt card flies to exactly the cell it will occupy.
+    /// Null past the last cell.
+    /// </summary>
+    private static SKRect? GridCellRect(ZoneLayout layout, int index)
+    {
+        var zone = layout.Zone;
+        int cols = Math.Max(1, zone.Definition?.Cols ?? 3);
+        int rows = Math.Max(1, zone.Definition?.Rows ?? 2);
+        if (index >= rows * cols) return null;
 
         const float gap = 6f;
 
@@ -1104,15 +1141,11 @@ public sealed class CardTableRenderer
         float gridH = rows * cardH + (rows - 1) * gap;
         float left  = layout.Bounds.MidX - gridW / 2f;
         float top   = layout.Bounds.MidY - gridH / 2f;
-        long  now   = NowMs();
 
-        for (int i = 0; i < cards.Count && i < rows * cols; i++)
-        {
-            int   r = i / cols, c = i % cols;
-            float x = left + c * (cardW + gap);
-            float y = top  + r * (cardH + gap);
-            DrawSpreadCard(canvas, cards[i], new SKRect(x, y, x + cardW, y + cardH), cardH, now);
-        }
+        int   r = index / cols, c = index % cols;
+        float x = left + c * (cardW + gap);
+        float y = top  + r * (cardH + gap);
+        return new SKRect(x, y, x + cardW, y + cardH);
     }
 
     /// <summary>

@@ -36,6 +36,7 @@ public static class PhaseHandlerRegistry
             ["deal"]                = (def, next) => new DealPhaseHandler(def, next),
             ["name_trump"]          = (def, next) => new NameTrumpHandler(def, next),
             ["dealer_discard"]      = (def, next) => new DealerDiscardHandler(next),
+            ["reveal"]              = (def, next) => new RevealHandler(def, next),
         };
 
     /// <summary>

@@ -137,6 +137,8 @@ public static class GameText
         ["pass_select"] = "Select {count} cards to pass {direction}.",
         ["pot_won_by_fold"] = "Everyone folded. {player} wins the pot ({pot}).",
         ["rank_unmeldable"] = "{rank}s cannot be melded.",
+        ["reveal_more"] = "{player}'s turn — Tap {count} cards to turn over",
+        ["reveal_one"] = "{player}'s turn — Tap a card to turn over",
         ["round_started"] = "Round {round}",
         ["showdown_won"] = "{player} wins with {hand}: {cards}",
         ["too_many_wilds"] = "That would leave the meld more wild than real.",
@@ -220,5 +222,7 @@ public static class GameText
         ["trick_won"]        = "You win the trick!",
         ["pot_won_by_fold"]  = "Everyone folded. You win the pot ({pot})!",
         ["showdown_won"]     = "You win with {hand}: {cards}",
+        ["reveal_one"]       = "Tap a card to turn over",
+        ["reveal_more"]      = "Tap {count} cards to turn over",
     };
 }

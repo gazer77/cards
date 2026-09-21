@@ -705,6 +705,22 @@ scoring values them.
 
 ---
 
+### `reveal`
+Each player in turn chooses cards of their own to turn face-up — Golf's two peeks before
+play. A rule about *choice*, so a phase rather than a side effect of the deal.
+```json
+{ "id": "peek", "type": "reveal", "zone": "grid", "count": 2, "next": "play" }
+```
+
+`zone`: base id of the zone the cards are in, resolved per player. `count`: how many each
+player turns. A computer seat picks at once; a person is waited for. When every seat has
+turned its count the phase ends with the first player to act.
+
+(`peek_count` on a grid zone still exists and turns the *first* cards dealt, with no
+choice; prefer a `reveal` phase.)
+
+---
+
 ### `war`
 Each active player flips their top card; highest wins all flipped cards. Ties trigger war.
 ```json
@@ -994,6 +1010,8 @@ name a player) addresses the person at this screen.
 | `pass_select` | Select {count} cards to pass {direction}. |
 | `pot_won_by_fold` | Everyone folded. {player} wins the pot ({pot}). |
 | `rank_unmeldable` | {rank}s cannot be melded. |
+| `reveal_more` | {player}'s turn — Tap {count} cards to turn over |
+| `reveal_one` | {player}'s turn — Tap a card to turn over |
 | `round_started` | Round {round} |
 | `showdown_won` | {player} wins with {hand}: {cards} |
 | `too_many_wilds` | That would leave the meld more wild than real. |
