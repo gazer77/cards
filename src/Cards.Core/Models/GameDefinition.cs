@@ -176,6 +176,14 @@ public class ZoneDefinition
     public int PeekCount { get; set; } = 0;
 
     /// <summary>
+    /// Which way dealt cards land in this zone — "up" or "down" — overriding the deal's
+    /// own <c>face</c>. Golf's grid is dealt face-down whatever the deal says, then
+    /// <c>peek_count</c> turns two. Omitted, the deal decides.
+    /// </summary>
+    [JsonPropertyName("initial_face")]
+    public string? InitialFace { get; set; }
+
+    /// <summary>
     /// How the cards sit: "full" (side by side), "compact" (overlapped, index showing),
     /// or "stack" (top card only, with a count). Geometry, not information — what may
     /// be SEEN stays visibility's job. Null takes the default for the zone's type.

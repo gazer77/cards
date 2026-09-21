@@ -49,6 +49,9 @@ public static class DefinitionValidator
             for (int i = 0; i < zone.GroupBadges.Count; i++)
                 ValidateBadge(zone.Id, i, zone.GroupBadges[i], problems);
 
+            if (zone.InitialFace is { } face && face is not ("up" or "down"))
+                problems.Add($"zone '{zone.Id}': initial_face '{face}' is not up or down.");
+
             if (zone.CardScale <= 0f)
                 problems.Add($"zone '{zone.Id}': card_scale must be positive.");
 

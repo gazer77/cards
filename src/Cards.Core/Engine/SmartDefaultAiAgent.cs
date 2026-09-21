@@ -188,7 +188,13 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         // If it's a low-scoring card (≤3), risk swapping a face-down slot.
         var faceDownCards = gridCards.Where(c => !c.IsFaceUp).ToList();
         if (faceDownCards.Count > 0 && drawnValue <= 3)
-            return plays.First(a => a.CardId == faceDownCards[_rng.Next(faceDownCards.Count)].Id);
+        {
+            // Chosen once. Rolling the die inside the predicate compared each play to a
+            // different card and could match none — unreachable while every grid card
+            // was dealt face-up, which is the only reason it went unnoticed.
+            var target = faceDownCards[_rng.Next(faceDownCards.Count)];
+            return plays.First(a => a.CardId == target.Id);
+        }
 
         // Discard the drawn card (play it back without swapping)
         return plays.First(a => a.CardId == drawnCardId);

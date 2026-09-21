@@ -290,10 +290,22 @@ public sealed class StandardDealEngine : IDealStrategy
             ?? state.FindZone("hand");
     }
 
-    private static bool FaceUp(string? face, Zone zone) => face switch
+    private static bool FaceUp(string? face, Zone zone)
     {
-        "up"    => true,
-        "owner" => zone.Visibility is "all" or "owner",
-        _       => false,  // "down" or null
-    };
+        // The zone's own word wins over the deal's. initial_face sat in the definition
+        // unread, so Golf's grids — "face": "owner" into a zone everyone may see —
+        // dealt face-up and the peek turned two cards that were already up.
+        switch (zone.Definition?.InitialFace)
+        {
+            case "up":   return true;
+            case "down": return false;
+        }
+
+        return face switch
+        {
+            "up"    => true,
+            "owner" => zone.Visibility is "all" or "owner",
+            _       => false,  // "down" or null
+        };
+    }
 }
