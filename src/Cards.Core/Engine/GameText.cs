@@ -153,6 +153,7 @@ public static class GameText
         ["turn_meld"] = "{player}'s turn — Select cards to meld or tap Done.",
         ["turn_owed"] = "{player}'s turn — Meld the {card} they took",
         ["turn_swap"] = "{player}'s turn — Tap a card to swap, or discard the drawn card",
+        ["turn_flip"] = "{player}'s turn — Tap a face-down card to turn over",
         ["turn_trump"] = "{player}'s turn  |  Trump: {trump}",
         ["war_flip"] = "Tap to flip!",
     };
@@ -207,6 +208,7 @@ public static class GameText
         ["turn_draw"]        = "Your turn — Draw a card",
         ["turn_discard"]     = "Your turn — Discard a card",
         ["turn_swap"]        = "Your turn — Tap a card to swap, or discard the drawn card",
+        ["turn_flip"]        = "Your turn — Tap a face-down card to turn over",
         ["turn_owed"]        = "Your turn — Meld the {card} you took",
         ["foot_picked_up"]   = "You picked up your foot!",
         ["opening_too_low"]  = "Your first meld this round must be worth {required}; that is {offered}.",

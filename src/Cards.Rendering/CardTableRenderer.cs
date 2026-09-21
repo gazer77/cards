@@ -29,7 +29,10 @@ public sealed class CardTableRenderer
 
     private string? _dragCardId;
     private string? _dragSourceZoneId;
-    private string? _tooltipCardId;
+    /// <summary>The physical card whose name is showing, or null. By uid: a description
+    /// names several cards in a multi-deck game, and the one under the finger may be
+    /// face-down while a twin elsewhere is not.</summary>
+    private int? _tooltipUid;
     private SKPoint _touchStartPt;
     private SKPoint _dragCurrentPt;
     private bool    _isDragging;
@@ -223,7 +226,7 @@ public sealed class CardTableRenderer
                 .SelectMany(z => z.Cards).Select(c => c.Uid).ToHashSet() ?? [];
 
             _state         = value;
-            _tooltipCardId = null;   // dismiss tooltip whenever the game state advances
+            _tooltipUid = null;   // dismiss tooltip whenever the game state advances
 
             if (value is not null)
             {
@@ -1746,12 +1749,17 @@ public sealed class CardTableRenderer
         // Show the card the same way the source zone was rendering it —
         // zone-level FaceUp overrides the per-card flag (e.g. hand zones
         // show all cards face-up even when IsFaceUp is false).
-        bool faceUp = IsCardFaceUp(_dragCardId!);
+        bool faceUp = IsInFaceUpZone(_dragCardId!);
         if (faceUp)
             CardRenderer.DrawCardFace(canvas, ghostRect, card, _skin);
         else
             DrawCardBackCounted(canvas, ghostRect, _skin);
     }
+
+    /// <summary>Whether the card sits in a zone drawn face-up — for the drag ghost, which
+    /// shows the card the way its source zone was showing it.</summary>
+    private bool IsInFaceUpZone(string cardId)
+        => _lastLayouts.Any(l => l.FaceUp && l.Zone.Cards.Any(c => c.Id == cardId));
 
     private Card? FindCardByUid(int uid)
     {
@@ -1844,7 +1852,7 @@ public sealed class CardTableRenderer
 
             if (isDoubleTap && hitZone is not null)
             {
-                _tooltipCardId = null;
+                _tooltipUid = null;
                 ZoneActivated?.Invoke(hitZone);
                 _isDragging       = false;
                 _dragCardId       = null;
@@ -1856,11 +1864,13 @@ public sealed class CardTableRenderer
             var hit = HitTestCardWithUid(location);
             if (hit is { } tapped)
             {
-                // Toggle info tooltip on face-up cards (any card, not just selectable ones)
-                if (IsCardFaceUp(tapped.Id))
-                    _tooltipCardId = (_tooltipCardId == tapped.Id) ? null : tapped.Id;
+                // Toggle the name of the card under the finger — if it is showing its
+                // face. Asked of the card itself: a zone anyone may look at can still
+                // hold cards lying face-down, and naming one of those is a leak.
+                if (IsShowingFace(tapped.Uid))
+                    _tooltipUid = (_tooltipUid == tapped.Uid) ? null : tapped.Uid;
                 else
-                    _tooltipCardId = null;
+                    _tooltipUid = null;
 
                 // The uid names the physical card under the finger, so a five-deck
                 // game can tell which of its identical fours was meant.
@@ -1868,7 +1878,7 @@ public sealed class CardTableRenderer
             }
             else
             {
-                _tooltipCardId = null;  // dismiss tooltip on empty-space tap
+                _tooltipUid = null;  // dismiss tooltip on empty-space tap
                 if (hitZone is not null)
                     ZoneTapped?.Invoke(hitZone);
                 else
@@ -2374,12 +2384,19 @@ public sealed class CardTableRenderer
     /// Only non-rotated zone layouts record card rects, so rotated opponent hands are
     /// naturally excluded.
     /// </summary>
-    private bool IsCardFaceUp(string cardId)
+    /// <summary>
+    /// Whether this card is drawn face-up right now: its zone lets it be seen AND the
+    /// card itself is face-up (or the debug reveal is on). The zone alone is not enough
+    /// — Golf's grids may be looked at by everyone and are mostly face-down.
+    /// </summary>
+    private bool IsShowingFace(int uid)
     {
+        if (RevealAllCards) return true;
         foreach (var layout in _lastLayouts)
         {
-            if (!layout.FaceUp) continue;
-            if (layout.Zone.Cards.Any(c => c.Id == cardId)) return true;
+            var card = layout.Zone.Cards.FirstOrDefault(c => c.Uid == uid);
+            if (card is null) continue;
+            return layout.FaceUp && card.IsFaceUp;
         }
         return false;
     }
@@ -2391,16 +2408,12 @@ public sealed class CardTableRenderer
     /// </summary>
     private void DrawCardTooltip(SKCanvas canvas, SKImageInfo info)
     {
-        if (_tooltipCardId is null || _state is null) return;
+        if (_tooltipUid is not int uid || _state is null) return;
 
-        // Find the card's last-drawn screen rect
-        var entry = _cardRects.LastOrDefault(r => r.CardId == _tooltipCardId);
+        var entry = _cardRects.LastOrDefault(r => r.Uid == uid);
         if (entry.CardId is null) return;
 
-        // Find the card for its display name
-        Card? card = _state.Zones.Values
-            .SelectMany(z => z.Cards)
-            .FirstOrDefault(c => c.Id == _tooltipCardId);
+        var card = FindCardByUid(uid);
         if (card is null) return;
 
         string text     = card.DisplayName;

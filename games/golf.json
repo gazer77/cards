@@ -34,6 +34,7 @@
       "draw_count": 1,
       "discard_count": 1,
       "target_zone": "grid",
+      "flip_after_discard": true,
       "round_ends_when": "any_player_grid_all_face_up",
       "remaining_players_get_one_more_turn": true,
       "next": "score"

@@ -46,6 +46,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     private readonly JsonElement? _goOutRequires;
     private readonly string?      _roundEndsWhen;
     private readonly bool         _remainingGetOneTurn;
+    // Golf: a player who discards the drawn card unplayed must then turn one of their
+    // own face-down cards up. The turn is not over until they have.
+    private readonly bool         _flipAfterDiscard;
 
     /// <summary>Zone id → the condition under which it may be drawn from.</summary>
     private readonly Dictionary<string, JsonElement> _drawRequires = [];
@@ -113,6 +116,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             _goOutRequires = goOut.Clone();
         _roundEndsWhen   = GetString(def, "round_ends_when");
         _remainingGetOneTurn = GetBool(def, "remaining_players_get_one_more_turn") ?? false;
+        _flipAfterDiscard    = GetBool(def, "flip_after_discard") ?? false;
     }
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
@@ -215,6 +219,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         if (_targetZone == "grid")
         {
             var grid = PlayerGrid(state, state.CurrentPlayer.Id);
+            // A flip owed after discarding: only the face-down cards can answer it.
+            if (grid is not null && state.Metadata.ContainsKey("dd_must_flip"))
+                return grid.Cards.Where(c => !c.IsFaceUp).Select(c => c.Id).ToList();
             if (grid is not null && state.Metadata.TryGetValue("dd_drawn_card", out var drawnId))
                 return [.. grid.Cards.Select(c => c.Id), drawnId];
         }
@@ -272,6 +279,29 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 state.Metadata.GetValueOrDefault("dd_drawn_card") == chosen.Id)
             {
                 DiscardCard(state, token);
+                return;
+            }
+
+            // A flip owed after discarding the drawn card: the tapped face-down grid
+            // card turns over and the turn ends.
+            if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_must_flip"))
+            {
+                if (chosen.IsFaceUp) return;
+                chosen.IsFaceUp = true;
+                state.Metadata.Remove("dd_must_flip");
+                state.Metadata.Remove("selected_card");
+                state.Metadata.Remove("dd_turn_state");
+                AdvanceTurn(state);
+                return;
+            }
+
+            // In grid mode, tapping a grid card while holding the drawn card swaps them
+            // then and there. It used to only select, and the swap waited on a second
+            // gesture — dropping onto the grid — that nothing on screen suggested.
+            if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_drawn_card")
+                && PlayerGrid(state, state.CurrentPlayer.Id)?.Cards.Contains(chosen) == true)
+            {
+                SwapGridCard(state, chosen);
                 return;
             }
 
@@ -529,7 +559,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             {
                 // Grid mode: the selected card is a grid card to swap out.
                 // The drawn card goes face-up into the grid slot; the grid card goes to discard.
-                SwapGridCard(state, card.Id);
+                SwapGridCard(state, card);
                 return;
             }
             // Player chose to discard the drawn card without swapping. Fall through to
@@ -552,12 +582,22 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             state.Metadata.Remove("dd_drawn_card");
 
         state.Metadata.Remove("selected_card");
+
+        // Discarding the draw unplayed owes a flip while there is still a card to turn.
+        if (drawnCardDiscarded && _flipAfterDiscard
+            && PlayerGrid(state, state.CurrentPlayer.Id)?.Cards.Any(c => !c.IsFaceUp) == true)
+        {
+            state.Metadata["dd_must_flip"] = "true";
+            UpdateStatus(state);
+            return;
+        }
+
         state.Metadata.Remove("dd_turn_state");
 
         AdvanceTurn(state);
     }
 
-    private void SwapGridCard(GameState state, string gridCardId)
+    private void SwapGridCard(GameState state, Card gridCard)
     {
         string drawnCardId = state.Metadata.GetValueOrDefault("dd_drawn_card", "");
         var grid    = PlayerGrid(state, state.CurrentPlayer.Id);
@@ -571,9 +611,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         hand.Remove(drawnCard);
 
         // Remove grid card from grid, preserving its slot index for the replacement.
-        int slotIdx = grid.Cards.FindIndex(c => c.Id == gridCardId);
+        int slotIdx = grid.Cards.IndexOf(gridCard);
         if (slotIdx < 0) return;
-        var gridCard = grid.Cards[slotIdx];
         grid.Remove(gridCard);
 
         // Drawn card takes the same slot; grid card goes to discard.
@@ -1112,6 +1151,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                                    me, ("card", CardName(state, owed)))
             : TurnState(state) == "draw"
                 ? GameText.Message(state, "turn_draw", "{player}'s turn — Draw a card", me)
+            : state.Metadata.ContainsKey("dd_must_flip")
+                ? GameText.Message(state, "turn_flip", "{player}'s turn — Tap a face-down card to turn over", me)
             : _targetZone == "grid" && state.Metadata.ContainsKey("dd_drawn_card")
                 ? GameText.Message(state, "turn_swap", "{player}'s turn — Tap a card to swap, or discard the drawn card", me)
                 : GameText.Message(state, "turn_discard", "{player}'s turn — Discard a card", me);

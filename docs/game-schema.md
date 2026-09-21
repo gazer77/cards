@@ -623,6 +623,7 @@ One draw + one discard per player turn. Repeats until a special action ends the 
   "draw_count": 1,
   "discard_count": 1,
   "target_zone": "grid",
+  "flip_after_discard": true,
   "special_actions": ["knock", "gin", "go_out"],
   "knock_condition": "deadwood_lte_10",
   "gin_condition": "deadwood_eq_0",
@@ -634,6 +635,8 @@ One draw + one discard per player turn. Repeats until a special action ends the 
 ```
 
 `target_zone`: `"hand"` | `"grid"` — Grid mode (Golf): drawn card is held in a temporary hand slot; player then taps a grid card to swap it in (drawn card replaces grid card face-up; grid card goes to discard). Player may also `discard_drawn` to skip the swap.
+
+`flip_after_discard`: `true` — Grid mode only. A player who discards the drawn card without swapping must then tap one of their own face-down cards to turn it up (Golf). While a flip is owed only face-down cards are selectable and the turn does not end until one is turned; no flip is owed once every card is already up.
 
 `round_ends_when`: `"any_player_grid_all_face_up"` — round ends when any player has all grid cards face-up.
 
@@ -1026,6 +1029,7 @@ name a player) addresses the person at this screen.
 | `turn_meld` | {player}'s turn — Select cards to meld or tap Done. |
 | `turn_owed` | {player}'s turn — Meld the {card} they took |
 | `turn_swap` | {player}'s turn — Tap a card to swap, or discard the drawn card |
+| `turn_flip` | {player}'s turn — Tap a face-down card to turn over |
 | `turn_trump` | {player}'s turn  \|  Trump: {trump} |
 | `war_flip` | Tap to flip! |
 

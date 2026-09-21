@@ -45,3 +45,72 @@ public sealed class GolfDealTests
         Assert.Equal(seats, state.Zones.Keys.Count(k => k.StartsWith("grid:")));
     }
 }
+
+/// <summary>
+/// The Golf turn as reported broken: a drawn card could not be moved onto the grid, and
+/// there was no way to turn a card over. Tapping a grid card while holding the draw swaps
+/// them; discarding the draw unplayed owes a flip of one face-down card, which is the
+/// only way a card turns over in play.
+/// </summary>
+public sealed class GolfTurnTests
+{
+    private static (GameState State, IGameLogic Logic, Zone Grid) InPlay()
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(4) };
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, 2, []);
+
+        // Both seats peek their first two so play starts with player 0.
+        for (int seat = 0; seat < 2; seat++)
+        {
+            var g = state.Zones[$"grid:{state.CurrentPlayer.Id}"];
+            foreach (var pick in new[] { g.Cards[0], g.Cards[1] })
+                logic.Apply(state, new GameAction("select_card", CardId: pick.Id, CardUid: pick.Uid));
+        }
+        Assert.Equal("play", state.CurrentPhaseId);
+        return (state, logic, state.Zones[$"grid:{state.CurrentPlayer.Id}"]);
+    }
+
+    [Fact]
+    public void Tapping_a_grid_card_while_holding_the_draw_swaps_them()
+    {
+        var (state, logic, grid) = InPlay();
+        var me = state.CurrentPlayer.Id;
+        logic.Apply(state, new GameAction("draw_from_deck"));
+        var drawn = state.Zones[$"hand:{me}"].Cards.Single();
+        var target = grid.Cards[3];
+        Assert.False(target.IsFaceUp);
+
+        logic.Apply(state, new GameAction("select_card", CardId: target.Id, CardUid: target.Uid));
+
+        Assert.Same(drawn, grid.Cards[3]);
+        Assert.True(drawn.IsFaceUp);
+        Assert.Same(target, state.Zones["discard"].Cards[^1]);
+        Assert.NotEqual(me, state.CurrentPlayer.Id);
+    }
+
+    [Fact]
+    public void Discarding_the_draw_unplayed_owes_a_flip_of_a_face_down_card()
+    {
+        var (state, logic, grid) = InPlay();
+        var me = state.CurrentPlayer.Id;
+        logic.Apply(state, new GameAction("draw_from_deck"));
+        var drawn = state.Zones[$"hand:{me}"].Cards.Single();
+
+        logic.Apply(state, new GameAction("select_card", CardId: drawn.Id, CardUid: drawn.Uid));
+
+        // Still my turn; only the face-down cards are on offer.
+        Assert.Equal(me, state.CurrentPlayer.Id);
+        Assert.Same(drawn, state.Zones["discard"].Cards[^1]);
+        var offered = logic.GetSelectableCardIds(state);
+        Assert.Equal(grid.Cards.Where(c => !c.IsFaceUp).Select(c => c.Id).OrderBy(x => x), offered.OrderBy(x => x));
+
+        var flip = grid.Cards[5];
+        logic.Apply(state, new GameAction("select_card", CardId: flip.Id, CardUid: flip.Uid));
+        Assert.True(flip.IsFaceUp);
+        Assert.Equal(3, grid.Cards.Count(c => c.IsFaceUp));
+        Assert.NotEqual(me, state.CurrentPlayer.Id);
+    }
+}
