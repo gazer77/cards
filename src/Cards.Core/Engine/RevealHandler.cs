@@ -20,7 +20,9 @@ namespace Cards.Engine;
 ///
 /// The seat to act is stored in metadata["reveal_seat"] and how many it has turned in
 /// metadata["reveal_done"]; what it has picked but not yet turned is in
-/// metadata["reveal_picked"], as uids.
+/// metadata["selected_card"], as uids — the same channel every other phase uses to say
+/// what is picked, so picked cards get the selection border without the renderer
+/// learning a second word for it.
 /// </summary>
 public sealed class RevealHandler : IPhaseHandler
 {
@@ -78,7 +80,7 @@ public sealed class RevealHandler : IPhaseHandler
                 if (CardByUid(state, uid) is { IsFaceUp: false } card)
                     Turn(state, card);
 
-            state.Metadata.Remove("reveal_picked");
+            state.Metadata.Remove("selected_card");
             Settle(state);
             return;
         }
@@ -105,8 +107,8 @@ public sealed class RevealHandler : IPhaseHandler
                 picked.Add(chosen.Uid);
             }
 
-            if (picked.Count == 0) state.Metadata.Remove("reveal_picked");
-            else state.Metadata["reveal_picked"] = string.Join(",", picked);
+            if (picked.Count == 0) state.Metadata.Remove("selected_card");
+            else state.Metadata["selected_card"] = string.Join(",", picked);
 
             UpdateStatus(state);
             return;
@@ -117,7 +119,7 @@ public sealed class RevealHandler : IPhaseHandler
         {
             var picked = Picked(state);
             if (picked.Remove(chosen.Uid))
-                state.Metadata["reveal_picked"] = string.Join(",", picked);
+                state.Metadata["selected_card"] = string.Join(",", picked);
         }
         Settle(state);
     }
@@ -139,7 +141,7 @@ public sealed class RevealHandler : IPhaseHandler
 
         state.AdvancePlayer();
         state.Metadata["reveal_done"] = "0";
-        state.Metadata.Remove("reveal_picked");
+        state.Metadata.Remove("selected_card");
         if (state.CurrentPlayerIndex == 0)
         {
             state.Metadata.Remove("reveal_done");
@@ -165,7 +167,7 @@ public sealed class RevealHandler : IPhaseHandler
         => int.TryParse(state.Metadata.GetValueOrDefault("reveal_done"), out int n) ? n : 0;
 
     private static List<int> Picked(GameState state)
-        => (state.Metadata.GetValueOrDefault("reveal_picked") ?? "")
+        => (state.Metadata.GetValueOrDefault("selected_card") ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Select(int.Parse)
             .ToList();

@@ -246,3 +246,63 @@ public sealed class DefaultCardActionTests
         Assert.True(grid.Cards[2].IsFaceUp);
     }
 }
+
+/// <summary>
+/// Two things a double tap must go on doing, which cards answering the gesture first
+/// nearly took away.
+/// </summary>
+public sealed class DoubleTapFallbackTests
+{
+    private static (GameState State, IGameLogic Logic) Golf()
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(6) };
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, 2, []);
+
+        for (int seat = 0; seat < 2; seat++)
+        {
+            var g = state.Zones[$"grid:{state.CurrentPlayer.Id}"];
+            foreach (var pick in new[] { g.Cards[0], g.Cards[1] })
+                logic.Apply(state, new GameAction("select_card", CardId: pick.Id, CardUid: pick.Uid));
+            if (logic.GetValidActions(state).Any(a => a.Type == "flip"))
+                logic.Apply(state, new GameAction("flip"));
+        }
+        return (state, logic);
+    }
+
+    [Fact]
+    public void A_pile_is_still_drawn_from_through_the_card_lying_on_it()
+    {
+        // The regression: a deck and a discard pile are read through their top card, so
+        // a double tap there hits a card, and the card had nothing to say. The gesture
+        // has to fall through to the pile, which is the thing the player aimed at.
+        var (state, logic) = Golf();
+        var top = state.Zones["discard"].Cards[^1];
+
+        Assert.Null(logic.GetDefaultCardAction(state, top.Id, top.Uid));
+        Assert.Contains(logic.GetValidActions(state), a => a.Type == "draw_from_discard");
+    }
+
+    [Fact]
+    public void Cards_picked_for_a_flip_are_marked_as_selected()
+    {
+        // The selection channel is what the table draws a border around, so a pick that
+        // lives anywhere else is a pick the player cannot see.
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(6) };
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, 2, []);
+
+        var grid = state.Zones[$"grid:{state.CurrentPlayer.Id}"];
+        logic.Apply(state, new GameAction("select_card", CardId: grid.Cards[3].Id, CardUid: grid.Cards[3].Uid));
+
+        Assert.Equal(grid.Cards[3].Uid.ToString(), state.Metadata.GetValueOrDefault("selected_card"));
+
+        // And a second tap takes the pick back, border and all.
+        logic.Apply(state, new GameAction("select_card", CardId: grid.Cards[3].Id, CardUid: grid.Cards[3].Uid));
+        Assert.False(state.Metadata.ContainsKey("selected_card"));
+    }
+}

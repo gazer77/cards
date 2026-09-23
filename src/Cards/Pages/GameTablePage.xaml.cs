@@ -288,12 +288,18 @@ public partial class GameTablePage : ContentPage
     {
         if (_state is null || _logic is null) return;
         if (GameOverOverlay.IsVisible || GameLogOverlay.IsVisible || _isAutoAdvancing) return;
-        if (!_logic.GetSelectableCardIds(_state).Contains(cardId)) return;
-
         var action = _logic.GetDefaultCardAction(_state, cardId, uid >= 0 ? uid : null);
-        if (action is null) { OnCardTapped(cardId, uid); return; }
+        if (action is not null && _logic.GetSelectableCardIds(_state).Contains(cardId))
+        {
+            _ = ApplyAndRefreshAsync(action);
+            return;
+        }
 
-        _ = ApplyAndRefreshAsync(action);
+        // Nothing for the card itself: the gesture belongs to what it lies on, which is
+        // how a double tap on the deck has always drawn from it.
+        var zone = _state.Zones.Values.FirstOrDefault(z => z.Cards.Any(c => c.Id == cardId));
+        if (zone is not null) OnZoneActivated(zone.Id);
+        else                  OnCardTapped(cardId, uid);
     }
     private void OnCardDropped(string cardId, string zoneId)
     {

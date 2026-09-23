@@ -489,14 +489,24 @@ public sealed class GameTableViewModel
 
         int? physical = uid >= 0 ? uid : null;
         var action = _logic!.GetDefaultCardAction(_state!, cardId, physical);
-        if (action is null) return TapCard(cardId, uid);
 
         // Still only for cards the phase is offering: a double tap is a shortcut past
         // the asking, never past the rules.
-        if (!_logic.GetSelectableCardIds(_state!).Contains(cardId)) return Task.CompletedTask;
+        if (action is not null && _logic.GetSelectableCardIds(_state!).Contains(cardId))
+            return ApplyAsync(action);
 
-        return ApplyAsync(action);
+        // Nothing to do with the card itself, so the gesture belongs to what it is
+        // lying on. A deck and a discard pile are read through their top card, and a
+        // double tap there has always meant "draw from here" — it kept meaning that
+        // right up until cards learned to answer the gesture first.
+        if (ZoneHolding(cardId) is { } zoneId) return ActivateZone(zoneId);
+
+        return TapCard(cardId, uid);
     }
+
+    /// <summary>The zone a card is lying in, or null if the table does not hold it.</summary>
+    private string? ZoneHolding(string cardId)
+        => _state?.Zones.Values.FirstOrDefault(z => z.Cards.Any(c => c.Id == cardId))?.Id;
     public Task DropCard(string cardId, string zoneId)
     {
         if (!CanAcceptInput()) return Task.CompletedTask;

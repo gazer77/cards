@@ -1502,6 +1502,12 @@ public sealed class CardTableRenderer
             if (t >= 1f) _finishedDealAnims.Add(card.Uid);
         }
 
+        // A picked card rises out of its row. The border alone said "selected" quietly,
+        // and a card picked to be turned over is a card the player is about to commit
+        // to: it should be obvious which ones are going, from across the table.
+        if (IsSelected(card.Uid, card.Id))
+            rect = OffsetRect(rect, 0f, -cardH * SpreadSelectionLift);
+
         DrawCardCounted(canvas, rect, card, _skin);
 
         if (_recordCardRects)
@@ -1510,6 +1516,12 @@ public sealed class CardTableRenderer
             DrawCardInteractiveHint(canvas, rect, card.Id, card.Uid);
         }
     }
+
+    /// <summary>
+    /// How far a picked card lifts out of a spread or grid. Smaller than a hand's lift:
+    /// a grid has a row above to stay clear of, and a hand has only the table.
+    /// </summary>
+    private const float SpreadSelectionLift = 0.07f;
 
     // ── Flying cards overlay ──────────────────────────────────────────────────
 
