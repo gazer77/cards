@@ -29,6 +29,7 @@ public static class UiSizes
     [
         ("cards",   "Cards"),
         ("bubbles", "Speech bubbles"),
+        ("tooltip", "Card name bubble"),
         ("status",  "Status line"),
     ];
 

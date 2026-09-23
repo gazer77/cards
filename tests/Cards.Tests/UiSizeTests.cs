@@ -88,3 +88,26 @@ public sealed class UiSizeTests
         Assert.False(ScoringEngine.HasCardValues(hearts));
     }
 }
+
+/// <summary>
+/// The card name bubble a tap raises: it is sized like everything else, and it is
+/// where the card's worth is said — the question "what is this card?" and "what is it
+/// worth?" are the same question in a game that counts cards.
+/// </summary>
+public sealed class CardTooltipTests
+{
+    [Fact]
+    public void The_name_bubble_is_one_of_the_sizable_elements()
+        => Assert.Contains(UiSizes.Targets, t => t.Id == "tooltip");
+
+    [Fact]
+    public void A_card_reads_with_its_value_in_a_game_that_scores_cards()
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var golf   = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var jack   = new Card(Suit.Clubs, Rank.Jack);
+
+        Assert.Equal("Jack of Clubs", jack.DisplayName);
+        Assert.Equal(10, ScoringEngine.CardPointValue(golf, [jack]));
+    }
+}

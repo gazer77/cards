@@ -64,6 +64,12 @@ public class SettingsViewModel : INotifyPropertyChanged
         set { _settings.SetUiSize("bubbles", UiSizes.All[value].Id); OnPropertyChanged(); }
     }
 
+    public int TooltipSizeIndex
+    {
+        get => IndexOfSize("tooltip");
+        set { _settings.SetUiSize("tooltip", UiSizes.All[value].Id); OnPropertyChanged(); }
+    }
+
     public int StatusSizeIndex
     {
         get => IndexOfSize("status");

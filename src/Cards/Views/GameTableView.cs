@@ -107,6 +107,7 @@ public class GameTableView : SKCanvasView
     /// <summary>The player's own sizes, and whether cards show what they are worth.</summary>
     public float CardScale      { get => _renderer.CardScale;      set => _renderer.CardScale = value; }
     public float BubbleScale    { get => _renderer.BubbleScale;    set => _renderer.BubbleScale = value; }
+    public float TooltipScale   { get => _renderer.TooltipScale;   set => _renderer.TooltipScale = value; }
     public bool  ShowCardValues { get => _renderer.ShowCardValues; set => _renderer.ShowCardValues = value; }
 
     public void SetSkin(ICardSkin skin)     => _renderer.SetSkin(skin);

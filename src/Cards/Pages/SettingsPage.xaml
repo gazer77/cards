@@ -49,6 +49,13 @@
                     TextColor="{StaticResource TextPrimary}"
                     BackgroundColor="{StaticResource SurfaceMid}"
                     TitleColor="{StaticResource TextSecondary}" />
+                <Label Text="Card name bubble" Style="{StaticResource BodyText}" />
+                <Picker
+                    ItemsSource="{Binding SizeNames}"
+                    SelectedIndex="{Binding TooltipSizeIndex, Mode=TwoWay}"
+                    TextColor="{StaticResource TextPrimary}"
+                    BackgroundColor="{StaticResource SurfaceMid}"
+                    TitleColor="{StaticResource TextSecondary}" />
                 <Label Text="Status line" Style="{StaticResource BodyText}" />
                 <Picker
                     ItemsSource="{Binding SizeNames}"

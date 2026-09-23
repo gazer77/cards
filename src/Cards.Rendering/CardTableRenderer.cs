@@ -171,8 +171,11 @@ public sealed class CardTableRenderer
     /// each definition's <c>card_scale</c> asks for. 1 is the size the table has always
     /// drawn; see <see cref="Cards.Services.UiSizes"/>.
     /// </summary>
-    public float CardScale   { get; set; } = 1f;
-    public float BubbleScale { get; set; } = 1f;
+    public float CardScale    { get; set; } = 1f;
+    public float BubbleScale  { get; set; } = 1f;
+
+    /// <summary>The size of the card name bubble a tap raises.</summary>
+    public float TooltipScale { get; set; } = 1f;
 
     /// <summary>
     /// Writes each visible card's worth under this game's scoring in its lower corner.
@@ -2422,6 +2425,17 @@ public sealed class CardTableRenderer
     /// The bubble appears above the card (or below if near the top edge) with a
     /// triangular tail pointing at the card.
     /// </summary>
+
+    /// <summary>
+    /// " — 10" when the game scores cards and the player asked for values, else "".
+    /// </summary>
+    private string CardValueSuffix(Card card)
+    {
+        if (!ShowCardValues || _state?.Definition is not { } definition) return "";
+        _hasCardValues ??= ScoringEngine.HasCardValues(definition);
+        if (_hasCardValues is not true) return "";
+        return $" — {ScoringEngine.CardPointValue(definition, [card])}";
+    }
     private void DrawCardTooltip(SKCanvas canvas, SKImageInfo info)
     {
         if (_tooltipUid is not int uid || _state is null) return;
@@ -2432,9 +2446,12 @@ public sealed class CardTableRenderer
         var card = FindCardByUid(uid);
         if (card is null) return;
 
-        string text     = card.DisplayName;
+        // The name, and what the card is worth when the game scores cards and the
+        // player asked to see it — the tooltip is where a player looks to ask "what is
+        // this?", and "what is it worth?" is the same question in a game that counts.
+        string text     = card.DisplayName + CardValueSuffix(card);
         float  cardW    = entry.Rect.Width;
-        float  fontSize = Math.Clamp(cardW * 0.52f, 26f, 44f);
+        float  fontSize = Math.Clamp(cardW * 0.52f, 26f, 44f) * TooltipScale;
 
         using var font  = new SKFont(SKTypeface.Default, fontSize);
         float textW     = font.MeasureText(text);

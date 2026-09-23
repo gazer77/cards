@@ -705,6 +705,7 @@ public partial class GameTablePage : ContentPage
     {
         TableCanvas.CardScale      = (float)_settings.UiScale("cards");
         TableCanvas.BubbleScale    = (float)_settings.UiScale("bubbles");
+        TableCanvas.TooltipScale   = (float)_settings.UiScale("tooltip");
         TableCanvas.ShowCardValues = _settings.ShowCardValues;
     }
     private static async Task AnimateMessageAsync(View bubble)
