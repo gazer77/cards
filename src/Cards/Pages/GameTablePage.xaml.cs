@@ -102,6 +102,7 @@ public partial class GameTablePage : ContentPage
 
         Title = definition.Name;
         TableCanvas.SetSkin(SkinFactory.Create(_settings.CardSkinId));
+        ApplyDisplaySettings();
 
         // Configure HUD buttons from game definition
         var ui = definition.Ui;
@@ -159,6 +160,7 @@ public partial class GameTablePage : ContentPage
 
         Title = definition.Name;
         TableCanvas.SetSkin(SkinFactory.Create(_settings.CardSkinId));
+        ApplyDisplaySettings();
 
         var ui = definition.Ui;
         GearSortButton.IsVisible = ui?.AllowSort  ?? true;
@@ -671,7 +673,9 @@ public partial class GameTablePage : ContentPage
         {
             Text                  = text,
             TextColor             = Color.FromArgb("#FFD700"),
-            FontSize              = 15,
+            // The status size the player chose: this panel is where a MAUI table says
+            // what is happening, so it is the status line by another name.
+            FontSize              = 15 * _settings.UiScale("status"),
             FontAttributes        = FontAttributes.Bold,
             HorizontalTextAlignment = TextAlignment.Center,
         };
@@ -692,6 +696,17 @@ public partial class GameTablePage : ContentPage
         _ = AnimateMessageAsync(bubble);
     }
 
+
+    /// <summary>
+    /// The player's display choices, pushed into the renderer. Read on every start so
+    /// a size chosen on the settings page is in force the next time a table opens.
+    /// </summary>
+    private void ApplyDisplaySettings()
+    {
+        TableCanvas.CardScale      = (float)_settings.UiScale("cards");
+        TableCanvas.BubbleScale    = (float)_settings.UiScale("bubbles");
+        TableCanvas.ShowCardValues = _settings.ShowCardValues;
+    }
     private static async Task AnimateMessageAsync(View bubble)
     {
         await bubble.FadeToAsync(1.0, 180);

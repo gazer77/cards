@@ -20,6 +20,7 @@ public class SettingsService
     private const string KeyShowDiagnostics = "show_diagnostics";
     private const string KeyTurnPace       = "turn_pace";
     private const string KeyDefaultSort    = "default_hand_sort";
+    private const string KeyShowCardValues = "show_card_values";
 
     private readonly ISettingsStore _store;
 
@@ -117,6 +118,58 @@ public class SettingsService
     {
         get => _store.Get(KeyShowDiagnostics, false);
         set => _store.Set(KeyShowDiagnostics, value);
+    }
+
+    /// <summary>
+    /// The size chosen for one of <see cref="UiSizes.Targets"/> — "cards", "bubbles"
+    /// or "status". Stored per element, because the reasons to shrink one are not the
+    /// reasons to shrink another: a player may want small cards to fit a long hand and
+    /// large text to read the status line across the room.
+    /// </summary>
+    public string GetUiSize(string target)
+    {
+        var value = _store.Get($"size:{target}", "");
+        return string.IsNullOrEmpty(value) ? UiSizes.Default : value;
+    }
+
+    public void SetUiSize(string target, string sizeId)
+        => _store.Set($"size:{target}", sizeId);
+
+    /// <summary>Sets every element to one size — the "All" choice on the size menu.</summary>
+    public void SetAllUiSizes(string sizeId)
+    {
+        foreach (var (id, _) in UiSizes.Targets) SetUiSize(id, sizeId);
+    }
+
+    /// <summary>
+    /// The size every element shares, or null when they differ — which is what lets
+    /// the "All" menu show a check only when it is actually true.
+    /// </summary>
+    public string? CommonUiSize
+    {
+        get
+        {
+            string first = GetUiSize(UiSizes.Targets[0].Id);
+            foreach (var (id, _) in UiSizes.Targets)
+                if (GetUiSize(id) != first) return null;
+            return first;
+        }
+    }
+
+    public double UiScale(string target) => UiSizes.ScaleOf(GetUiSize(target));
+
+    /// <summary>
+    /// Writes each card's worth under the current game's scoring on the card itself.
+    ///
+    /// What a card is worth is a rule of the game rather than a property of the card —
+    /// a 5 is worth 5 in Golf, 5 in Hand and Foot, and nothing at all in Hearts — so
+    /// it cannot be learned once and remembered. Off by default: it is a crutch for
+    /// learning a game, and clutter once the game is known.
+    /// </summary>
+    public bool ShowCardValues
+    {
+        get => _store.Get(KeyShowCardValues, false);
+        set => _store.Set(KeyShowCardValues, value);
     }
 
     /// <summary>

@@ -942,6 +942,16 @@ public static class ScoringEngine
         return 7;
     }
 
+    /// <summary>
+    /// Whether this game states what its cards are worth at all. A trick-taking game
+    /// scores tricks and names no card values, and writing 0 on every card there would
+    /// be a confident wrong answer rather than a blank.
+    /// </summary>
+    public static bool HasCardValues(GameDefinition definition)
+        => definition.Scoring?.Extra?.TryGetValue("card_values", out var el) == true
+           && el.ValueKind == JsonValueKind.Object;   // the per-card list form Hearts uses
+                                                      // is not what CardPointValue reads
+
     public static int CardPointValue(GameDefinition definition, IEnumerable<Card> cards)
     {
         if (definition.Scoring is null) return 0;

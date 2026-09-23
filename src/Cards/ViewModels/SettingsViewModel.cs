@@ -45,6 +45,44 @@ public class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
+
+    // ── Size and card points ──────────────────────────────────────────────────
+    // One picker per element, sharing the table in Cards.Services.UiSizes so the
+    // phone and the browser offer the same steps and write the same settings.
+
+    public List<string> SizeNames { get; } = [.. UiSizes.All.Select(s => s.Label)];
+
+    public int CardSizeIndex
+    {
+        get => IndexOfSize("cards");
+        set { _settings.SetUiSize("cards", UiSizes.All[value].Id); OnPropertyChanged(); }
+    }
+
+    public int BubbleSizeIndex
+    {
+        get => IndexOfSize("bubbles");
+        set { _settings.SetUiSize("bubbles", UiSizes.All[value].Id); OnPropertyChanged(); }
+    }
+
+    public int StatusSizeIndex
+    {
+        get => IndexOfSize("status");
+        set { _settings.SetUiSize("status", UiSizes.All[value].Id); OnPropertyChanged(); }
+    }
+
+    public bool ShowCardValues
+    {
+        get => _settings.ShowCardValues;
+        set { _settings.ShowCardValues = value; OnPropertyChanged(); }
+    }
+
+    private int IndexOfSize(string target)
+    {
+        string id = _settings.GetUiSize(target);
+        for (int i = 0; i < UiSizes.All.Length; i++)
+            if (UiSizes.All[i].Id == id) return i;
+        return 0;
+    }
     public bool ShowGameMessages
     {
         get => _settings.ShowGameMessages;

@@ -104,6 +104,11 @@ public class GameTableView : SKCanvasView
         set => _renderer.DropZoneIds = value;
     }
 
+    /// <summary>The player's own sizes, and whether cards show what they are worth.</summary>
+    public float CardScale      { get => _renderer.CardScale;      set => _renderer.CardScale = value; }
+    public float BubbleScale    { get => _renderer.BubbleScale;    set => _renderer.BubbleScale = value; }
+    public bool  ShowCardValues { get => _renderer.ShowCardValues; set => _renderer.ShowCardValues = value; }
+
     public void SetSkin(ICardSkin skin)     => _renderer.SetSkin(skin);
     public void SetTheme(ITableTheme theme) => _renderer.SetTheme(theme);
 

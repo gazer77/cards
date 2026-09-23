@@ -495,3 +495,14 @@ html, body {
 .choice.chosen { background: #2e7d4f; border-color: #2e7d4f; font-weight: 600; }
 
 .setup-block input[type=range] { width: 100%; accent-color: #2e7d4f; }
+
+/* Options menu: a size list nests one level under the element it sizes, and each
+   parent row carries the size currently in effect so the list need not be opened
+   to read it. */
+.menu-item.indent-2 { padding-left: 2rem; font-size: 0.92rem; }
+.menu-item.submenu { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; }
+.menu-note { color: var(--ink-dim); font-size: 0.82rem; }
+
+/* Settings: one row of sizes per element, label left, choices right. */
+.size-row { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+.size-label { min-width: 8rem; color: var(--ink-dim); }

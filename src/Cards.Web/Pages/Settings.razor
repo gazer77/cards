@@ -53,8 +53,45 @@
         </p>
     </section>
 
+    @* The same choices the table's own Options menu offers, for a player who would
+       rather set them once than per game. Both write the same settings. *@
+    <section class="setup-block">
+        <h2>Size</h2>
+        @foreach (var (target, label) in SizeRows)
+        {
+            var capturedTarget = target;
+            <div class="size-row">
+                <span class="size-label">@label</span>
+                <div class="choices">
+                    @foreach (var (sizeId, sizeLabel, _) in Cards.Services.UiSizes.All)
+                    {
+                        var capturedSize = sizeId;
+                        <button class="choice @(SizeOf(capturedTarget) == capturedSize ? "chosen" : "")"
+                                title="@sizeLabel"
+                                @onclick="() => SetSize(capturedTarget, capturedSize)">@ShortLabel(sizeId)</button>
+                    }
+                </div>
+            </div>
+        }
+        <p class="muted">
+            Extra large is how the table has always drawn; each step down is a quarter
+            smaller. Set them together, or one at a time when small cards and large text
+            suit you better than either alone.
+        </p>
+    </section>
+
     <section class="setup-block">
         <h2>Table</h2>
+        <label class="rule">
+            <input type="checkbox" checked="@_cardValues" @onchange="SetCardValues" />
+            <span>
+                <span class="rule-name">Show card points</span>
+                <span class="rule-desc">
+                    Write what each card is worth under the game being played, in the
+                    corner of its face. Games that score no card values show nothing.
+                </span>
+            </span>
+        </label>
         <label class="rule">
             <input type="checkbox" checked="@_messages" @onchange="SetMessages" />
             <span>
@@ -89,6 +126,29 @@
         ("none",           "Free"),
     ];
 
+    /// <summary>"All" first, then each element on its own.</summary>
+    private static readonly (string Target, string Label)[] SizeRows =
+        [("all", "Everything"), .. Cards.Services.UiSizes.Targets];
+
+    /// <summary>Five buttons on a phone need short names; the full one is the title.</summary>
+    private static string ShortLabel(string sizeId) => sizeId.ToUpperInvariant();
+
+    private string? SizeOf(string target)
+        => target == "all" ? Prefs.CommonUiSize : Prefs.GetUiSize(target);
+
+    private void SetSize(string target, string sizeId)
+    {
+        if (target == "all") Prefs.SetAllUiSizes(sizeId);
+        else                 Prefs.SetUiSize(target, sizeId);
+    }
+
+    private void SetCardValues(ChangeEventArgs e)
+    {
+        _cardValues = e.Value is true;
+        Prefs.ShowCardValues = _cardValues;
+    }
+
+    private bool    _cardValues;
     private string  _skin     = "simple";
     private double  _pace     = 1.8;
     private string? _sort;
@@ -100,6 +160,7 @@
         _pace     = Prefs.TurnPace;
         _sort     = Prefs.DefaultHandSort;
         _messages = Prefs.ShowGameMessages;
+        _cardValues = Prefs.ShowCardValues;
     }
 
     /// <summary>

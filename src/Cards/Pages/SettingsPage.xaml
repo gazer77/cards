@@ -31,6 +31,43 @@
                     TitleColor="{StaticResource TextSecondary}" />
             </VerticalStackLayout>
 
+
+            <!-- Size: eyesight and screen size vary more than one default can cover -->
+            <VerticalStackLayout Spacing="12">
+                <Label Text="SIZE" Style="{StaticResource FieldLabel}" />
+                <Label Text="Cards" Style="{StaticResource BodyText}" />
+                <Picker
+                    ItemsSource="{Binding SizeNames}"
+                    SelectedIndex="{Binding CardSizeIndex, Mode=TwoWay}"
+                    TextColor="{StaticResource TextPrimary}"
+                    BackgroundColor="{StaticResource SurfaceMid}"
+                    TitleColor="{StaticResource TextSecondary}" />
+                <Label Text="Speech bubbles" Style="{StaticResource BodyText}" />
+                <Picker
+                    ItemsSource="{Binding SizeNames}"
+                    SelectedIndex="{Binding BubbleSizeIndex, Mode=TwoWay}"
+                    TextColor="{StaticResource TextPrimary}"
+                    BackgroundColor="{StaticResource SurfaceMid}"
+                    TitleColor="{StaticResource TextSecondary}" />
+                <Label Text="Status line" Style="{StaticResource BodyText}" />
+                <Picker
+                    ItemsSource="{Binding SizeNames}"
+                    SelectedIndex="{Binding StatusSizeIndex, Mode=TwoWay}"
+                    TextColor="{StaticResource TextPrimary}"
+                    BackgroundColor="{StaticResource SurfaceMid}"
+                    TitleColor="{StaticResource TextSecondary}" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <Label
+                        Grid.Column="0"
+                        Text="Show card points"
+                        TextColor="{StaticResource TextPrimary}"
+                        VerticalOptions="Center" />
+                    <Switch
+                        Grid.Column="1"
+                        IsToggled="{Binding ShowCardValues, Mode=TwoWay}"
+                        OnColor="{StaticResource Gold}" />
+                </Grid>
+            </VerticalStackLayout>
             <!-- Game Messages -->
             <VerticalStackLayout Spacing="12">
                 <Label Text="GAMEPLAY" Style="{StaticResource FieldLabel}" />

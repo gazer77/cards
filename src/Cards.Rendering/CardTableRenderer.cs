@@ -166,6 +166,21 @@ public sealed class CardTableRenderer
     /// </summary>
     public bool RevealAllCards { get; set; }
 
+    /// <summary>
+    /// The player's chosen size for cards and for speech bubbles, on top of whatever
+    /// each definition's <c>card_scale</c> asks for. 1 is the size the table has always
+    /// drawn; see <see cref="Cards.Services.UiSizes"/>.
+    /// </summary>
+    public float CardScale   { get; set; } = 1f;
+    public float BubbleScale { get; set; } = 1f;
+
+    /// <summary>
+    /// Writes each visible card's worth under this game's scoring in its lower corner.
+    /// A learning aid, so it is drawn over the card rather than baked into the cached
+    /// face — the value belongs to the game, not the card.
+    /// </summary>
+    public bool ShowCardValues { get; set; }
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     /// <summary>A card was tapped: its description id, and the uid of the physical card hit.</summary>
@@ -215,6 +230,7 @@ public sealed class CardTableRenderer
         {
             long now = NowMs();
             _wildRanks = null;   // a different game may have different wilds
+            _hasCardValues = null;
 
             // Collect card states before the swap
             var oldUids = _state?.Zones.Values
@@ -426,14 +442,14 @@ public sealed class CardTableRenderer
     /// it will land. The same geometry the drawers use, turned the way the zone is.
     /// Cards in zones with no per-card place (a stack, a spread) are omitted.
     /// </summary>
-    private static Dictionary<int, SKPoint> ComputeFanSlotCenters(
+    private Dictionary<int, SKPoint> ComputeFanSlotCenters(
         GameState state, IEnumerable<int> cardUids, SKImageInfo info)
     {
         var result = new Dictionary<int, SKPoint>();
         var idSet  = cardUids.ToHashSet();
         if (idSet.Count == 0) return result;
 
-        foreach (var placed in ZoneLayoutEngine.Compute(state, info))
+        foreach (var placed in ZoneLayoutEngine.Compute(state, info, CardScale))
         {
             var layout = placed;
             var screenBounds = layout.Bounds;
@@ -664,7 +680,7 @@ public sealed class CardTableRenderer
 
         _cardRects.Clear();
         _allSelectable = null;
-        var layouts = ZoneLayoutEngine.Compute(_state, info);
+        var layouts = ZoneLayoutEngine.Compute(_state, info, CardScale);
         _lastLayouts = layouts;
 
         // Signal any caller waiting for the canvas to render the current state.
@@ -708,7 +724,7 @@ public sealed class CardTableRenderer
         // Bubbles sit above the table but below the tooltip, which is a direct response
         // to a touch and must never be covered by an incidental message.
         if (_bubbles.Any)
-            _bubbles.Draw(canvas, info, NowMs(), AnchorForPlayer);
+            _bubbles.Draw(canvas, info, NowMs(), AnchorForPlayer, BubbleScale);
 
         DrawCardTooltip(canvas, info);
     }
@@ -2588,7 +2604,42 @@ public sealed class CardTableRenderer
     {
         _diagnostics.CardsDrawn++;
         CardRenderer.DrawCard(canvas, rect, card, skin, IsWildHere(card));
+        if (card.IsFaceUp) DrawCardValue(canvas, rect, card);
     }
+
+    /// <summary>
+    /// Writes what this card is worth under the game's own scoring, in the lower-right
+    /// corner of its face.
+    ///
+    /// Over the card rather than part of it: the face is cached by card and skin, while
+    /// the value belongs to the game being played — the same 5 is five points in Golf
+    /// and nothing in Hearts. Games whose definition states no card values draw nothing,
+    /// which is the honest answer rather than a column of zeroes.
+    /// </summary>
+    private void DrawCardValue(SKCanvas canvas, SKRect rect, Card card)
+    {
+        if (!ShowCardValues || _state?.Definition is not { } definition) return;
+
+        _hasCardValues ??= ScoringEngine.HasCardValues(definition);
+        if (_hasCardValues is not true) return;
+
+        string text = ScoringEngine.CardPointValue(definition, [card]).ToString();
+        float size = MathF.Max(7f, rect.Height * 0.16f);
+        using var font = new SKFont(SKTypeface.Default, size);
+        float w = font.MeasureText(text);
+
+        float pad = size * 0.3f;
+        var box = new SKRect(rect.Right - w - pad * 2.4f, rect.Bottom - size - pad * 1.9f,
+                             rect.Right - pad * 0.6f,     rect.Bottom - pad * 0.5f);
+
+        using var fill = new SKPaint { Color = new SKColor(0x10, 0x20, 0x18, 0xE6), IsAntialias = true };
+        using var ink  = new SKPaint { Color = new SKColor(0xFF, 0xFF, 0xFF, 0xF0), IsAntialias = true };
+        canvas.DrawRoundRect(box, size * 0.3f, size * 0.3f, fill);
+        canvas.DrawText(text, box.MidX - w / 2f, box.Bottom - pad * 0.7f, font, ink);
+    }
+
+    /// <summary>Whether this game states card values at all; null until first asked.</summary>
+    private bool? _hasCardValues;
 
     /// <summary>
     /// Whether this game treats the card as wild. Read from the definition once per
@@ -2621,6 +2672,7 @@ public sealed class CardTableRenderer
             // reveal nothing.
             _diagnostics.CardsDrawn++;
             CardRenderer.DrawCardFace(canvas, rect, card, _skin, IsWildHere(card));
+            DrawCardValue(canvas, rect, card);
             return;
         }
 

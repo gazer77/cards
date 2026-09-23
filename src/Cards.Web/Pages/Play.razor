@@ -35,6 +35,31 @@
                 }
                 <hr />
             }
+            @* Options: what the table looks like, as opposed to what the game does.
+               Sizes nest one level further so the section stays readable â the same
+               shape, and the same tick, as the sort above. *@
+            <div class="menu-heading">Options</div>
+            @foreach (var (target, label) in SizeTargets)
+            {
+                var capturedTarget = target;
+                <button class="menu-item indent submenu @(_sizeMenu == capturedTarget ? "open" : "")"
+                        @onclick="() => _sizeMenu = _sizeMenu == capturedTarget ? null : capturedTarget">
+                    <span>@(_sizeMenu == capturedTarget ? "▾" : "▸") @label size</span>
+                    <span class="menu-note">@SizeLabelFor(capturedTarget)</span>
+                </button>
+                @if (_sizeMenu == capturedTarget)
+                {
+                    @foreach (var (sizeId, sizeLabel, _) in Cards.Services.UiSizes.All)
+                    {
+                        var capturedSize = sizeId;
+                        <button class="menu-item indent-2 @(SizeOf(capturedTarget) == capturedSize ? "chosen" : "")"
+                                @onclick="() => SetSize(capturedTarget, capturedSize)">@sizeLabel</button>
+                    }
+                }
+            }
+            <button class="menu-item indent @(_showCardValues ? "chosen" : "")"
+                    @onclick="ToggleCardValues">Show card points</button>
+            <hr />
             <button class="menu-item" @onclick="ShowLog">Game log</button>
             <button class="menu-item" @onclick="ShowRules">Rules</button>
             <button class="menu-item" @onclick="ConfirmNewGame">New game</button>
@@ -133,7 +158,7 @@
                          CardDropped="OnCardDropped"
                          CardReordered="OnCardReordered" />
 
-        <div class="status">@Vm.StatusText</div>
+        <div class="status" style="font-size: @StatusFontSize">@Vm.StatusText</div>
 
         <div class="action-bar">
             @if (Vm.ShowActionButtons)
@@ -195,7 +220,7 @@
     private void OnVmChanged()
     {
         // Push to the canvas synchronously. The turn loop applies an action, raises
-        // this, and then immediately asks the animator to fly the moved cards — so the
+        // this, and then immediately asks the animator to fly the moved cards â so the
         // renderer must already hold the new state when that happens. Deferring the
         // push meant fly-ins were queued against the previous position.
         PushToCanvas();
@@ -210,8 +235,8 @@
         if (!firstRender) return;
 
         // The game cannot start until the canvas exists. Dealing is choreographed
-        // against the table's real geometry — where the deck sits, where each hand
-        // fans out — so starting from OnInitializedAsync meant the entire opening
+        // against the table's real geometry â where the deck sits, where each hand
+        // fans out â so starting from OnInitializedAsync meant the entire opening
         // deal, and every AI turn before the player's first, played out against no
         // table at all and was over before anything was ever drawn.
         if (_canvas?.Renderer is not null)
@@ -228,6 +253,8 @@
             // Only appsettings.Development.json sets it, so a published build cannot.
             _canvas.Renderer.RevealAllCards =
                 Config.GetValue<bool>("Debug:RevealAllCards");
+
+            ApplyDisplaySettings();
         }
 
         // Pace comes from the player now. The engine's own timing was tuned against a
@@ -240,7 +267,7 @@
 
         // The sort travels WITH the start, so the deal flies cards straight to their
         // sorted slots. Sorting afterwards dealt in shuffle order and then snapped the
-        // hand into place — the table visibly rearranging itself the moment it settled.
+        // hand into place â the table visibly rearranging itself the moment it settled.
         _sort = Settings.GetHandSort(GameId) ?? Settings.DefaultHandSort;
 
         _failed = !await Vm.StartAsync(GameId, Seats, EnabledRules, resume: Slot is not null,
@@ -264,7 +291,7 @@
     private void OnCardReordered((string CardId, int NewIndex) e)
         => Vm.ReorderInHand(e.CardId, e.NewIndex);
 
-    // ── Gear menu ─────────────────────────────────────────────────────────────
+    // ââ Gear menu âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
     private bool _menu;
     private IReadOnlyList<(string Mode, string Label)> _sortModes = [];
@@ -279,6 +306,60 @@
     private string _confirmMessage = "";
     private string _confirmVerb    = "";
 
+    // ââ Options âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+
+    /// <summary>"All" first, then each element on its own â a player usually wants one
+    /// dial, and occasionally wants to say "small cards, large text".</summary>
+    private static readonly (string Target, string Label)[] SizeTargets =
+        [("all", "All"), .. Cards.Services.UiSizes.Targets];
+
+    /// <summary>Which size list is open, or null. One at a time keeps the menu short.</summary>
+    private string? _sizeMenu;
+    private bool    _showCardValues;
+
+    private string? SizeOf(string target)
+        => target == "all" ? Settings.CommonUiSize : Settings.GetUiSize(target);
+
+    private string SizeLabelFor(string target)
+        => SizeOf(target) is { } id ? Cards.Services.UiSizes.LabelOf(id) : "Mixed";
+
+    private void SetSize(string target, string sizeId)
+    {
+        if (target == "all") Settings.SetAllUiSizes(sizeId);
+        else                 Settings.SetUiSize(target, sizeId);
+
+        _sizeMenu = null;
+        ApplyDisplaySettings();
+    }
+
+    private void ToggleCardValues()
+    {
+        _showCardValues = !_showCardValues;
+        Settings.ShowCardValues = _showCardValues;
+        ApplyDisplaySettings();
+    }
+
+    /// <summary>The status line's own size, as a CSS length, from the chosen step.</summary>
+    private string StatusFontSize
+        => (1.0 * Settings.UiScale("status")).ToString("0.###",
+               System.Globalization.CultureInfo.InvariantCulture) + "rem";
+
+    /// <summary>
+    /// Pushes the player's display choices into the renderer and repaints. Called on
+    /// load and whenever one changes, so a size takes effect where it was chosen
+    /// rather than on the next deal.
+    /// </summary>
+    private void ApplyDisplaySettings()
+    {
+        _showCardValues = Settings.ShowCardValues;
+        if (_canvas?.Renderer is not { } renderer) return;
+
+        renderer.CardScale     = (float)Settings.UiScale("cards");
+        renderer.BubbleScale   = (float)Settings.UiScale("bubbles");
+        renderer.ShowCardValues = _showCardValues;
+        _canvas.Redraw();
+    }
+
     private void SortHand(string mode)
     {
         _menu = false;
@@ -286,7 +367,7 @@
         Settings.SetHandSort(GameId, mode);
 
         // Sorting also stays in effect, so cards won later land in place. "Free" is a
-        // real choice — it stops the sorting rather than doing nothing.
+        // real choice â it stops the sorting rather than doing nothing.
         Vm.SortHand(mode);
     }
 
@@ -300,7 +381,7 @@
         _exportNote   = "";
     }
 
-    // ── Export ────────────────────────────────────────────────────────────────
+    // ââ Export ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
     private string _exportNote = "";
 
@@ -324,11 +405,11 @@
 
             // The clipboard can be refused for reasons the page cannot see, so say
             // which happened rather than looking like nothing occurred.
-            _exportNote = ok ? "Copied." : "Copy blocked — use Save file.";
+            _exportNote = ok ? "Copied." : "Copy blocked â use Save file.";
         }
         catch
         {
-            _exportNote = "Copy failed — use Save file.";
+            _exportNote = "Copy failed â use Save file.";
         }
     }
 
@@ -356,7 +437,7 @@
         _menu         = false;
         _overlayTitle = "Rules";
         _overlayLines = null;
-        _overlay      = "Loading…";
+        _overlay      = "Loadingâ¦";
         StateHasChanged();
 
         _overlay = await Help.LoadAsync(GameId);

@@ -49,7 +49,8 @@ internal sealed class SpeechBubbles
     /// has nothing on the table to point at — in which case the message is skipped
     /// rather than drawn somewhere arbitrary.
     /// </summary>
-    public void Draw(SKCanvas canvas, SKImageInfo info, long nowMs, Func<string, SKRect?> anchorFor)
+    public void Draw(SKCanvas canvas, SKImageInfo info, long nowMs,
+                     Func<string, SKRect?> anchorFor, float scale = 1f)
     {
         foreach (var (playerId, (text, start)) in _bubbles)
         {
@@ -60,18 +61,21 @@ internal sealed class SpeechBubbles
             float alpha = age <= HoldMs ? 1f : Math.Clamp(1f - (age - HoldMs) / FadeMs, 0f, 1f);
             if (alpha <= 0f) continue;
 
-            DrawBubble(canvas, info, text, anchor.Value, alpha);
+            DrawBubble(canvas, info, text, anchor.Value, alpha, scale);
         }
     }
 
     private static void DrawBubble(
-        SKCanvas canvas, SKImageInfo info, string text, SKRect anchor, float alpha)
+        SKCanvas canvas, SKImageInfo info, string text, SKRect anchor, float alpha, float scale)
     {
-        float size = MathF.Max(12f, MathF.Min(info.Width, info.Height) * 0.022f);
+        // The player's size scales the whole bubble — text, padding and the width it
+        // is allowed to take — so a small bubble is a small bubble, not small text in a
+        // box the size it always was.
+        float size = MathF.Max(9f, MathF.Min(info.Width, info.Height) * 0.022f * scale);
         using var font = new SKFont(SKTypeface.Default, size);
 
-        const float padX = 12f, padY = 8f;
-        float maxWidth = info.Width * 0.42f;
+        float padX = 12f * scale, padY = 8f * scale;
+        float maxWidth = info.Width * 0.42f * MathF.Max(scale, 0.5f);
 
         var lines = Wrap(text, font, maxWidth - padX * 2);
         float lineH = size * 1.25f;
