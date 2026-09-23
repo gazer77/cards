@@ -2435,13 +2435,19 @@ public sealed class CardTableRenderer
     /// </summary>
 
     /// <summary>
-    /// " — 10" when the game scores cards and the player asked for values, else "".
+    /// " — 10" when this game says what its cards are worth, else "". The corner pip on
+    /// the face stays a player setting; naming the value is the game speaking.
     /// </summary>
     private string CardValueSuffix(Card card)
     {
-        if (!ShowCardValues || _state?.Definition is not { } definition) return "";
+        if (_state?.Definition is not { } definition) return "";
+
+        // The game decides, not the player: the value is part of what the card IS in
+        // this game, and a player who has to go and switch it on is a player who did
+        // not know a King was worth nothing until they had lost a hand to it.
         _hasCardValues ??= ScoringEngine.HasCardValues(definition);
         if (_hasCardValues is not true) return "";
+        if (definition.Ui?.ShowCardValues == false) return "";
         return $" — {ScoringEngine.CardPointValue(definition, [card])}";
     }
 

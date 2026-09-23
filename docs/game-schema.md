@@ -1352,7 +1352,8 @@ Optional `ui` block for display hints.
   "card_scale": 1.2,
   "auto_sort_hand": "rank",
   "allow_sort": true,
-  "show_game_log": false
+  "show_game_log": false,
+  "show_card_values": true
 }
 ```
 
@@ -1362,6 +1363,7 @@ Optional `ui` block for display hints.
 | `auto_sort_hand` | `"none"` | Auto-sort after every action: `"none"` \| `"rank"` \| `"rank_ace_high"` \| `"suit"` |
 | `allow_sort` | `true` | Show a Sort button in the HUD |
 | `show_game_log` | `true` | Show a Log button in the HUD |
+| `show_card_values` | set by the game | Whether the bubble naming a tapped card also says what it is worth — "Jack of Clubs — 10". Unset means true for any game whose `scoring` states `card_values`, which is exactly the games where a card is worth something its face does not say. Set `false` for a game that would rather not tell. The corner pip on the card face is a player setting and is separate. |
 
 ---
 

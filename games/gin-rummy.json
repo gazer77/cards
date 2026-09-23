@@ -56,7 +56,8 @@
   },
   "ui": {
     "default_sort": "rank_ace_high",
-    "sort_modes": ["rank_ace_high", "suit_value", "suit_stable"]
+    "sort_modes": ["rank_ace_high", "suit_value", "suit_stable"],
+    "show_card_values": true
   },
   "win_condition": { "type": "target_score", "score": 100, "winner": "first" },
   "house_rules": [

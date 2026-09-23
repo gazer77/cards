@@ -1,3 +1,4 @@
+using Cards.Models;
 using Cards.Engine;
 using Cards.Rendering;
 using Cards.Services;
@@ -109,5 +110,47 @@ public sealed class CardTooltipTests
 
         Assert.Equal("Jack of Clubs", jack.DisplayName);
         Assert.Equal(10, ScoringEngine.CardPointValue(golf, [jack]));
+    }
+}
+
+/// <summary>
+/// What the name bubble says a card is worth, which the game decides rather than the
+/// player: a King is nothing in Golf and ten in Hand and Foot, and neither is written
+/// on the card.
+/// </summary>
+public sealed class CardValueNameTests
+{
+    private static GameDefinition Load(string id)
+        => new GameLoader(new EmbeddedGameAssetSource()).LoadAsync(id).GetAwaiter().GetResult()!;
+
+    [Theory]
+    [InlineData("golf")]
+    [InlineData("gin-rummy")]
+    [InlineData("hand-and-foot")]
+    public void A_game_that_scores_its_cards_says_so_in_its_definition(string id)
+    {
+        var definition = Load(id);
+        Assert.True(ScoringEngine.HasCardValues(definition));
+        Assert.True(definition.Ui?.ShowCardValues, $"{id} scores its cards but does not say to name the value.");
+    }
+
+    [Fact]
+    public void A_game_that_scores_no_cards_has_nothing_to_say()
+    {
+        // Left unset, and nothing to show even if it were set: the bubble falls back to
+        // the card's name alone rather than writing 0 on everything.
+        var hearts = Load("hearts");
+        Assert.Null(hearts.Ui?.ShowCardValues);
+        Assert.False(ScoringEngine.HasCardValues(hearts));
+    }
+
+    [Fact]
+    public void The_value_is_the_games_own_and_not_the_cards_face()
+    {
+        // The case that makes this worth showing at all: a King reads as nothing in one
+        // game and as ten in another, with the same face both times.
+        var king = new Card(Suit.Spades, Rank.King);
+        Assert.Equal(0,  ScoringEngine.CardPointValue(Load("golf"), [king]));
+        Assert.Equal(10, ScoringEngine.CardPointValue(Load("hand-and-foot"), [king]));
     }
 }

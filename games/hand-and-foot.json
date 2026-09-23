@@ -172,5 +172,8 @@
       "affects": { "teams": false }
     }
   ],
+  "ui": {
+    "show_card_values": true
+  },
   "help": "hand-and-foot.md"
 }

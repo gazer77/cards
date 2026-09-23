@@ -468,6 +468,23 @@ public class GameUiConfig
     public string? DefaultSort { get; set; }
 
     /// <summary>
+    /// Whether the bubble that names a tapped card also says what it is worth —
+    /// "Jack of Clubs — 10".
+    ///
+    /// What a card is worth is a rule of the game, not a property of the card: a King
+    /// is nothing in Golf, ten in Hand and Foot, and neither in Hearts, and none of
+    /// that is on the face. So a game that scores its cards says it here and the value
+    /// is part of the card's name from then on, for every player, rather than waiting
+    /// on a setting each of them would have to find.
+    ///
+    /// Left unset it is true for any game whose scoring states card values, which is
+    /// exactly the set of games where a card means more than its rank and suit. Set it
+    /// false for a game that would rather not say.
+    /// </summary>
+    [JsonPropertyName("show_card_values")]
+    public bool? ShowCardValues { get; set; }
+
+    /// <summary>
     /// When true a Log button appears in the HUD so the player can review the
     /// full game event history.  Defaults to true.
     /// </summary>
