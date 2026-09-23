@@ -732,6 +732,11 @@ over, so a finger landing on the wrong card costs nothing. `false` turns each ca
 tapped. Either way a double tap turns a card there and then (see **Double tap**), and a
 computer seat acts on its own taps, having no mind to change.
 
+`distinct`: `"column"`, `"row"`, or both as an array — the cards a seat turns must lie in
+different lines of the grid. Golf's peeks may share a row but not a column. Cards that would
+break the rule are simply not offered, so it shows itself as "that card cannot be picked"
+rather than as a refusal after the fact, and a computer seat cannot pick its way around it.
+
 (`peek_count` on a grid zone still exists and turns the *first* cards dealt, with no
 choice; prefer a `reveal` phase.)
 

@@ -306,3 +306,89 @@ public sealed class DoubleTapFallbackTests
         Assert.False(state.Metadata.ContainsKey("selected_card"));
     }
 }
+
+/// <summary>
+/// Golf's peek rule as it is actually played: the two cards you turn may share a row,
+/// but not a column. Declared, so a game with a different grid or a different rule says
+/// so rather than inheriting Golf's.
+/// </summary>
+public sealed class RevealDistinctTests
+{
+    private static (GameState State, IGameLogic Logic, Zone Grid) Golf()
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(9) };
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, 2, []);
+        return (state, logic, state.Zones[$"grid:{state.CurrentPlayer.Id}"]);
+    }
+
+    // A 2x3 grid, row-major: indices 0,1,2 are the top row; 3,4,5 the bottom.
+    // So 0 and 3 share a column; 0 and 4 do not.
+
+    [Fact]
+    public void A_card_below_the_one_already_picked_is_not_offered()
+    {
+        var (state, logic, grid) = Golf();
+        var first = grid.Cards[0];
+        logic.Apply(state, new GameAction("select_card", CardId: first.Id, CardUid: first.Uid));
+
+        var offered = logic.GetSelectableCardIds(state);
+        Assert.DoesNotContain(grid.Cards[3].Id, offered);   // same column
+        Assert.Contains(grid.Cards[1].Id, offered);         // same row, other column
+        Assert.Contains(first.Id, offered);                 // the pick can be taken back
+    }
+
+    [Fact]
+    public void Picking_out_of_column_is_refused_even_when_asked_directly()
+    {
+        // Agents and outside callers send a card straight in; a rule that lives only in
+        // a highlight is not a rule.
+        var (state, logic, grid) = Golf();
+        logic.Apply(state, new GameAction("select_card", CardId: grid.Cards[0].Id, CardUid: grid.Cards[0].Uid));
+        logic.Apply(state, new GameAction("select_card", CardId: grid.Cards[3].Id, CardUid: grid.Cards[3].Uid));
+
+        Assert.Equal(grid.Cards[0].Uid.ToString(), state.Metadata.GetValueOrDefault("selected_card"));
+    }
+
+    [Fact]
+    public void Two_cards_in_one_row_are_a_legal_pair()
+    {
+        var (state, logic, grid) = Golf();
+        foreach (var pick in new[] { grid.Cards[0], grid.Cards[1] })
+            logic.Apply(state, new GameAction("select_card", CardId: pick.Id, CardUid: pick.Uid));
+
+        logic.Apply(state, new GameAction("flip"));
+        Assert.True(grid.Cards[0].IsFaceUp && grid.Cards[1].IsFaceUp);
+    }
+
+    [Fact]
+    public void Every_seat_turns_cards_in_different_columns()
+    {
+        // Including the computer seats, which reach the cards by their own route.
+        var (state, logic, _) = Golf();
+        for (int seat = 0; seat < 2; seat++)
+        {
+            var grid = state.Zones[$"grid:{state.CurrentPlayer.Id}"];
+            while (state.Zones[$"grid:{state.CurrentPlayer.Id}"] == grid
+                   && grid.Cards.Count(c => c.IsFaceUp) < 2)
+            {
+                var offered = logic.GetSelectableCardIds(state);
+                if (offered.Count == 0) break;
+                var card = grid.Cards.First(c => offered.Contains(c.Id) && !c.IsFaceUp);
+                logic.Apply(state, new GameAction("select_card", CardId: card.Id, CardUid: card.Uid));
+                if (logic.GetValidActions(state).Any(a => a.Type == "flip"))
+                    logic.Apply(state, new GameAction("flip"));
+            }
+
+            var columns = grid.Cards
+                .Select((c, i) => (Card: c, Col: i % 3))
+                .Where(x => x.Card.IsFaceUp)
+                .Select(x => x.Col)
+                .ToList();
+            Assert.Equal(2, columns.Count);
+            Assert.Equal(columns.Count, columns.Distinct().Count());
+        }
+    }
+}

@@ -65,7 +65,7 @@ public static class DefinitionAudit
         ["deal"]                = ["burn_first", "cards", "count", "face", "to"],
         ["name_trump"]          = ["exclude_suit"],
         ["dealer_discard"]      = [],
-        ["reveal"]              = ["count", "zone", "confirm"],
+        ["reveal"]              = ["count", "zone", "confirm", "distinct"],
     };
 
     /// <summary>Parameters any phase may carry, whatever its type.</summary>

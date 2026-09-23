@@ -242,8 +242,12 @@ public partial class GameTablePage : ContentPage
         if (_state is null || _logic is null) return;
         if (GameOverOverlay.IsVisible || GameLogOverlay.IsVisible || _isAutoAdvancing) return;
 
+        // Only where the table itself is the affordance: an action with no label has no
+        // button, and one with a button must not have an invisible second copy on the
+        // felt — a turned zone records no card rectangles, so a tap on an opponent's
+        // card is a tap on nothing.
         var actions = _logic.GetValidActions(_state);
-        if (actions.Count != 1) return;
+        if (actions.Count != 1 || actions[0].Label is not null) return;
         _ = ApplyAndRefreshAsync(actions[0]);
     }
 

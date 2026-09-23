@@ -27,7 +27,8 @@
       "layout": { "place": { "x": "50%", "y": "93%", "anchor": "center", "width": "10%", "height": "12%" } } }
   ],
   "phases": [
-    { "id": "peek", "type": "reveal", "zone": "grid", "count": 2, "confirm": true, "next": "play" },
+    { "id": "peek", "type": "reveal", "zone": "grid", "count": 2, "confirm": true,
+      "distinct": "column", "next": "play" },
     {
       "id": "play",
       "type": "draw_discard",

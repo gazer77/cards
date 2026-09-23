@@ -434,12 +434,22 @@ public sealed class GameTableViewModel
             CardUid: uid >= 0 ? uid : null));
     }
 
+    /// <summary>
+    /// A tap on bare felt. It carries the game forward only where the table itself is
+    /// the affordance — "Tap to flip!" — which is what an action with no label is: one
+    /// the action bar never draws a button for.
+    ///
+    /// A labelled action has a button, so the felt must not be a second, invisible copy
+    /// of it. It was: a zone drawn turned records no card rectangles, so a click on an
+    /// opponent's card is a click on nothing, and with a single action available that
+    /// "nothing" discarded the card the player had just drawn.
+    /// </summary>
     public Task TapTable()
     {
         if (!CanAcceptInput()) return Task.CompletedTask;
 
         var actions = _logic!.GetValidActions(_state!);
-        if (actions.Count != 1) return Task.CompletedTask;
+        if (actions.Count != 1 || actions[0].Label is not null) return Task.CompletedTask;
 
         return ApplyAsync(actions[0]);
     }

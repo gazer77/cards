@@ -31,6 +31,17 @@ public sealed class RevealHandler : IPhaseHandler
     private readonly int    _count;
     private readonly bool   _confirm;
 
+    /// <summary>
+    /// Dimensions the cards a seat turns must differ in — Golf's rule that the two you
+    /// peek at may share a row but not a column. Empty when the game does not care.
+    ///
+    /// Enforced by leaving the cards that would break it out of the selectable list
+    /// rather than by refusing a tap afterwards: a rule that shows itself as "that card
+    /// is not on offer" needs no message, and a computer seat cannot pick its way into
+    /// an illegal pair either.
+    /// </summary>
+    private readonly HashSet<string> _distinct = [];
+
     public RevealHandler(PhaseDefinition def, string nextPhaseId)
     {
         _nextPhaseId = nextPhaseId;
@@ -40,6 +51,17 @@ public sealed class RevealHandler : IPhaseHandler
             ? c.GetInt32() : 2;
         _confirm = def.Extra?.TryGetValue("confirm", out var f) != true
                 || f.ValueKind != System.Text.Json.JsonValueKind.False;
+
+        // "distinct": "column", or ["row", "column"] for a game that wants both.
+        if (def.Extra?.TryGetValue("distinct", out var d) == true)
+        {
+            if (d.ValueKind == System.Text.Json.JsonValueKind.String)
+                _distinct.Add(d.GetString()!);
+            else if (d.ValueKind == System.Text.Json.JsonValueKind.Array)
+                foreach (var entry in d.EnumerateArray())
+                    if (entry.ValueKind == System.Text.Json.JsonValueKind.String)
+                        _distinct.Add(entry.GetString()!);
+        }
     }
 
     public IReadOnlyList<GameAction> GetValidActions(GameState state)
@@ -63,7 +85,52 @@ public sealed class RevealHandler : IPhaseHandler
 
         // Picked cards stay selectable so a second tap takes the pick back — the whole
         // point of asking before turning.
-        return zone.Cards.Where(c => !c.IsFaceUp).Select(c => c.Id).ToList();
+        var picked = Picked(state);
+        var taken  = TakenLines(zone, picked);
+
+        return zone.Cards
+            .Where(c => !c.IsFaceUp)
+            .Where(c => picked.Contains(c.Uid) || IsAllowed(zone, c, taken))
+            .Select(c => c.Id)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The rows and columns already spoken for this turn — by a card already turned, or
+    /// by one picked and waiting on the button.
+    /// </summary>
+    private HashSet<(string Dimension, int Line)> TakenLines(Zone zone, List<int> picked)
+    {
+        var taken = new HashSet<(string, int)>();
+        if (_distinct.Count == 0) return taken;
+
+        for (int i = 0; i < zone.Cards.Count; i++)
+        {
+            var card = zone.Cards[i];
+            if (!card.IsFaceUp && !picked.Contains(card.Uid)) continue;
+
+            var (row, col) = Cell(zone, i);
+            if (_distinct.Contains("row"))    taken.Add(("row", row));
+            if (_distinct.Contains("column")) taken.Add(("column", col));
+        }
+        return taken;
+    }
+
+    private bool IsAllowed(Zone zone, Card card, HashSet<(string Dimension, int Line)> taken)
+    {
+        if (taken.Count == 0) return true;
+
+        var (row, col) = Cell(zone, zone.Cards.IndexOf(card));
+        if (_distinct.Contains("row")    && taken.Contains(("row", row)))    return false;
+        if (_distinct.Contains("column") && taken.Contains(("column", col))) return false;
+        return true;
+    }
+
+    /// <summary>Where a card sits in its grid, row-major — the same order it is drawn in.</summary>
+    private static (int Row, int Col) Cell(Zone zone, int index)
+    {
+        int cols = Math.Max(1, zone.Definition?.Cols ?? 3);
+        return (index / cols, index % cols);
     }
 
     /// <summary>A double tap turns that card now, whatever the confirm setting says.</summary>
@@ -94,6 +161,12 @@ public sealed class RevealHandler : IPhaseHandler
             ? zone.Cards.FirstOrDefault(c => c.Uid == tapped)
             : zone.Cards.FirstOrDefault(c => c.Id == action.CardId && !c.IsFaceUp);
         if (chosen is null || chosen.IsFaceUp) return;
+
+        // The same rule the selectable list expresses, held here too: an agent or an
+        // outside caller sends a card id straight in, and a rule that only exists in a
+        // highlight is not a rule.
+        var already = Picked(state);
+        if (!already.Contains(chosen.Uid) && !IsAllowed(zone, chosen, TakenLines(zone, already))) return;
 
         // Picking, when this game asks before turning and there is a person to ask. An
         // agent has no mind to change, and waiting for it to press its own button would
