@@ -199,3 +199,91 @@ public sealed class DeclaredLayoutTests
         public void StopFrames() { }
     }
 }
+
+/// <summary>
+/// Two things a table must not do, whatever the seat count: squeeze a seat's zone down
+/// to nothing, or drop a panel on top of somebody's cards.
+///
+/// Four-player Golf did the first. A side seat's band was clamped by the discard pile,
+/// which lapped 7% of its width into that column, and the seat's whole side of the table
+/// collapsed to two pixels: both side players' grids were simply not drawn, on a table
+/// whose zones all passed the no-overlap check.
+/// </summary>
+[Collection(CardCacheCollection.Name)]
+public sealed class TableRoomTests
+{
+    private sealed class StubDriver : IAnimationDriver
+    { public event Action? Tick; public void RequestFrames() { } public void StopFrames() { } }
+
+    private static readonly SKImageInfo Canvas = new(1400, 900);
+
+    public static TheoryData<string, int> EveryTable
+    {
+        get
+        {
+            var data = new TheoryData<string, int>();
+            var loader = new GameLoader(new EmbeddedGameAssetSource());
+            foreach (var def in loader.LoadAllAsync().GetAwaiter().GetResult())
+                for (int seats = def.MinPlayers; seats <= def.MaxPlayers; seats++)
+                    data.Add(def.Id, seats);
+            return data;
+        }
+    }
+
+    private static GameState Table(string gameId, int seats)
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync(gameId).GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(1) };
+        LogicRegistry.Create(definition).Initialize(state, seats, []);
+        return state;
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryTable))]
+    public void Every_zone_has_room_to_draw_a_card(string gameId, int seats)
+    {
+        // Measured against what the zone asked for: a zone declaring card_scale 0.6 means
+        // to be small, and holding it to the same floor as a hand would call its own
+        // wish a bug. What is never intentional is a zone squeezed towards nothing.
+        foreach (var l in ZoneLayoutEngine.Compute(Table(gameId, seats), Canvas))
+        {
+            float scale = l.Zone.Definition?.CardScale ?? 1f;
+            Assert.True(l.CardWidth >= 20f * scale && l.CardHeight >= 28f * scale,
+                $"{gameId}/{seats}p: {l.Zone.Id} draws cards {l.CardWidth:F0}x{l.CardHeight:F0} "
+              + $"in {l.Bounds} — too small to see, let alone play.");
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryTable))]
+    public void A_score_card_sits_clear_of_every_zone(string gameId, int seats)
+    {
+        var state = Table(gameId, seats);
+        if (state.Definition.ScoreCard is null) return;
+
+        // Checked in the view the game opens in, with a full history behind it — a score
+        // card that only clears the table while the game is young is clear of nothing.
+        // The other view is the player opening a panel over the table, which they asked
+        // for and close with a second tap; that one may cover cards.
+        for (int round = 1; round <= state.Definition.ScoreCard.MaxRounds; round++)
+            state.ScoreHistory.Add(new ScoreRound(round,
+                state.Players.ToDictionary(p => p.Id, _ => -88)));
+
+        var renderer = new CardTableRenderer(new StubDriver()) { GameState = state };
+        using var surface = SKSurface.Create(Canvas);
+        renderer.Paint(surface.Canvas, Canvas);
+
+        var card = renderer.ScoreCardBounds;
+        Assert.NotNull(card);
+
+        foreach (var l in ZoneLayoutEngine.Compute(state, Canvas))
+        {
+            var zone = l.Bounds;
+            zone.Inflate(-1f, -1f);
+            var panel = card.Value;
+            Assert.False(panel.IntersectsWith(zone),
+                $"{gameId}/{seats}p: the score card at {panel} covers {l.Zone.Id} at {l.Bounds}.");
+        }
+    }
+}

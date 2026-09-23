@@ -243,6 +243,10 @@ heuristics, and conservative poker betting; everything else falls through to ran
         Euchre's bidding `prompt`.
       Each is either a rule to implement or a line to delete; leaving them stated and
       unread is the one option now ruled out.
+- [ ] **Hand and Foot at five seats** — the two side players' feet are drawn at the
+      smallest size the table allows. Five seats put three players along the top, which
+      leaves the sides a narrow band, and Hand and Foot asks each seat for a hand, a
+      foot and a meld strip. Playable, but the foot is a token rather than a pile.
 - [x] **Score card zone** — a `score_card` block places a panel with a row per player or
       team, a total, and a detail view with a column per round. The engine records what
       each round scored (`GameState.ScoreHistory`), so detail and total always agree.

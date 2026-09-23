@@ -109,7 +109,7 @@
     "by": "player",
     "round_label": "R",
     "max_rounds": 6,
-    "place": { "x": "2%", "y": "3%", "anchor": "top-left" }
+    "place": { "x": "19%", "y": "50%", "anchor": "center", "width": "8%", "height": "26%" }
   },
   "help": "hearts.md"
 }

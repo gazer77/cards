@@ -88,10 +88,38 @@ public static class DeclaredLayoutEngine
             var (yMin, yMax) = bands.GetValueOrDefault(spot.Seat.Index, (0f, H));
             foreach (var ob in fixedObstacles)
             {
-                if (ob.Right <= bounds.Left || ob.Left >= bounds.Right) continue;   // not in this column
+                // Only what is really in the way. A clipped corner — a pile whose edge
+                // laps a few pixels into this column — used to count as fully blocking,
+                // and Golf's discard, overlapping a side grid by 7% of its width, took
+                // the whole side of the table away from two of its four players.
+                float overlap = MathF.Min(ob.Right, bounds.Right) - MathF.Max(ob.Left, bounds.Left);
+                if (overlap <= MathF.Min(ob.Width, bounds.Width) * 0.25f) continue;
+
+                // An obstacle across the middle of the table cannot be gone round by
+                // moving up or down: taking it as either would leave a sliver. The side
+                // seat keeps the larger of the two gaps it leaves instead.
+                if (ob.Top < H / 2f && ob.Bottom > H / 2f)
+                {
+                    if (ob.Top - yMin >= yMax - ob.Bottom) yMax = MathF.Min(yMax, ob.Top - 4f);
+                    else                                   yMin = MathF.Max(yMin, ob.Bottom + 4f);
+                    continue;
+                }
+
                 if (ob.MidY < H / 2f) yMin = MathF.Max(yMin, ob.Bottom + 4f);
                 else                  yMax = MathF.Min(yMax, ob.Top - 4f);
             }
+
+            // A band thinner than a card is not a squeeze, it is a disappearance. When
+            // the obstacles leave no room, the seat keeps a card's worth of table and
+            // overlaps rather than vanishing: a player can move a card off a pile they
+            // can see, and can do nothing at all with one they cannot.
+            float floor = baseCardW * 1.4f;
+            if (yMax - yMin < floor)
+            {
+                float mid = (yMin + yMax) / 2f;
+                (yMin, yMax) = (MathF.Max(0f, mid - floor / 2f), MathF.Min(H, mid + floor / 2f));
+            }
+
             bands[spot.Seat.Index] = (yMin, yMax);
         }
 
@@ -104,15 +132,57 @@ public static class DeclaredLayoutEngine
                 && placed.Where(p => p.Spot.Seat.Index == spot.Seat.Index)
                          .Any(p => p.Bounds.Top < band.Min || p.Bounds.Bottom > band.Max))
             {
-                float k = (band.Max - band.Min) / H;
-                final = new SKRect(bounds.Left, band.Min + bounds.Top * k, bounds.Right, band.Min + bounds.Bottom * k);
+                // What the seat uses, squeezed into what it has. Scaling the whole
+                // table height instead threw away the margin the seat was not using:
+                // Golf's side player, whose column holds one grid and an empty slot,
+                // got a grid a third the size of the one across the table from it.
+                var used = Occupied(placed, spot.Seat.Index);
+                float span = MathF.Max(1f, used.Bottom - used.Top);
+                float k    = (band.Max - band.Min) / span;
+                final = new SKRect(bounds.Left,
+                                   band.Min + (bounds.Top    - used.Top) * k,
+                                   bounds.Right,
+                                   band.Min + (bounds.Bottom - used.Top) * k);
             }
+
+            // The sliver the band tolerated: an obstacle lapping a little way into this
+            // column is gone round sideways rather than by giving up the whole height.
+            // Trimming the edge costs a side seat a few pixels of width; treating it as
+            // a full block cost it the table.
+            if (spot.Seat.Side is "left" or "right")
+                foreach (var ob in fixedObstacles)
+                {
+                    if (ob.Bottom <= final.Top || ob.Top >= final.Bottom) continue;
+                    if (ob.Right <= final.Left || ob.Left >= final.Right) continue;
+
+                    if (spot.Seat.Side == "left") final.Right = MathF.Min(final.Right, ob.Left - 4f);
+                    else                          final.Left  = MathF.Max(final.Left,  ob.Right + 4f);
+                }
+
             layouts.Add(Describe(state, spot, final, baseCardW));
         }
 
         return layouts;
     }
 
+
+    /// <summary>
+    /// The vertical run a seat's zones actually cover, before any squeeze. A seat is
+    /// compressed into the room it has by how much of the table it uses, not by how
+    /// much of the table exists.
+    /// </summary>
+    private static (float Top, float Bottom) Occupied(
+        List<(Spot Spot, SKRect Bounds)> placed, int seatIndex)
+    {
+        float top = float.MaxValue, bottom = float.MinValue;
+        foreach (var (spot, bounds) in placed)
+        {
+            if (spot.Seat.Index != seatIndex) continue;
+            top    = MathF.Min(top, bounds.Top);
+            bottom = MathF.Max(bottom, bounds.Bottom);
+        }
+        return top <= bottom ? (top, bottom) : (0f, 1f);
+    }
     // ── Seats ─────────────────────────────────────────────────────────────────
 
     /// <summary>

@@ -10,6 +10,7 @@ namespace Cards.Tests;
 /// Scores lived only in a total and an end-of-game list, so a game of nine holes could
 /// not show the holes and a game mid-round showed nothing at all.
 /// </summary>
+[Collection(CardCacheCollection.Name)]
 public sealed class ScoreCardTests
 {
     private sealed class StubDriver : IAnimationDriver
@@ -36,7 +37,10 @@ public sealed class ScoreCardTests
         var card = state.Definition.ScoreCard;
 
         Assert.NotNull(card);
-        Assert.Equal("detail", card.View);      // nine holes, shown as holes
+        // Opens as a total, which fits in the corner at every seat count; the holes are
+        // a tap away and may cover the table, because the player asked for them.
+        Assert.Equal("total", card.View);
+        Assert.True(card.Collapsible);
         Assert.Equal("H", card.RoundLabel);
         Assert.NotNull(card.Place);
     }

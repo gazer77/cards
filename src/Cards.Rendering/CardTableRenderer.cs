@@ -2451,6 +2451,12 @@ public sealed class CardTableRenderer
     private SKRect? _scoreCardRect;
 
     /// <summary>
+    /// The score card as last painted, or null when this game shows none. Exposed so a
+    /// test can ask whether it lands on top of somebody's cards.
+    /// </summary>
+    public SKRect? ScoreCardBounds => _scoreCardRect;
+
+    /// <summary>
     /// Which view the player is looking at, once they have said. Null means the view
     /// the definition opens in — the player's choice belongs to the player and to this
     /// sitting, so it is not written into the game.
@@ -2481,6 +2487,23 @@ public sealed class CardTableRenderer
         var table = new SKImageInfo(info.Width, info.Height);
         float unit = MathF.Min(table.Width, table.Height);
         float size = MathF.Max(9f, unit * 0.026f);
+
+        // A declared width or height is a promise about how much table this takes, and
+        // a panel that outgrew it would land on somebody's cards — an eight-player game
+        // has eight rows whatever the type size. So the text shrinks to the box rather
+        // than the box growing past what was declared. Measured once at the natural
+        // size, then scaled: the ratio is exact because every part scales together.
+        if (card.Place is { } spot && (spot.Width is not null || spot.Height is not null))
+        {
+            using var probe = new SKFont(SKTypeface.Default, size);
+            float wantW = Content(card, rows, rounds.Count, probe).W;
+            float wantH = Content(card, rows, rounds.Count, probe).H;
+            float haveW = spot.Width  is { } pw ? info.Width  * Percent(pw, 1f) : wantW;
+            float haveH = spot.Height is { } ph ? info.Height * Percent(ph, 1f) : wantH;
+            size *= MathF.Min(1f, MathF.Min(haveW / wantW, haveH / wantH));
+            size  = MathF.Max(7f, size);
+        }
+
         using var font     = new SKFont(SKTypeface.Default, size);
         using var headFont = new SKFont(SKTypeface.Default, size * 0.85f);
 
@@ -2563,6 +2586,31 @@ public sealed class CardTableRenderer
         }
     }
 
+
+    /// <summary>
+    /// How much room the score card's contents want at a given type size — the same
+    /// arithmetic the drawing uses, so a card told to fit a box fits it.
+    /// </summary>
+    private static (float W, float H) Content(
+        Cards.Models.ScoreCardDefinition card,
+        List<(string Id, string Name, int Total, bool IsMe)> rows,
+        int roundCount, SKFont font)
+    {
+        float size    = font.Size;
+        float pad     = size * 0.55f;
+        float lineH   = size * 1.55f;
+        float nameW   = rows.Max(r => font.MeasureText(r.Name)) + pad;
+        float colW    = MathF.Max(font.MeasureText("-99"), size * 1.6f) + pad;
+        float bodyW   = nameW + colW * (roundCount + 1);
+        float headH   = card.Label.Length > 0 ? lineH : 0f;
+        float roundsH = roundCount > 0 ? lineH : 0f;
+        float headW   = card.Label.Length == 0 ? 0f
+            : font.MeasureText(card.Label)
+              + (card.Collapsible ? font.MeasureText("detail") * 0.85f + pad * 2f : 0f);
+
+        return (MathF.Max(bodyW, headW) + pad * 2f,
+                headH + roundsH + rows.Count * lineH + pad * 2f);
+    }
     /// <summary>One row per player, or per team when the definition asks for sides.</summary>
     private List<(string Id, string Name, int Total, bool IsMe)> ScoreRows(Cards.Models.ScoreCardDefinition card)
     {
