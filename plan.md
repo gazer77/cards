@@ -107,6 +107,17 @@ heuristics, and conservative poker betting; everything else falls through to ran
       (casino green) is the only implementation, and nothing constructs another
 - [ ] Player-uploaded custom backgrounds — no file/media picker in the app
 - [x] Custom house rules (per-game toggles) — 15 of 16 games define house rules
+- [ ] **Vote on the house rules** — before a multiplayer game starts, every seat sees the
+      rules the definition offers and says yes or no, rather than the host deciding for
+      the table. The rules are already declared per game with a name, a description and
+      a default (`house_rules`), and a table already agrees on a definition before it
+      deals, so the missing part is the asking: a lobby screen listing each rule with a
+      tally, a way to close the vote, and the agreed set travelling with the deal so
+      every client applies the same patches in the same order. Open questions worth
+      settling when it is picked up: whether the host can carry a rule the table voted
+      down, whether a majority or unanimity decides, and whether a late joiner inherits
+      the vote or reopens it. Local games would get it too, as a way to see what a game
+      offers without leaving the table.
 - [x] Save and resume any number of games — each save gets its own slot carrying the
       seat count and house rules it was written at, listed for resuming on the setup
       screen. Replaces one-slot-per-game, which let a four-player save load into a
