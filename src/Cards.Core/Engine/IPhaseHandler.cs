@@ -38,5 +38,15 @@ public interface IPhaseHandler
     /// Only invoked on the handler for the game's first phase.
     /// Default implementation is a no-op.
     /// </summary>
+
+    /// <summary>
+    /// The one obvious thing to do with this card — what a double tap on it means.
+    ///
+    /// Null when this phase has no such thing, and the double tap is then just a tap.
+    /// A phase that asks before it acts (see the confirm parameters) answers here with
+    /// the action it would have taken, so a player who knows their mind can skip the
+    /// asking without losing it for everyone else.
+    /// </summary>
+    GameAction? DefaultCardAction(GameState state, string cardId, int? uid) => null;
     void OnGameStart(GameState state) { }
 }

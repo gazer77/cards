@@ -50,6 +50,11 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     // own face-down cards up. The turn is not over until they have.
     private readonly bool         _flipAfterDiscard;
 
+    // Grid mode: whether a tap proposes and a button commits, rather than a tap doing
+    // it. The drawn card sits where a player reaches past it, and the tap that meant
+    // "replace this one" was ending the turn instead.
+    private readonly bool         _confirm;
+
     /// <summary>Zone id → the condition under which it may be drawn from.</summary>
     private readonly Dictionary<string, JsonElement> _drawRequires = [];
 
@@ -117,6 +122,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         _roundEndsWhen   = GetString(def, "round_ends_when");
         _remainingGetOneTurn = GetBool(def, "remaining_players_get_one_more_turn") ?? false;
         _flipAfterDiscard    = GetBool(def, "flip_after_discard") ?? false;
+        _confirm             = GetBool(def, "confirm") ?? false;
     }
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
@@ -158,6 +164,24 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             // A card owed to the table blocks everything that would end the turn: the
             // obligation is the price of the pickup, so it cannot be walked away from.
             bool owesMeld = state.Metadata.ContainsKey("dd_must_meld");
+
+            // Grid mode asks before it acts, when the definition says to. Tapping the
+            // drawn card used to discard it there and then, which is the same gesture a
+            // player makes when reaching past it for the card they meant to replace —
+            // and the turn was over before they saw it go.
+            if (_targetZone == "grid" && Confirming(state))
+            {
+                if (state.Metadata.ContainsKey("dd_must_flip"))
+                {
+                    if (state.Metadata.GetValueOrDefault("selected_card") is { Length: > 0 })
+                        actions.Add(new GameAction("flip", Label: GameText.Action(state, "flip", "Flip")));
+                }
+                else if (state.Metadata.ContainsKey("dd_drawn_card"))
+                {
+                    actions.Add(new GameAction("discard_drawn",
+                        Label: GameText.Action(state, "discard_drawn", "Discard Drawn")));
+                }
+            }
 
             // Special actions available after drawing (before discarding)
             if (_specialActions.Contains("gin") && ConditionMet(state, _ginCondition))
@@ -256,22 +280,42 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             return;
         }
 
+        // The Flip button: turn the card picked for the obligation.
+        if (_targetZone == "grid" && action.Type == "flip"
+            && state.Metadata.ContainsKey("dd_must_flip")
+            && state.Metadata.GetValueOrDefault("selected_card") is { Length: > 0 } pickedToken
+            && CardFromToken(state, pickedToken) is { IsFaceUp: false } pickedCard)
+        {
+            FlipOwed(state, pickedCard);
+            return;
+        }
+
         // A flip owed after discarding the drawn card. An agent sends play_card, a tap
         // sends select_card; both must answer the obligation, or the AI's turn — its
         // play_card having fallen through to a discard from an empty hand — never ends.
         if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_must_flip")
-            && action.Type is "select_card" or "play_card" && action.CardId is not null)
+            && action.Type is "select_card" or "play_card" or "flip_card" && action.CardId is not null)
         {
             var grid = PlayerGrid(state, state.CurrentPlayer.Id);
             var toFlip = action.CardUid is int flipUid
                 ? grid?.Cards.FirstOrDefault(c => c.Uid == flipUid)
                 : grid?.Cards.FirstOrDefault(c => c.Id == action.CardId && !c.IsFaceUp);
             if (toFlip is null || toFlip.IsFaceUp) return;
-            toFlip.IsFaceUp = true;
-            state.Metadata.Remove("dd_must_flip");
-            state.Metadata.Remove("selected_card");
-            state.Metadata.Remove("dd_turn_state");
-            AdvanceTurn(state);
+
+            // Picked rather than turned, when this game asks first — a double tap
+            // (flip_card) says the player is sure and skips the asking.
+            if (action.Type != "flip_card" && Confirming(state))
+            {
+                string pick = toFlip.Uid.ToString();
+                if (state.Metadata.GetValueOrDefault("selected_card") == pick)
+                    state.Metadata.Remove("selected_card");
+                else
+                    state.Metadata["selected_card"] = pick;
+                UpdateStatus(state);
+                return;
+            }
+
+            FlipOwed(state, toFlip);
             return;
         }
 
@@ -291,12 +335,22 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             if (chosen is null) return;
             string token = chosen.Uid.ToString();
 
-            // In grid mode, tapping the drawn card discards it without swapping. The
-            // drawn-card channel stays id-keyed: it holds exactly one card, so the
-            // ambiguity uids exist for cannot arise there.
+            // In grid mode, tapping the drawn card discards it without swapping — or,
+            // when the game asks first, only picks it out, and the Discard button ends
+            // the turn. The drawn-card channel stays id-keyed: it holds exactly one
+            // card, so the ambiguity uids exist for cannot arise there.
             if (_targetZone == "grid" &&
                 state.Metadata.GetValueOrDefault("dd_drawn_card") == chosen.Id)
             {
+                if (Confirming(state))
+                {
+                    if (state.Metadata.GetValueOrDefault("selected_card") == token)
+                        state.Metadata.Remove("selected_card");
+                    else
+                        state.Metadata["selected_card"] = token;
+                    return;
+                }
+
                 DiscardCard(state, token);
                 return;
             }
@@ -634,6 +688,44 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         AdvanceTurn(state);
     }
 
+
+    /// <summary>
+    /// Whether this seat is asked before an irreversible tap goes through — the drawn
+    /// card being discarded, or the card owed to the flip.
+    ///
+    /// Only people are asked. An agent has no mind to change, and waiting for it to
+    /// press its own button would be a pause with nothing behind it.
+    /// </summary>
+    private bool Confirming(GameState state)
+        => _confirm && !state.PlayerAgents.ContainsKey(state.CurrentPlayer.Id);
+
+    /// <summary>Turns the card owed after discarding the draw, and ends the turn.</summary>
+    private void FlipOwed(GameState state, Card card)
+    {
+        card.IsFaceUp = true;
+        state.Metadata.Remove("dd_must_flip");
+        state.Metadata.Remove("selected_card");
+        state.Metadata.Remove("dd_turn_state");
+        AdvanceTurn(state);
+    }
+
+    /// <summary>
+    /// What a double tap on a card means here: discard the card just drawn, turn the
+    /// card owed to a flip, or swap a grid card for the one in hand. Each is the thing
+    /// a single tap proposes, done without the asking.
+    /// </summary>
+    public GameAction? DefaultCardAction(GameState state, string cardId, int? uid)
+    {
+        if (_targetZone != "grid" || TurnState(state) != "discard") return null;
+
+        if (state.Metadata.ContainsKey("dd_must_flip"))
+            return new GameAction("flip_card", CardId: cardId, CardUid: uid);
+
+        if (state.Metadata.GetValueOrDefault("dd_drawn_card") == cardId)
+            return new GameAction("discard_drawn");
+
+        return null;   // a grid card already swaps on a single tap
+    }
     private void AdvanceTurn(GameState state)
     {
         // When a player's hand is empty, they pick up their foot zone automatically.
@@ -1158,7 +1250,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             : TurnState(state) == "draw"
                 ? GameText.Message(state, "turn_draw", "{player}'s turn — Draw a card", me)
             : state.Metadata.ContainsKey("dd_must_flip")
-                ? GameText.Message(state, "turn_flip", "{player}'s turn — Tap a face-down card to turn over", me)
+                ? (state.Metadata.GetValueOrDefault("selected_card") is { Length: > 0 }
+                    ? GameText.Message(state, "turn_flip_ready", "{player}'s turn — Press Flip to turn it over", me)
+                    : GameText.Message(state, "turn_flip", "{player}'s turn — Tap a face-down card to turn over", me))
             : _targetZone == "grid" && state.Metadata.ContainsKey("dd_drawn_card")
                 ? GameText.Message(state, "turn_swap", "{player}'s turn — Tap a card to swap, or discard the drawn card", me)
                 : GameText.Message(state, "turn_discard", "{player}'s turn — Discard a card", me);

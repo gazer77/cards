@@ -475,6 +475,28 @@ public sealed class GameTableViewModel
         return TapZone(zoneId);
     }
 
+
+    /// <summary>
+    /// Does the obvious thing with a card — what a double tap on it means.
+    ///
+    /// The phase names it: turn this card now, discard the one just drawn. Where a
+    /// phase names nothing, the double tap is just a tap, which is what it was before
+    /// any of them named anything.
+    /// </summary>
+    public Task ActivateCard(string cardId, int uid = -1)
+    {
+        if (!CanAcceptInput()) return Task.CompletedTask;
+
+        int? physical = uid >= 0 ? uid : null;
+        var action = _logic!.GetDefaultCardAction(_state!, cardId, physical);
+        if (action is null) return TapCard(cardId, uid);
+
+        // Still only for cards the phase is offering: a double tap is a shortcut past
+        // the asking, never past the rules.
+        if (!_logic.GetSelectableCardIds(_state!).Contains(cardId)) return Task.CompletedTask;
+
+        return ApplyAsync(action);
+    }
     public Task DropCard(string cardId, string zoneId)
     {
         if (!CanAcceptInput()) return Task.CompletedTask;

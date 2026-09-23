@@ -45,6 +45,12 @@ public interface IGameLogic
     IReadOnlyList<string> GetDropZoneIds(GameState state, string cardId) => [];
 
     /// <summary>
+    /// What a double tap on this card means, or null when the phase has none — see
+    /// <see cref="IPhaseHandler.DefaultCardAction"/>.
+    /// </summary>
+    GameAction? GetDefaultCardAction(GameState state, string cardId, int? uid) => null;
+
+    /// <summary>
     /// Returns the action that should be applied during an auto-advance tick.
     /// When the current player has a registered <see cref="IPlayerAgent"/> the agent
     /// picks from legal card-play or action choices; otherwise the first valid action

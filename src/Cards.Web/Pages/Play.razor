@@ -154,6 +154,7 @@
                          CardTapped="OnCardTapped"
                          ZoneTapped="OnZoneTapped"
                          ZoneActivated="OnZoneActivated"
+                         CardActivated="OnCardActivated"
                          TableTapped="OnTableTapped"
                          CardDropped="OnCardDropped"
                          CardReordered="OnCardReordered" />
@@ -285,6 +286,7 @@
     private Task OnCardTapped((string CardId, int Uid) card) => Vm.TapCard(card.CardId, card.Uid);
     private Task OnZoneTapped(string zoneId)   => Vm.TapZone(zoneId);
     private Task OnZoneActivated(string zoneId)=> Vm.ActivateZone(zoneId);
+    private Task OnCardActivated((string CardId, int Uid) card) => Vm.ActivateCard(card.CardId, card.Uid);
     private Task OnTableTapped()               => Vm.TapTable();
     private Task OnCardDropped((string CardId, string ZoneId) e) => Vm.DropCard(e.CardId, e.ZoneId);
 

@@ -33,6 +33,16 @@ public sealed class GolfDealTests
             var grid = state.Zones[$"grid:{state.CurrentPlayer.Id}"];
             foreach (var pick in new[] { grid.Cards[5], grid.Cards[4] })
                 logic.Apply(state, new GameAction("select_card", CardId: pick.Id, CardUid: pick.Uid));
+
+            // The person at seat 0 is asked before anything turns, so a finger landing
+            // on the wrong card costs nothing. The AI seats have no mind to change and
+            // turn theirs as they pick.
+            if (logic.GetValidActions(state).Any(a => a.Type == "flip"))
+            {
+                Assert.Equal(0, grid.Cards.Count(c => c.IsFaceUp));
+                logic.Apply(state, new GameAction("flip"));
+            }
+
             Assert.Equal(2, grid.Cards.Count(c => c.IsFaceUp));
             Assert.True(grid.Cards[4].IsFaceUp && grid.Cards[5].IsFaceUp);
         }
@@ -68,6 +78,8 @@ public sealed class GolfTurnTests
             var g = state.Zones[$"grid:{state.CurrentPlayer.Id}"];
             foreach (var pick in new[] { g.Cards[0], g.Cards[1] })
                 logic.Apply(state, new GameAction("select_card", CardId: pick.Id, CardUid: pick.Uid));
+            if (logic.GetValidActions(state).Any(a => a.Type == "flip"))
+                logic.Apply(state, new GameAction("flip"));
         }
         Assert.Equal("play", state.CurrentPhaseId);
         return (state, logic, state.Zones[$"grid:{state.CurrentPlayer.Id}"]);
@@ -99,7 +111,14 @@ public sealed class GolfTurnTests
         logic.Apply(state, new GameAction("draw_from_deck"));
         var drawn = state.Zones[$"hand:{me}"].Cards.Single();
 
+        // Tapping the drawn card only picks it out. The reported accident: this is the
+        // same gesture as reaching past it for the grid card you meant to replace, and
+        // it used to end the turn before you saw the card go.
         logic.Apply(state, new GameAction("select_card", CardId: drawn.Id, CardUid: drawn.Uid));
+        Assert.Contains(state.Zones[$"hand:{me}"].Cards, c => c.Uid == drawn.Uid);
+        Assert.Contains(logic.GetValidActions(state), a => a.Type == "discard_drawn");
+
+        logic.Apply(state, new GameAction("discard_drawn"));
 
         // Still my turn; only the face-down cards are on offer.
         Assert.Equal(me, state.CurrentPlayer.Id);
@@ -107,11 +126,57 @@ public sealed class GolfTurnTests
         var offered = logic.GetSelectableCardIds(state);
         Assert.Equal(grid.Cards.Where(c => !c.IsFaceUp).Select(c => c.Id).OrderBy(x => x), offered.OrderBy(x => x));
 
+        // The flip is asked for too: pick, then Flip.
         var flip = grid.Cards[5];
         logic.Apply(state, new GameAction("select_card", CardId: flip.Id, CardUid: flip.Uid));
+        Assert.False(flip.IsFaceUp);
+        Assert.Contains(logic.GetValidActions(state), a => a.Type == "flip");
+
+        logic.Apply(state, new GameAction("flip"));
         Assert.True(flip.IsFaceUp);
         Assert.Equal(3, grid.Cards.Count(c => c.IsFaceUp));
         Assert.NotEqual(me, state.CurrentPlayer.Id);
+    }
+
+    /// <summary>
+    /// A player who knows their mind should not be made to say so twice: a double tap
+    /// does the thing a single tap proposes. The phase names what that is, so the
+    /// gesture means something different where the game means something different.
+    /// </summary>
+    [Fact]
+    public void A_double_tap_discards_the_drawn_card_without_the_asking()
+    {
+        var (state, logic, _) = InPlay();
+        var me = state.CurrentPlayer.Id;
+        logic.Apply(state, new GameAction("draw_from_deck"));
+        var drawn = state.Zones[$"hand:{me}"].Cards.Single();
+
+        var shortcut = logic.GetDefaultCardAction(state, drawn.Id, drawn.Uid);
+        Assert.NotNull(shortcut);
+        Assert.Equal("discard_drawn", shortcut.Type);
+
+        logic.Apply(state, shortcut);
+        Assert.Same(drawn, state.Zones["discard"].Cards[^1]);
+    }
+
+    [Fact]
+    public void A_double_tap_turns_a_peeked_card_there_and_then()
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(4) };
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, 2, []);
+
+        var grid = state.Zones[$"grid:{state.CurrentPlayer.Id}"];
+        var card = grid.Cards[3];
+
+        var shortcut = logic.GetDefaultCardAction(state, card.Id, card.Uid);
+        Assert.NotNull(shortcut);
+
+        logic.Apply(state, shortcut);
+        Assert.True(card.IsFaceUp);          // turned, with no button in between
+        Assert.Equal(1, grid.Cards.Count(c => c.IsFaceUp));
     }
 
     /// <summary>
@@ -135,5 +200,49 @@ public sealed class GolfTurnTests
         Assert.False(state.Metadata.ContainsKey("dd_must_flip"));
         Assert.Equal(3, grid.Cards.Count(c => c.IsFaceUp));
         Assert.NotEqual(me, state.CurrentPlayer.Id);
+    }
+}
+
+/// <summary>
+/// The gestures themselves, at the level the client uses them: a double tap asks the
+/// game what it means, and a phase that names nothing leaves it an ordinary tap.
+/// </summary>
+public sealed class DefaultCardActionTests
+{
+    private static (GameState State, IGameLogic Logic) Game(string id, int seats)
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync(id).GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(5) };
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, seats, []);
+        return (state, logic);
+    }
+
+    [Fact]
+    public void A_phase_with_no_shortcut_leaves_the_gesture_alone()
+    {
+        // Hearts passes cards; a double tap there has nothing special to mean, and the
+        // client falls back to selecting, which is what it did before any of this.
+        var (state, logic) = Game("hearts", 4);
+        var hand = state.Zones[$"hand:{state.CurrentPlayer.Id}"];
+
+        Assert.Null(logic.GetDefaultCardAction(state, hand.Cards[0].Id, hand.Cards[0].Uid));
+    }
+
+    [Fact]
+    public void The_shortcut_is_the_action_the_phase_would_have_taken()
+    {
+        // Golf's peek: the double tap turns the card, which is what Flip would have
+        // done for the same card a moment later.
+        var (state, logic) = Game("golf", 2);
+        var grid = state.Zones[$"grid:{state.CurrentPlayer.Id}"];
+
+        var shortcut = logic.GetDefaultCardAction(state, grid.Cards[2].Id, grid.Cards[2].Uid);
+        Assert.NotNull(shortcut);
+        Assert.Equal(grid.Cards[2].Id, shortcut.CardId);
+
+        logic.Apply(state, shortcut);
+        Assert.True(grid.Cards[2].IsFaceUp);
     }
 }

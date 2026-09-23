@@ -68,6 +68,11 @@ public abstract class GameLogicBase : IGameLogic
             ? h.GetDropZoneIds(state, cardId)
             : [];
 
+    public GameAction? GetDefaultCardAction(GameState state, string cardId, int? uid)
+        => _handlers.TryGetValue(state.CurrentPhaseId, out var h)
+            ? h.DefaultCardAction(state, cardId, uid)
+            : null;
+
     /// <summary>
     /// Returns the auto-advance delay from the current phase handler, or 800 ms
     /// when the current player has a registered AI agent (giving the agent time to

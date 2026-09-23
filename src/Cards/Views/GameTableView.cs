@@ -49,6 +49,7 @@ public class GameTableView : SKCanvasView
         _renderer.CardTapped          += (id, uid) => CardTapped?.Invoke(id, uid);
         _renderer.ZoneTapped          += id      => ZoneTapped?.Invoke(id);
         _renderer.ZoneActivated       += id      => ZoneActivated?.Invoke(id);
+        _renderer.CardActivated       += (id, u) => CardActivated?.Invoke(id, u);
         _renderer.CanvasTapped        += ()      => CanvasTapped?.Invoke();
         _renderer.CardDropped         += (c, z)  => CardDropped?.Invoke(c, z);
         _renderer.CardReorderedInHand += (c, i)  => CardReorderedInHand?.Invoke(c, i);
@@ -62,6 +63,7 @@ public class GameTableView : SKCanvasView
     public event Action<string, int>?    CardTapped;
     public event Action<string>?         ZoneTapped;
     public event Action<string>?         ZoneActivated;
+    public event Action<string, int>?    CardActivated;
     public event Action?                 CanvasTapped;
     public event Action<string, string>? CardDropped;
     public event Action<string, int>?    CardReorderedInHand;

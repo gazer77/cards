@@ -27,7 +27,7 @@
       "layout": { "place": { "x": "50%", "y": "93%", "anchor": "center", "width": "10%", "height": "12%" } } }
   ],
   "phases": [
-    { "id": "peek", "type": "reveal", "zone": "grid", "count": 2, "next": "play" },
+    { "id": "peek", "type": "reveal", "zone": "grid", "count": 2, "confirm": true, "next": "play" },
     {
       "id": "play",
       "type": "draw_discard",
@@ -36,6 +36,7 @@
       "discard_count": 1,
       "target_zone": "grid",
       "flip_after_discard": true,
+      "confirm": true,
       "round_ends_when": "any_player_grid_all_face_up",
       "remaining_players_get_one_more_turn": true,
       "next": "score"

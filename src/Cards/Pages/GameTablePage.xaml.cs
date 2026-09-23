@@ -44,6 +44,7 @@ public partial class GameTablePage : ContentPage
         TableCanvas.CanvasTapped        += OnCanvasTapped;
         TableCanvas.ZoneTapped          += OnZoneTapped;
         TableCanvas.ZoneActivated       += OnZoneActivated;
+        TableCanvas.CardActivated       += OnCardActivated;
         TableCanvas.CardDropped         += OnCardDropped;
         TableCanvas.CardReorderedInHand += OnCardReorderedInHand;
         TableCanvas.SizeChanged         += OnCanvasSizeChanged;
@@ -277,6 +278,23 @@ public partial class GameTablePage : ContentPage
         OnZoneTapped(zoneId);
     }
 
+
+    /// <summary>
+    /// Double-tapping a card does the obvious thing with it, which the phase names —
+    /// turn this one over, discard the one just drawn. Where the phase names nothing
+    /// the gesture falls back to an ordinary tap.
+    /// </summary>
+    private void OnCardActivated(string cardId, int uid)
+    {
+        if (_state is null || _logic is null) return;
+        if (GameOverOverlay.IsVisible || GameLogOverlay.IsVisible || _isAutoAdvancing) return;
+        if (!_logic.GetSelectableCardIds(_state).Contains(cardId)) return;
+
+        var action = _logic.GetDefaultCardAction(_state, cardId, uid >= 0 ? uid : null);
+        if (action is null) { OnCardTapped(cardId, uid); return; }
+
+        _ = ApplyAndRefreshAsync(action);
+    }
     private void OnCardDropped(string cardId, string zoneId)
     {
         if (_state is null || _logic is null) return;

@@ -638,6 +638,14 @@ One draw + one discard per player turn. Repeats until a special action ends the 
 
 `flip_after_discard`: `true` — Grid mode only. A player who discards the drawn card without swapping must then tap one of their own face-down cards to turn it up (Golf). While a flip is owed only face-down cards are selectable and the turn does not end until one is turned; no flip is owed once every card is already up.
 
+`confirm`: `true` — grid mode only. A tap proposes and a button commits: tapping the drawn
+card picks it out and a **Discard Drawn** button discards it, and the card owed to
+`flip_after_discard` is picked and turned with a **Flip** button. Without it a tap does the
+thing at once, which is the same gesture a player makes reaching past the drawn card for the
+one they meant to replace — and the turn was over before they saw it go. Only people are
+asked; an agent has no mind to change, so it acts on its own taps either way. A double tap
+always does the thing without the asking (see **Double tap**).
+
 `round_ends_when`: `"any_player_grid_all_face_up"` — round ends when any player has all grid cards face-up.
 
 `remaining_players_get_one_more_turn`: `true` — after round-end trigger, each other player gets one final turn before scoring.
@@ -712,12 +720,17 @@ scoring values them.
 Each player in turn chooses cards of their own to turn face-up — Golf's two peeks before
 play. A rule about *choice*, so a phase rather than a side effect of the deal.
 ```json
-{ "id": "peek", "type": "reveal", "zone": "grid", "count": 2, "next": "play" }
+{ "id": "peek", "type": "reveal", "zone": "grid", "count": 2, "confirm": true, "next": "play" }
 ```
 
 `zone`: base id of the zone the cards are in, resolved per player. `count`: how many each
 player turns. A computer seat picks at once; a person is waited for. When every seat has
 turned its count the phase ends with the first player to act.
+
+`confirm`: `true` (default) — tapping picks a card and a **Flip** button turns the picks
+over, so a finger landing on the wrong card costs nothing. `false` turns each card as it is
+tapped. Either way a double tap turns a card there and then (see **Double tap**), and a
+computer seat acts on its own taps, having no mind to change.
 
 (`peek_count` on a grid zone still exists and turns the *first* cards dealt, with no
 choice; prefer a `reveal` phase.)
@@ -1367,6 +1380,24 @@ Optional `ui` block for display hints.
 
 ---
 
+
+## Double tap
+
+A double tap means "do the obvious thing with this", and what that is comes from the game
+rather than from the client:
+
+- **On a card** — the phase names it. A `reveal` phase turns that card; a `draw_discard`
+  phase in grid mode discards the card just drawn, or turns the card owed to a flip. Where
+  a phase names nothing the double tap is an ordinary tap. A phase that asks before it acts
+  (`confirm`) answers here with the action it would have taken, so a player who knows their
+  mind skips the asking without losing it for anyone else.
+- **On a zone** — the zone's own action: a pile offering `draw_from_{zone}` draws from it,
+  and a zone the selection may be played to takes it.
+
+The rules still apply: a double tap is a shortcut past the asking, never past the game. A
+card the phase is not offering does nothing, however many times it is tapped.
+
+---
 ## Phase Handler Reference
 
 All phase types are implemented as `IPhaseHandler` subclasses registered in `PhaseHandlerRegistry`. Each handler receives its `PhaseDefinition` (for parameters) and a `nextPhaseId` (the phase to transition to on completion).

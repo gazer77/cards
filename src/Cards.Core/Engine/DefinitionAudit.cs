@@ -53,7 +53,7 @@ public static class DefinitionAudit
                                    "gin_condition", "go_out_condition", "initial_meld_requirement",
                                    "knock_condition", "remaining_players_get_one_more_turn",
                                    "round_ends_when", "special_actions", "target_zone",
-                                   "unmeldable_ranks"],
+                                   "unmeldable_ranks", "confirm"],
         ["meld"]                = ["layoff_allowed", "max_wilds_per_meld", "meld_types", "min_meld_size",
                                    "return_to_hand", "wilds_allowed"],
         ["poker_betting"]       = ["bring_in", "bring_in_amount", "can_check", "post_blinds",
@@ -65,7 +65,7 @@ public static class DefinitionAudit
         ["deal"]                = ["burn_first", "cards", "count", "face", "to"],
         ["name_trump"]          = ["exclude_suit"],
         ["dealer_discard"]      = [],
-        ["reveal"]              = ["count", "zone"],
+        ["reveal"]              = ["count", "zone", "confirm"],
     };
 
     /// <summary>Parameters any phase may carry, whatever its type.</summary>

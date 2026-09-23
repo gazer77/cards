@@ -201,6 +201,9 @@ public sealed class CardTableRenderer
     /// </summary>
     public event Action<string>?         ZoneActivated;
 
+    /// <summary>A card was double-tapped: do the obvious thing with it.</summary>
+    public event Action<string, int>?    CardActivated;
+
     public event Action?                 CanvasTapped;
     public event Action<string, string>? CardDropped;
     /// <summary>Card was dragged to a new position within its own hand zone.</summary>
@@ -1876,6 +1879,20 @@ public sealed class CardTableRenderer
 
             _lastTapMs    = isDoubleTap ? 0 : NowMs();   // a third tap starts over
             _lastTapPoint = location;
+
+            // A double tap on a card is about that card, not about the zone it happens
+            // to lie in: the card is what the finger is on, and a pile's own gesture
+            // (draw) is reached by tapping the pile where no card sits proud of it.
+            if (isDoubleTap && HitTestCardWithUid(location) is { } activated)
+            {
+                _tooltipUid = null;
+                CardActivated?.Invoke(activated.Id, activated.Uid);
+                _isDragging       = false;
+                _dragCardId       = null;
+                _dragSourceZoneId = null;
+                RequestRedraw();
+                return;
+            }
 
             if (isDoubleTap && hitZone is not null)
             {

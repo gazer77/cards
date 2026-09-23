@@ -138,6 +138,7 @@ public static class GameText
         ["pot_won_by_fold"] = "Everyone folded. {player} wins the pot ({pot}).",
         ["rank_unmeldable"] = "{rank}s cannot be melded.",
         ["reveal_more"] = "{player}'s turn — Tap {count} cards to turn over",
+        ["reveal_ready"] = "{player}'s turn — Press Flip to turn {count} over",
         ["reveal_one"] = "{player}'s turn — Tap a card to turn over",
         ["round_started"] = "Round {round}",
         ["showdown_won"] = "{player} wins with {hand}: {cards}",
@@ -154,6 +155,7 @@ public static class GameText
         ["turn_owed"] = "{player}'s turn — Meld the {card} they took",
         ["turn_swap"] = "{player}'s turn — Tap a card to swap, or discard the drawn card",
         ["turn_flip"] = "{player}'s turn — Tap a face-down card to turn over",
+        ["turn_flip_ready"] = "{player}'s turn — Press Flip to turn it over",
         ["turn_trump"] = "{player}'s turn  |  Trump: {trump}",
         ["war_flip"] = "Tap to flip!",
     };
@@ -177,6 +179,8 @@ public static class GameText
         ["double_down"] = "Double",
         ["end_game"] = "End Game",
         ["end_turn"] = "End Turn",
+        ["discard_drawn"] = "Discard Drawn",
+        ["flip"] = "Flip",
         ["fold"] = "Fold",
         ["gin"] = "Gin!",
         ["go_out"] = "Go Out",
@@ -226,5 +230,7 @@ public static class GameText
         ["showdown_won"]     = "You win with {hand}: {cards}",
         ["reveal_one"]       = "Tap a card to turn over",
         ["reveal_more"]      = "Tap {count} cards to turn over",
+        ["reveal_ready"]     = "Press Flip to turn {count} over",
+        ["turn_flip_ready"]  = "Press Flip to turn it over",
     };
 }

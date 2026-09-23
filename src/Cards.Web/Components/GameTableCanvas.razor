@@ -60,6 +60,7 @@
     [Parameter] public EventCallback<(string CardId, int Uid)> CardTapped { get; set; }
     [Parameter] public EventCallback<string> ZoneTapped { get; set; }
     [Parameter] public EventCallback<string> ZoneActivated { get; set; }
+    [Parameter] public EventCallback<(string CardId, int Uid)> CardActivated { get; set; }
     [Parameter] public EventCallback TableTapped { get; set; }
     [Parameter] public EventCallback<(string CardId, string ZoneId)> CardDropped { get; set; }
     [Parameter] public EventCallback<(string CardId, int NewIndex)> CardReordered { get; set; }
@@ -90,6 +91,7 @@
         _renderer.CardTapped           += (id, uid) => _ = CardTapped.InvokeAsync((id, uid));
         _renderer.ZoneTapped           += id     => _ = ZoneTapped.InvokeAsync(id);
         _renderer.ZoneActivated        += id     => _ = ZoneActivated.InvokeAsync(id);
+        _renderer.CardActivated        += (id, uid) => _ = CardActivated.InvokeAsync((id, uid));
         _renderer.CanvasTapped         += ()     => _ = TableTapped.InvokeAsync();
         _renderer.CardDropped          += (c, z) => _ = CardDropped.InvokeAsync((c, z));
         _renderer.CardReorderedInHand  += (c, i) => _ = CardReordered.InvokeAsync((c, i));
