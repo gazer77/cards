@@ -1093,6 +1093,20 @@ should be added when a game actually calls for it — not before.
   discard a card of the suit led", "you must pass three cards" would each need another.
 - **Continuous or simultaneous play.** Every phase assumes turns.
 
+
+### Properties nothing reads
+
+A definition is audited on load, and every property no engine code reads is recorded in
+`GameLoader.LoadWarnings` for that game. The game still loads and plays — a line that does
+nothing is not a reason to refuse a working game — but it can no longer hide, which is what
+made `"rows": 2` drawing one row and `"initial_face": "down"` dealing face-up so expensive
+to find.
+
+Two kinds are caught: a key no model maps (a typo, or a property written in the wrong
+block), and a phase parameter belonging to another phase type. The properties shipped games
+still state and the engine still ignores are pinned in `DefinitionAuditTests`, so a new one
+fails the build rather than joining them.
+
 ### Still decided in code
 
 The rule is that the whole game lives in the definition and only the computer players
@@ -1293,6 +1307,39 @@ Each house rule declares an id, display info, default value, and what it overrid
 | `"win_condition.<field>"` | `"win_condition.threshold": 50` | Patch a win condition field |
 | `"scoring.<field>"` | `"scoring.bag_penalty": null` | Set/clear a scoring extra field |
 | `"<phaseId>.<param>"` | `"battle.tie_resolution": "split"` | Set a phase extra parameter |
+
+---
+
+## Score Card
+
+A panel on the table showing what each side has scored, and optionally what each round
+scored on the way there. Optional: a game with no `score_card` shows none.
+
+```json
+"score_card": {
+  "label": "Scorecard",
+  "view": "detail",
+  "collapsible": true,
+  "by": "player",
+  "round_label": "H",
+  "max_rounds": 9,
+  "place": { "x": "2%", "y": "3%", "anchor": "top-left" }
+}
+```
+
+| Property | Meaning |
+|---|---|
+| `label` | Heading above the rows. `""` for none. Default `"Scores"`. |
+| `view` | `"total"` (default) — one number per side; `"detail"` — a column per round, total last. |
+| `collapsible` | `true` (default): a tap switches between the two views. The choice is the viewer's and is not saved into the game. |
+| `by` | `"player"` (default) or `"team"`. `"team"` requires the game to have teams. |
+| `round_label` | What a round column is called — `"H"` gives H1, H2 … Default `"R"`. |
+| `max_rounds` | How many round columns the detail view shows, most recent last. Default 9. |
+| `place` | Required. A `place` in table percentages, the same shape labels and badges use. |
+
+The rounds come from the engine's own score history: every scoring type records what each
+round scored, so the detail view always adds up to the total view. The row belonging to
+the person at the screen is drawn brightest, since it is the one they look for.
 
 ---
 

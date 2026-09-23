@@ -21,6 +21,15 @@ public class GameState
     /// </summary>
     public string? DealerId { get; set; }
     public Dictionary<string, int> Scores { get; } = [];
+
+    /// <summary>
+    /// What each round scored, oldest first — the detail behind <see cref="Scores"/>.
+    ///
+    /// A running total answers "who is winning" and nothing else; a game of nine holes
+    /// wants to show the holes. Recorded once, where every scoring type ends, and read
+    /// by the score card a definition places on the table.
+    /// </summary>
+    public List<ScoreRound> ScoreHistory { get; } = [];
     public Dictionary<string, bool> EnabledHouseRules { get; } = [];
 
     /// <summary>Game-logic scratch space for phase state, results, etc.</summary>
@@ -107,3 +116,9 @@ public class GameState
             CurrentPlayerIndex = (CurrentPlayerIndex + 1) % n;
     }
 }
+
+/// <summary>
+/// One round's scoring: what each player or team scored that round, by id. The totals
+/// live in <see cref="GameState.Scores"/>; this is the row behind them.
+/// </summary>
+public sealed record ScoreRound(int Round, Dictionary<string, int> Scores);

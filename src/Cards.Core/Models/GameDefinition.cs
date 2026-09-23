@@ -88,6 +88,12 @@ public class GameDefinition
     [JsonPropertyName("text")]
     public TextDefinition? Text { get; set; }
 
+    /// <summary>
+    /// The score card on the table, if this game shows one. See <see cref="ScoreCardDefinition"/>.
+    /// </summary>
+    [JsonPropertyName("score_card")]
+    public ScoreCardDefinition? ScoreCard { get; set; }
+
     // Helpers
     public string DeckType => Deck.ValueKind == JsonValueKind.String
         ? Deck.GetString() ?? "standard-52"
@@ -787,4 +793,51 @@ public class TextDefinition
 
     [JsonPropertyName("messages")]
     public Dictionary<string, string> Messages { get; set; } = [];
+}
+
+/// <summary>
+/// A score card on the table: what each side has scored, and optionally what each round
+/// scored on the way there.
+///
+/// Placed like everything else — a <see cref="PlaceDefinition"/> in table percentages —
+/// so a game decides where its scores belong rather than the renderer deciding for it.
+///
+/// Two views of the same figures, because both are wanted at different moments:
+///   "total"  — one number per side. Small, and always readable.
+///   "detail" — a column per round with the total at the end. Golf's nine holes.
+/// A game names the view it opens in; the player switches with a tap when
+/// <c>collapsible</c> is left true, and that choice is theirs and not saved into the game.
+/// </summary>
+public class ScoreCardDefinition
+{
+    /// <summary>Heading above the rows. Empty for none.</summary>
+    [JsonPropertyName("label")]
+    public string Label { get; set; } = "Scores";
+
+    /// <summary>"total" (default) or "detail" — the view it opens in.</summary>
+    [JsonPropertyName("view")]
+    public string View { get; set; } = "total";
+
+    /// <summary>Whether a tap switches between the two views. Default true.</summary>
+    [JsonPropertyName("collapsible")]
+    public bool Collapsible { get; set; } = true;
+
+    /// <summary>"player" (default) or "team" — one row per seat, or per side.</summary>
+    [JsonPropertyName("by")]
+    public string By { get; set; } = "player";
+
+    /// <summary>
+    /// How many rounds the detail view shows, most recent last. A game of many short
+    /// rounds would otherwise write columns until they were too thin to read.
+    /// </summary>
+    [JsonPropertyName("max_rounds")]
+    public int MaxRounds { get; set; } = 9;
+
+    /// <summary>What to call a round in the detail view's header — "Hole", "Round".</summary>
+    [JsonPropertyName("round_label")]
+    public string RoundLabel { get; set; } = "R";
+
+    /// <summary>Where it sits. Required: a score card with no place has nowhere to go.</summary>
+    [JsonPropertyName("place")]
+    public PlaceDefinition? Place { get; set; }
 }

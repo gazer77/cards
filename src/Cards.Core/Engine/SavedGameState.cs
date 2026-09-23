@@ -16,6 +16,9 @@ public sealed class SavedGameState
     public string?        DealerId     { get; set; }
     public Dictionary<string, int>    Scores   { get; set; } = [];
     public Dictionary<string, string> Metadata { get; set; } = [];
+
+    /// <summary>What each round scored — the detail a score card shows.</summary>
+    public List<SavedScoreRound>      ScoreHistory { get; set; } = [];
     public List<string>   GameLog  { get; set; } = [];
     public List<SavedZone> Zones   { get; set; } = [];
 }
@@ -50,4 +53,11 @@ public sealed class SavedCard
     /// matter in multi-deck games.
     /// </summary>
     public int  Uid      { get; set; }
+}
+
+/// <summary>One round of <see cref="SavedGameState.ScoreHistory"/>.</summary>
+public sealed class SavedScoreRound
+{
+    public int Round { get; set; }
+    public Dictionary<string, int> Scores { get; set; } = [];
 }

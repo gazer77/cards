@@ -729,6 +729,7 @@ public sealed class CardTableRenderer
         if (_bubbles.Any)
             _bubbles.Draw(canvas, info, NowMs(), AnchorForPlayer, BubbleScale);
 
+        DrawScoreCard(canvas, info);
         DrawCardTooltip(canvas, info);
     }
 
@@ -1857,6 +1858,13 @@ public sealed class CardTableRenderer
         }
         else
         {
+            // The score card is a control, not a zone: it answers the tap itself.
+            if (TapScoreCard(location))
+            {
+                _isDragging = false; _dragCardId = null; _dragSourceZoneId = null;
+                return;
+            }
+
             // A second tap in the same place, soon after the first, activates the zone
             // under it. Checked before anything else so it works over the pile's top
             // card, which is exactly where a player aims when they mean "draw".
@@ -2435,6 +2443,152 @@ public sealed class CardTableRenderer
         _hasCardValues ??= ScoringEngine.HasCardValues(definition);
         if (_hasCardValues is not true) return "";
         return $" — {ScoringEngine.CardPointValue(definition, [card])}";
+    }
+
+    // ── Score card ────────────────────────────────────────────────────────────
+
+    /// <summary>Where the score card was last drawn, so a tap can find it.</summary>
+    private SKRect? _scoreCardRect;
+
+    /// <summary>
+    /// Which view the player is looking at, once they have said. Null means the view
+    /// the definition opens in — the player's choice belongs to the player and to this
+    /// sitting, so it is not written into the game.
+    /// </summary>
+    private bool? _scoreCardDetail;
+
+    /// <summary>
+    /// Draws the score card a definition places on the table: a row per side, either
+    /// as one total each or as a column per round with the total at the end.
+    ///
+    /// A running total says who is winning and nothing else; a game of nine holes wants
+    /// to show the holes, and a game of many rounds wants the holes out of the way. So
+    /// both, with a tap between them.
+    /// </summary>
+    private void DrawScoreCard(SKCanvas canvas, SKImageInfo info)
+    {
+        _scoreCardRect = null;
+        if (_state?.Definition.ScoreCard is not { Place: not null } card) return;
+
+        var rows = ScoreRows(card);
+        if (rows.Count == 0) return;
+
+        bool detail = _scoreCardDetail ?? card.View == "detail";
+        var  rounds = detail
+            ? _state.ScoreHistory.TakeLast(Math.Max(1, card.MaxRounds)).ToList()
+            : [];
+
+        var table = new SKImageInfo(info.Width, info.Height);
+        float unit = MathF.Min(table.Width, table.Height);
+        float size = MathF.Max(9f, unit * 0.026f);
+        using var font     = new SKFont(SKTypeface.Default, size);
+        using var headFont = new SKFont(SKTypeface.Default, size * 0.85f);
+
+        float pad     = size * 0.55f;
+        float lineH   = size * 1.55f;
+        float nameW   = rows.Max(r => font.MeasureText(r.Name)) + pad;
+        float colW    = MathF.Max(font.MeasureText("-99"), size * 1.6f) + pad;
+        float bodyW   = nameW + colW * (rounds.Count + 1);
+        float headH   = card.Label.Length > 0 ? lineH : 0f;
+        float roundsH = rounds.Count > 0 ? lineH : 0f;
+
+        // The heading and the "tap for the other view" hint share a line, so the card
+        // is at least wide enough for both with a gap — they ran together otherwise.
+        float headW = card.Label.Length == 0 ? 0f
+            : font.MeasureText(card.Label)
+              + (card.Collapsible ? headFont.MeasureText("detail") + pad * 2f : 0f);
+
+        var box = ResolvePlace(card.Place, new SKRect(0, 0, info.Width, info.Height),
+                               MathF.Max(bodyW, headW) + pad * 2f,
+                               headH + roundsH + rows.Count * lineH + pad * 2f);
+        _scoreCardRect = box;
+
+        using var fill = new SKPaint { Color = new SKColor(0x0D, 0x25, 0x18, 0xD8), IsAntialias = true };
+        using var edge = new SKPaint
+        {
+            Color = new SKColor(0xFF, 0xFF, 0xFF, 0x2A),
+            Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true,
+        };
+        canvas.DrawRoundRect(box, size * 0.4f, size * 0.4f, fill);
+        canvas.DrawRoundRect(box, size * 0.4f, size * 0.4f, edge);
+
+        using var ink  = new SKPaint { Color = new SKColor(0xFF, 0xFF, 0xFF, 0xF0), IsAntialias = true };
+        using var dim  = new SKPaint { Color = new SKColor(0xFF, 0xFF, 0xFF, 0x9A), IsAntialias = true };
+
+        float y = box.Top + pad + size;
+        float x = box.Left + pad;
+
+        if (card.Label.Length > 0)
+        {
+            canvas.DrawText(card.Label, x, y, font, ink);
+            // The affordance is a word, not an icon: "tap for holes" needs no legend.
+            if (card.Collapsible)
+            {
+                string hint = detail ? "total" : "detail";
+                canvas.DrawText(hint, box.Right - pad - headFont.MeasureText(hint), y, headFont, dim);
+            }
+            y += lineH;
+        }
+
+        // Column headings: the rounds shown, then the total.
+        if (rounds.Count > 0)
+        {
+            float cx = box.Left + pad + nameW;
+            foreach (var round in rounds)
+            {
+                string head = $"{card.RoundLabel}{round.Round}";
+                canvas.DrawText(head, cx + colW - pad - headFont.MeasureText(head), y, headFont, dim);
+                cx += colW;
+            }
+            const string totalHead = "Tot";
+            canvas.DrawText(totalHead, cx + colW - pad - headFont.MeasureText(totalHead), y, headFont, dim);
+            y += lineH;
+        }
+
+        foreach (var row in rows)
+        {
+            canvas.DrawText(row.Name, x, y, font, row.IsMe ? ink : dim);
+
+            float cx = box.Left + pad + nameW;
+            foreach (var round in rounds)
+            {
+                string cell = round.Scores.TryGetValue(row.Id, out int v) ? v.ToString() : "-";
+                canvas.DrawText(cell, cx + colW - pad - font.MeasureText(cell), y, font, dim);
+                cx += colW;
+            }
+
+            string total = row.Total.ToString();
+            canvas.DrawText(total, cx + colW - pad - font.MeasureText(total), y, font, ink);
+            y += lineH;
+        }
+    }
+
+    /// <summary>One row per player, or per team when the definition asks for sides.</summary>
+    private List<(string Id, string Name, int Total, bool IsMe)> ScoreRows(Cards.Models.ScoreCardDefinition card)
+    {
+        if (_state is null) return [];
+
+        if (card.By == "team")
+            return [.. _state.Teams.Select(t => (t.Id, t.Name, _state.GetTeamScore(t.Id), false))];
+
+        // The person at this screen always sits at seat 0, and their own row is the one
+        // they look for first, so it is the one drawn brightest.
+        return [.. _state.Players.Select((p, i) => (p.Id, p.Name, _state.GetScore(p.Id), i == 0))];
+    }
+
+    /// <summary>
+    /// A tap on the score card switches detail and total. Returns true when it was the
+    /// score card that was tapped, so the tap goes no further.
+    /// </summary>
+    private bool TapScoreCard(SKPoint location)
+    {
+        if (_state?.Definition.ScoreCard is not { Collapsible: true } card) return false;
+        if (_scoreCardRect is not { } box || !box.Contains(location)) return false;
+
+        bool detail = _scoreCardDetail ?? card.View == "detail";
+        _scoreCardDetail = !detail;
+        RequestRedraw();
+        return true;
     }
     private void DrawCardTooltip(SKCanvas canvas, SKImageInfo info)
     {

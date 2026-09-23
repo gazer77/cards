@@ -53,6 +53,13 @@ public class GameLoader
     /// </summary>
     public ConcurrentDictionary<string, string> LoadErrors { get; } = new();
 
+    /// <summary>
+    /// What a definition says that nothing reads, keyed by game ID. The game still
+    /// loads and plays; this is the line that did nothing, so it can be implemented or
+    /// deleted rather than quietly believed.
+    /// </summary>
+    public ConcurrentDictionary<string, string> LoadWarnings { get; } = new();
+
     public async Task<List<GameDefinition>> LoadAllAsync()
     {
         var games = new List<GameDefinition>();
@@ -72,9 +79,25 @@ public class GameLoader
 
         try
         {
-            using var stream = await _assets.OpenAsync($"games/{gameId}.json");
-            var def = await JsonSerializer.DeserializeAsync<GameDefinition>(stream, JsonOptions);
+            string json;
+            using (var stream = await _assets.OpenAsync($"games/{gameId}.json"))
+            using (var reader = new StreamReader(stream))
+                json = await reader.ReadToEndAsync();
+
+            var def = JsonSerializer.Deserialize<GameDefinition>(json, JsonOptions);
             if (def is null) return null;
+
+            // Properties nothing reads are recorded against the file they were written
+            // in, before inheritance blurs whose they were. A warning and not an error:
+            // a game that plays is not stopped over a line that does nothing, but the
+            // line should not be able to hide either — a definition saying "rows": 2
+            // and getting one row cost several rounds of looking in the wrong place.
+            if (DefinitionAudit.UnreadProperties(json) is { Count: > 0 } unread)
+            {
+                LoadWarnings[gameId] = string.Join(" | ", unread);
+                System.Diagnostics.Debug.WriteLine(
+                    $"[GameLoader] {gameId}: {unread.Count} propert{(unread.Count == 1 ? "y" : "ies")} nothing reads");
+            }
 
             // Apply inheritance: merge with parent when "extends" is present.
             if (def.Extends is { Length: > 0 } parentId)

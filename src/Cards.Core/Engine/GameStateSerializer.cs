@@ -24,6 +24,9 @@ public static class GameStateSerializer
             DealerId     = state.DealerId,
             Scores       = new Dictionary<string, int>(state.Scores),
             Metadata     = new Dictionary<string, string>(state.Metadata),
+            ScoreHistory = state.ScoreHistory
+                .Select(r => new SavedScoreRound { Round = r.Round, Scores = new(r.Scores) })
+                .ToList(),
             GameLog      = [.. state.GameLog],
             Zones        = state.Zones.Values.Select(z => new SavedZone
             {
@@ -118,6 +121,10 @@ public static class GameStateSerializer
 
         state.Metadata.Clear();
         foreach (var (k, v) in dto.Metadata) state.Metadata[k] = v;
+
+        state.ScoreHistory.Clear();
+        state.ScoreHistory.AddRange(
+            dto.ScoreHistory.Select(r => new ScoreRound(r.Round, new(r.Scores))));
 
         state.GameLog.Clear();
         state.GameLog.AddRange(dto.GameLog);

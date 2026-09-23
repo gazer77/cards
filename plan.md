@@ -227,12 +227,26 @@ heuristics, and conservative poker betting; everything else falls through to ran
       Depends on the definition validator, which already reports what is wrong with
       a definition and why; an editor is mostly a UI over that. Export/import also
       gives players a way to share a game they wrote.
-- [ ] **Score card zone** — a declared table element that shows running scores during
-      play (Golf's nine holes, Hearts' running total, Hand and Foot's rounds), placed
-      with `place` like any label or badge and styled from the definition: per-player
-      or per-team rows, a column per round, a total, and an option to show only the
-      current standing. Scores exist in `state.Scores` and per-round in metadata; only
-      the end-of-game list shows them today, so a player mid-game has nothing to look at.
+- [ ] **Declared but not implemented** — the audit (`DefinitionAudit`, warnings in
+      `GameLoader.LoadWarnings`) now names every definition property nothing reads, and
+      `DefinitionAuditTests` pins today's list so no new one can join it quietly. What
+      is on that list and worth doing:
+      - Blackjack's `allow_split`, `allow_double_down`, `allow_surrender` and
+        `blackjack_pays` — four real rules the definition states and the table does not
+        offer. Its `roles` block (a dealer seat with fixed rules) is the same story.
+      - `dealer: "random"` on ten games — who deals first. The engine always starts at
+        seat 0 and rotates.
+      - `deal.order` and a bidding phase's `order` ("clockwise", "left_of_dealer") —
+        descriptive today; the deal and the bidding are both hard-wired to go clockwise
+        from the dealer's left.
+      - Hand and Foot's `locked_until` on the foot, Pinochle's `scoring.meld_table`,
+        Euchre's bidding `prompt`.
+      Each is either a rule to implement or a line to delete; leaving them stated and
+      unread is the one option now ruled out.
+- [x] **Score card zone** — a `score_card` block places a panel with a row per player or
+      team, a total, and a detail view with a column per round. The engine records what
+      each round scored (`GameState.ScoreHistory`), so detail and total always agree.
+      Golf and Hearts have one; the rest may declare one whenever it earns its space.
 - [ ] **Scoring with cards** — the Euchre way: a side keeps score by exposing pips on
       a pair of low cards (a 6 and a 4, say), turning and covering them as points come.
       Declared as a scoring zone per team whose cards are set aside from the deck at the

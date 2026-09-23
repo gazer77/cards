@@ -1184,6 +1184,13 @@ public static class ScoringEngine
         string summary = string.Join("  |  ", parts);
         state.Metadata["status"]        = summary;
         state.Metadata["score_summary"] = summary;
+
+        // The round as its own line, so a score card can show the holes and not only
+        // the total. Every scoring type ends here, which is why it is recorded here
+        // and not in each of them.
+        state.ScoreHistory.Add(new ScoreRound(
+            state.RoundNumber,
+            roundScores.ToDictionary(kv => kv.Key, kv => kv.Value)));
     }
 
     // ── Card value rule parsing ───────────────────────────────────────────────

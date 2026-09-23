@@ -73,6 +73,21 @@ public static class DefinitionValidator
         foreach (var phase in definition.Phases)
             ValidatePhase(phase, problems);
 
+        if (definition.ScoreCard is { } card)
+        {
+            if (card.View is not ("total" or "detail"))
+                problems.Add($"score_card: view '{card.View}' is not total or detail.");
+            if (card.By is not ("player" or "team"))
+                problems.Add($"score_card: by '{card.By}' is not player or team.");
+            if (card.By == "team" && definition.TeamsConfig is null)
+                problems.Add("score_card: by team, but this game has no teams.");
+            if (card.MaxRounds < 1)
+                problems.Add("score_card: max_rounds must be at least 1.");
+            if (card.Place is null)
+                problems.Add("score_card: give it a place; there is no default spot on the table.");
+            ValidatePlace("score_card", card.Place, problems);
+        }
+
         // A misspelt text key would override nothing and say nothing about it.
         if (definition.Text is { } text)
         {

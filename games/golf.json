@@ -83,5 +83,13 @@
       "affects": { "win_condition.count": 18 }
     }
   ],
+  "score_card": {
+    "label": "Scorecard",
+    "view": "detail",
+    "by": "player",
+    "round_label": "H",
+    "max_rounds": 9,
+    "place": { "x": "2%", "y": "3%", "anchor": "top-left" }
+  },
   "help": "golf.md"
 }

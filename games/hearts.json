@@ -103,5 +103,13 @@
       "affects": { "pass.skip": true }
     }
   ],
+  "score_card": {
+    "label": "Scores",
+    "view": "total",
+    "by": "player",
+    "round_label": "R",
+    "max_rounds": 6,
+    "place": { "x": "2%", "y": "3%", "anchor": "top-left" }
+  },
   "help": "hearts.md"
 }
