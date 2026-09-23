@@ -1335,6 +1335,11 @@ public static class ScoringEngine
         {
             string rankKey = card.Rank switch
             {
+                // A joker is named by its rank, not by being wild. Golf declares
+                // "joker": -2 and marks nothing wild — there is nothing to be wild in —
+                // so the value went unread and every joker scored its enum number,
+                // which is zero. A card the definition prices at -2 was worth nothing.
+                Rank.Joker => "joker",
                 Rank.Ace   => "A",
                 Rank.King  => "K",
                 Rank.Queen => "Q",
@@ -1344,7 +1349,10 @@ public static class ScoringEngine
             };
 
             if (RankValues.TryGetValue(rankKey, out int v)) return v;
-            if (RankValues.TryGetValue("joker", out int jv) && card.IsWild) return jv;
+
+            // A game may also price whatever it has declared wild, jokers or not.
+            if (card.IsWild && RankValues.TryGetValue("joker", out int jv)) return jv;
+
             return DefaultMode == "pip" ? (int)card.Rank : 0;
         }
     }
