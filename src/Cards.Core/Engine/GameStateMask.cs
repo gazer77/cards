@@ -57,6 +57,9 @@ public static class GameStateMask
             if (seeAll)
             {
                 dest.AddRange(src.Cards);
+                // Melds are groups, and which cards make up which book is as public
+                // as the cards themselves. Without them an agent saw one heap.
+                foreach (var g in src.Groups) dest.Groups.Add([.. g]);
             }
             else if (src.Visibility == "mixed")
             {

@@ -189,7 +189,10 @@ public sealed class HandAndFootRuleTests
 
         // The side is open now, so a small meld is fine.
         hand.Clear();
-        Lay(state, logic, Give(hand, (Rank.Four, Suit.Clubs), (Rank.Four, Suit.Hearts), (Rank.Four, Suit.Spades)));
+        // (A card is kept back: the foot is up, and the last card is the discard.)
+        var fours = Give(hand, (Rank.Four, Suit.Clubs), (Rank.Four, Suit.Hearts), (Rank.Four, Suit.Spades),
+                               (Rank.Nine, Suit.Clubs));
+        Lay(state, logic, fours.Take(3));
 
         Assert.Equal(2, Melds(state).Groups.Count);
     }
@@ -316,5 +319,76 @@ public sealed class HandAndFootRuleTests
         Melds(state).AddGroup(Book(Rank.Nine, wilds: 2, uidBase: 9820));
 
         Assert.False(CanGoOut(state, logic));
+    }
+    // ── Found while teaching the computer players to meld ─────────────────────
+
+    /// <summary>
+    /// A red three is filed into the meld strip the moment it is dealt or drawn. It
+    /// counted as the side having opened, so one three waived the round's minimum.
+    /// </summary>
+    [Fact]
+    public void A_filed_red_three_is_not_an_opening()
+    {
+        var (state, logic) = Table();
+        state.RoundNumber = 1;
+        Melds(state).AddGroup([new Card(Suit.Hearts, Rank.Three, isFaceUp: true) { Uid = 9950 }]);
+
+        var hand = Hand(state);
+        hand.Clear();
+        var fours = Give(hand, (Rank.Four, Suit.Clubs), (Rank.Four, Suit.Hearts), (Rank.Four, Suit.Spades),
+                               (Rank.King, Suit.Clubs));
+        Lay(state, logic, fours.Take(3));   // 15, and the minimum is 50
+
+        Assert.Single(Melds(state).Groups);   // only the three
+        Assert.Contains("50", state.Metadata.GetValueOrDefault("status", ""));
+    }
+
+    /// <summary>
+    /// With the foot already up, melding the last card leaves nothing to discard. Short
+    /// of the books going out needs, that was a turn with no move at all.
+    /// </summary>
+    [Fact]
+    public void The_last_card_cannot_be_melded_unless_it_goes_out()
+    {
+        var (state, logic) = Table();
+        logic.Apply(state, new GameAction("draw_from_deck"));
+        var me = state.CurrentPlayer.Id;
+        state.Zones[$"foot:{me}"].Clear();
+
+        // Open, with a meld of kings short of a book.
+        Melds(state).AddGroup(Book(Rank.King, wilds: 0, uidBase: 9960).Take(4));
+        var hand = Hand(state);
+        hand.Clear();
+        var king = Give(hand, (Rank.King, Suit.Hearts));
+
+        state.Metadata["selected_card"] = king[0].Uid.ToString();
+        Assert.DoesNotContain(logic.GetValidActions(state), a => a.Type == "add_to_meld");
+        Assert.Contains("discard", state.Metadata.GetValueOrDefault("status", ""));
+
+        // With a card left over it is an ordinary addition.
+        Give(hand, (Rank.Five, Suit.Clubs));
+        Assert.Contains(logic.GetValidActions(state), a => a.Type == "add_to_meld");
+    }
+
+    /// <summary>...and when the lay does finish what going out needs, it is allowed.</summary>
+    [Fact]
+    public void The_last_card_may_be_melded_when_it_completes_the_books()
+    {
+        var (state, logic) = Table();
+        logic.Apply(state, new GameAction("draw_from_deck"));
+        var me = state.CurrentPlayer.Id;
+        state.Zones[$"foot:{me}"].Clear();
+
+        Melds(state).AddGroup(Book(Rank.Nine, wilds: 2, uidBase: 9980));              // the wild book
+        Melds(state).AddGroup(Book(Rank.King, wilds: 0, uidBase: 10100).Take(6));      // a king short
+        var hand = Hand(state);
+        hand.Clear();
+        var king = Give(hand, (Rank.King, Suit.Hearts));
+
+        state.Metadata["selected_card"] = king[0].Uid.ToString();
+        logic.Apply(state, new GameAction("add_to_meld"));
+
+        Assert.Empty(hand.Cards);
+        Assert.Contains(logic.GetValidActions(state), a => a.Type == "go_out");
     }
 }

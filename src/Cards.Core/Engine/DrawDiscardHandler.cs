@@ -504,7 +504,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     private int RequiredOpeningMeld(GameState state)
     {
         if (_initialMeldRequirement.Count == 0) return 0;
-        if (MeldZoneFor(state) is { Count: > 0 }) return 0;   // already open
+        if (MeldRules.HasOpened(MeldZoneFor(state), state)) return 0;   // already open (a filed red three is not an opening)
 
         // First tier naming this round, else the first without a round — the default.
         foreach (var (round, points) in _initialMeldRequirement)
@@ -1001,6 +1001,19 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             return null;
         }
 
+        // Laying every card with the foot already up leaves nothing to discard, and that
+        // is allowed only as the way out. Without this a player could meld their last
+        // card short of the books going out needs and sit at a turn with no move — no
+        // card to discard, no Go Out — and the table stopped.
+        if (selectedCards.Count == hand.Count && !FootWaiting(state)
+            && !WouldMeetGoOut(state, meldZone, melds, addTarget, wilds))
+        {
+            reason = GameText.Message(state, "keep_a_discard",
+                "Keep a card to discard — {player} cannot go out yet.",
+                forPlayerId: state.CurrentPlayer.Id);
+            return null;
+        }
+
         // A side that has not melded must open with enough in one go. The requirement
         // rises by round in Hand and Foot, which is why it is a table in the definition
         // rather than a number. Adding to a meld presupposes one is down, so it is
@@ -1019,6 +1032,37 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         }
 
         return new MeldPlan(selectedCards, melds, addTarget, meldZone, wilds);
+    }
+
+    private static bool FootWaiting(GameState state)
+        => state.FindZone($"foot:{state.CurrentPlayer.Id}") is { IsEmpty: false };
+
+    /// <summary>
+    /// Whether the side would meet the go-out requirement once these melds are down —
+    /// judged on a copy of its meld zone, since a lay can finish the very book it needs.
+    /// </summary>
+    private bool WouldMeetGoOut(
+        GameState state, Zone meldZone, List<List<Card>> melds, int addTarget, HashSet<Rank> wilds)
+    {
+        if (_goOutRequires is not { } req) return true;
+
+        var trial = new Zone(meldZone.Id, meldZone.Type, meldZone.OwnerId, meldZone.Visibility);
+        trial.AddRange(meldZone.Cards);
+        foreach (var g in meldZone.Groups) trial.Groups.Add([.. g]);
+
+        foreach (var meld in melds)
+        {
+            int existing = addTarget >= 0 ? addTarget : FindGroupOfRank(trial, MeldRules.MeldRankOf(meld, wilds), wilds);
+            if (existing >= 0) foreach (var card in meld) trial.AddToGroup(existing, card);
+            else trial.AddGroup(meld);
+        }
+
+        string? key = state.Zones.FirstOrDefault(kv => ReferenceEquals(kv.Value, meldZone)).Key;
+        if (key is null) return RuleCondition.Evaluate(req, state);
+
+        state.Zones[key] = trial;
+        try     { return RuleCondition.Evaluate(req, state); }
+        finally { state.Zones[key] = meldZone; }
     }
 
     private void LayMeld(GameState state, bool addToExisting)

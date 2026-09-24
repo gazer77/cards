@@ -103,7 +103,7 @@ public static class RuleCondition
 
         // "Has this side put anything down yet" — the gate on picking up the discard
         // pile in Hand and Foot, and on laying off in most rummy games.
-        "team_has_melded" => MeldZone(state) is { Count: > 0 },
+        "team_has_melded" => MeldRules.HasOpened(MeldZone(state), state),
 
         // "Can this side open using the top of the discard?" — the other half of the
         // Hand and Foot pickup rule. A side that has not melded may still claim the
@@ -323,7 +323,7 @@ public static class RuleCondition
     /// </summary>
     private static bool CanOpenWithTopDiscard(GameState state)
     {
-        if (MeldZone(state) is { Count: > 0 }) return false;   // already open
+        if (MeldRules.HasOpened(MeldZone(state), state)) return false;   // already open
 
         int required = int.TryParse(
             state.Metadata.GetValueOrDefault("dd_opening_requirement"), out int r) ? r : 0;

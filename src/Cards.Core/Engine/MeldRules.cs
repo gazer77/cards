@@ -121,6 +121,19 @@ public static class MeldRules
         return ranks;
     }
 
+    /// <summary>
+    /// Whether a side has opened: laid a real meld, not just had a red three filed into
+    /// its meld strip. Counting any card there meant a three dealt on the first draw
+    /// waived the opening minimum for the whole round.
+    /// </summary>
+    public static bool HasOpened(Zone? melds, GameState state)
+    {
+        if (melds is null || melds.Count == 0) return false;
+        var wilds      = WildRanks(state.Definition);
+        var unmeldable = UnmeldableRanks(state);
+        return melds.Cards.Any(c => !IsWild(c, wilds) && !unmeldable.Contains(c.Rank));
+    }
+
     /// <summary>Whether a group is a meld at all: it has a natural card of a rank that may be melded.</summary>
     public static bool IsMeldGroup(IReadOnlyList<Card> group, HashSet<Rank> wilds, HashSet<Rank> unmeldable)
         => group.Any(c => !IsWild(c, wilds) && !unmeldable.Contains(c.Rank));

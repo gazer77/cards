@@ -38,6 +38,10 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         if (validActions.Any(a => a.Type == "knock"))
             return validActions.First(a => a.Type == "knock");
 
+        // Melding within the turn (Hand and Foot): pick, lay, then discard.
+        if (state.Metadata.GetValueOrDefault("dd_turn_state") == "discard" && MeldsInDiscardTurn(state))
+            return ChooseMeldTurn(state, validActions);
+
         // Card-play decisions — detect context before generic trick-taking
         var plays = validActions.Where(a => a.Type == "play_card" && a.CardId is not null).ToList();
         if (plays.Count > 0)
@@ -88,6 +92,193 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         return validActions[_rng.Next(validActions.Count)];
     }
 
+
+    // ── Melding inside the turn (Hand and Foot) ───────────────────────────────
+
+    /// <summary>Lays already tried that the table would not take.</summary>
+    private readonly HashSet<string> _refusedLays = [];
+
+    /// <summary>Whether this phase lays melds between the draw and the discard.</summary>
+    private static bool MeldsInDiscardTurn(GameState state)
+    {
+        var phase = state.Definition?.Phases.FirstOrDefault(p => p.Id == state.CurrentPhaseId);
+        if (phase?.Extra?.TryGetValue("special_actions", out var el) != true
+            || el.ValueKind != System.Text.Json.JsonValueKind.Array) return false;
+        return el.EnumerateArray().Any(e => e.GetString() is "meld" or "add_to_meld");
+    }
+
+    /// <summary>
+    /// A turn in which melds are laid by picking cards and pressing a button, the way a
+    /// person does it: one card picked per action, then the lay, then the discard. The
+    /// agent used to see only the discards, so it never laid a card and a round against
+    /// it ended only when the stock ran out.
+    /// </summary>
+    private GameAction ChooseMeldTurn(GameState state, IReadOnlyList<GameAction> actions)
+    {
+        // Going out is the point of the round.
+        if (actions.FirstOrDefault(a => a.Type == "go_out") is { } goOut) return goOut;
+
+        var hand = state.Zones.GetValueOrDefault($"hand:{PlayerId}")?.Cards.ToList() ?? [];
+        var selected = (state.Metadata.GetValueOrDefault("selected_card") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(t => int.TryParse(t, out var uid) ? hand.FirstOrDefault(c => c.Uid == uid) : null)
+            .OfType<Card>()
+            .ToList();
+
+        var plan = PlanLay(state, hand);
+        string? key = plan is null ? null
+            : $"{state.RoundNumber}|{hand.Count}|{string.Join(",", plan.Select(c => c.Uid).Order())}";
+
+        if (plan is not null && !_refusedLays.Contains(key!))
+        {
+            // The lay is offered for exactly what was planned: press it. A button offered
+            // for some other pick — cards tapped by someone else — is not taken on trust.
+            if (selected.Count == plan.Count && plan.All(selected.Contains)
+                && actions.FirstOrDefault(a => a.Type is "meld" or "add_to_meld") is { } lay)
+                return lay;
+
+            if (selected.FirstOrDefault(c => !plan.Contains(c)) is { } stray)
+                return new GameAction("select_card", CardId: stray.Id, CardUid: stray.Uid);
+            if (plan.FirstOrDefault(c => !selected.Contains(c)) is { } next)
+                return new GameAction("select_card", CardId: next.Id, CardUid: next.Uid);
+
+            // Everything planned is picked and the table offers no lay: the plan was
+            // wrong about a rule. Remember it, so the next look discards instead of
+            // picking the same cards for ever.
+            _refusedLays.Add(key!);
+        }
+
+        var plays = actions.Where(a => a.Type == "play_card" && a.CardId is not null).ToList();
+        return plays.Count > 0 ? ChooseMeldingDiscard(state, hand, plays) : actions[0];
+    }
+
+    /// <summary>
+    /// The cards worth laying this turn, or null. Additions to melds already down come
+    /// first, a rank at a time, since the table takes one addition per press; then new
+    /// melds, all together, because an opening minimum is met by what goes down at once.
+    /// Keeps a card to discard unless emptying the hand brings up the foot.
+    /// </summary>
+    private List<Card>? PlanLay(GameState state, List<Card> hand)
+    {
+        if (hand.Count == 0 || state.Definition is not { } def) return null;
+
+        var wilds      = MeldRules.WildRanks(def);
+        var unmeldable = MeldRules.UnmeldableRanks(state);
+        int bookSize   = ScoringEngine.BookSize(def);
+        var team       = state.GetPlayerTeam(PlayerId);
+        var melds      = (team is not null ? state.Zones.GetValueOrDefault($"meld:{team.Id}") : null)
+                      ?? state.Zones.GetValueOrDefault($"meld:{PlayerId}");
+        if (melds is null) return null;
+
+        bool opened   = MeldRules.HasOpened(melds, state);
+        bool footLeft = int.TryParse(state.Metadata.GetValueOrDefault($"zone_count:foot:{PlayerId}"), out var f) && f > 0;
+
+        bool IsWild(Card c) => MeldRules.IsWild(c, wilds);
+        var naturals  = hand.Where(c => !IsWild(c) && !unmeldable.Contains(c.Rank)).ToList();
+        var wildCards = hand.Where(IsWild).ToList();
+
+        var groups = Enumerable.Range(0, melds.Groups.Count)
+            .Select(i => melds.GroupCards(i))
+            .Where(g => MeldRules.IsMeldGroup(g, wilds, unmeldable))
+            .ToList();
+        Rank RankOf(IReadOnlyList<Card> g) => MeldRules.MeldRankOf(g, wilds);
+
+        // A lay may empty the hand only when the foot is waiting to come up.
+        bool Keeps(int laying) => laying < hand.Count || footLeft;
+
+        if (opened)
+        {
+            // Naturals that belong on a meld already down.
+            foreach (var g in groups.OrderByDescending(g => g.Count))
+            {
+                var same = naturals.Where(c => c.Rank == RankOf(g)).ToList();
+                if (same.Count > 0 && Keeps(same.Count)) return same;
+            }
+
+            // Wilds, when they finish a book or go on a meld already dirty. The table puts
+            // an all-wild addition on its biggest legal meld, so that is the one judged.
+            if (wildCards.Count > 0)
+            {
+                var target = groups
+                    .Where(g => g.Count(IsWild) < g.Count(c => !IsWild(c)) && g.Count < bookSize)
+                    .OrderByDescending(g => g.Count)
+                    .FirstOrDefault();
+                if (target is not null)
+                {
+                    int room  = target.Count(c => !IsWild(c)) - target.Count(IsWild);
+                    int needs = bookSize - target.Count;
+                    int n     = Math.Min(room, Math.Min(wildCards.Count, needs));
+                    if (n > 0 && (target.Any(IsWild) || n >= needs) && Keeps(n))
+                        return wildCards.Take(n).ToList();
+                }
+            }
+        }
+
+        // New melds: every rank held three deep that is not down already. Pairs join
+        // with a wild each, when the side is down or the opening needs the points.
+        var byRank = naturals.GroupBy(c => c.Rank)
+            .Where(g => !groups.Any(m => RankOf(m) == g.Key))
+            .OrderByDescending(g => g.Count())
+            .ToList();
+        var lay = byRank.Where(g => g.Count() >= 3).SelectMany(g => g).ToList();
+
+        int required = !opened && int.TryParse(state.Metadata.GetValueOrDefault("dd_opening_requirement"), out var r) ? r : 0;
+        int Worth(List<Card> cards) => ScoringEngine.CardPointValue(def, cards);
+
+        var spare = new Queue<Card>(wildCards);
+        foreach (var pair in byRank.Where(g => g.Count() == 2))
+        {
+            bool shortOfOpening = required > 0 && Worth(lay) < required;
+            if (spare.Count == 0 || !(shortOfOpening || opened)) break;
+            lay.AddRange(pair);
+            lay.Add(spare.Dequeue());
+        }
+
+        // Still short of the opening: a spare wild on each meld that can carry one.
+        if (required > 0)
+        {
+            foreach (var g in lay.Where(c => !IsWild(c)).GroupBy(c => c.Rank).ToList())
+            {
+                if (Worth(lay) >= required || spare.Count == 0) break;
+                lay.Add(spare.Dequeue());
+            }
+            if (Worth(lay) < required) return null;
+        }
+
+        // Keep a card back when the lay would take the whole hand for nothing: drop the
+        // smallest meld, and any wild left with nothing to stand in for.
+        while (lay.Count > 0 && !Keeps(lay.Count))
+        {
+            var smallest = lay.Where(c => !IsWild(c)).GroupBy(c => c.Rank).OrderBy(g => g.Count()).First();
+            lay.RemoveAll(c => !IsWild(c) && c.Rank == smallest.Key);
+            while (lay.Count(IsWild) > 0 && MeldRules.PartitionIntoMelds(lay, wilds) is null)
+                lay.Remove(lay.Last(IsWild));
+            if (required > 0 && Worth(lay) < required) return null;
+        }
+
+        return lay.Count > 0 && MeldRules.PartitionIntoMelds(lay, wilds) is not null ? lay : null;
+    }
+
+    /// <summary>
+    /// A discard for a game that melds sets: an unmeldable rank first (Hand and Foot's
+    /// black threes are good for nothing else), never a wild, then the loneliest rank,
+    /// cheapest first.
+    /// </summary>
+    private static GameAction ChooseMeldingDiscard(GameState state, List<Card> hand, List<GameAction> plays)
+    {
+        var wilds      = MeldRules.WildRanks(state.Definition);
+        var unmeldable = MeldRules.UnmeldableRanks(state);
+        var offered    = hand.Where(c => plays.Any(p => p.CardId == c.Id)).ToList();
+        if (offered.Count == 0 || state.Definition is not { } def) return plays[0];
+
+        var choice = offered
+            .OrderByDescending(c => unmeldable.Contains(c.Rank) && !MeldRules.IsWild(c, wilds))
+            .ThenBy(c => MeldRules.IsWild(c, wilds))
+            .ThenBy(c => hand.Count(h => h.Rank == c.Rank))
+            .ThenBy(c => ScoringEngine.CardPointValue(def, [c]))
+            .First();
+        return plays.First(p => p.CardId == choice.Id);
+    }
 
     // ── Blackjack strategy ────────────────────────────────────────────────────
 

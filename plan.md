@@ -329,12 +329,16 @@ heuristics, and conservative poker betting; everything else falls through to ran
         Euchre's bidding `prompt`.
       Each is either a rule to implement or a line to delete; leaving them stated and
       unread is the one option now ruled out.
-- [ ] **Hand and Foot's computer players cannot meld** — they draw, they discard, they
-      claim piles, and they never lay a meld, so a round only ends when a person melds
-      their way out. The table no longer freezes (a debt nobody can pay is forgiven) but
-      a game against three of them still runs until the stock does. Wants the meld
-      planner the engine already has, driven from the agent: `MeldRules.PartitionIntoMelds`
-      finds the groups, and `PlanMeld` says whether a lay is legal and worth enough.
+- [x] **Hand and Foot's computer players meld** — they pick cards and press Lay the way a
+      person does: open when the round's minimum can be met (pairs take a wild only
+      when the opening needs the points), add naturals to melds already down, put wilds
+      where they finish or extend a dirty book, keep a card to discard, and throw black
+      threes before anything else. Games against them end at every table size from two
+      to six. Found on the way: a filed red three counted as the side having opened, so
+      it waived the minimum; the agent's masked view dropped meld groups; and a player
+      could meld their last card short of the books and be left with no move.
+      Not yet: the computer player does not weigh whether taking the pile is worth it
+      beyond the existing rule, and never holds back a meld to go out in one turn.
 - [ ] **Hand and Foot at five seats** — the two side players' feet are drawn at the
       smallest size the table allows. Five seats put three players along the top, which
       leaves the sides a narrow band, and Hand and Foot asks each seat for a hand, a

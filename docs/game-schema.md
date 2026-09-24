@@ -696,6 +696,12 @@ hold — Hand and Foot asks for one natural book and one wild book. Being out of
 and foot both) is required underneath either form; a definition cannot let a player go out
 holding cards.
 
+With a `go_out_condition` set, a lay (meld or add) that would take the last card of the hand
+while the foot is already up is refused unless, with it down, the side meets that
+condition — otherwise the player is left with nothing to discard and no way out. The
+check is made on the melds as they would stand after the lay, so the card that finishes
+the last book needed may go.
+
 `round_ends_when`: also accepts `"stock_exhausted"` — the round ends when the draw pile
 runs out, which is how Hand and Foot and Gin Rummy end a round nobody goes out of. Without
 it those games simply stopped, with every seat unable to draw and no way forward.
@@ -757,7 +763,8 @@ are matched by round number; a last entry with no `round` is the default:
 ```
 
 The minimum is measured against the cards laid in that one action, valued as `card_points`
-scoring values them.
+scoring values them. A side has opened once a meldable card is in its strip; a red three
+filed there by `on_receive` does not count.
 
 ---
 
@@ -1001,7 +1008,7 @@ A condition is a term name, an object naming a term, or a combinator:
 | Term | Holds when |
 |---|---|
 | `stock_exhausted` | The draw pile is empty |
-| `team_has_melded` | This side has laid anything down this round |
+| `team_has_melded` | This side has laid a real meld this round (filed red threes do not count) |
 | `hand_empty` | The player to act holds no cards |
 | `always` / `never` | Unconditionally true / false |
 | `{ "hand_count_of_rank": <rank>, "at_least": n }` | The player holds `n`+ of that rank. The rank is a literal (`"K"`) or `"top_discard"` |
