@@ -57,34 +57,12 @@ when they require a phase type that doesn't exist yet.
 - [ ] Blind Baseball
 
 ### Euchre
-- [x] 4-player — `games/euchre-4p.json`
-- [x] 3-player — `games/euchre-3p.json`
-- [ ] 2-player
-- [ ] **One Euchre, with a seat count** — the 3- and 4-player games are separate
-      definitions because a definition cannot yet say "this rule depends on how many are
-      playing": teams at four and none at three, a different deck at two, and scoring
-      that pays the makers differently. `extends` + `overrides` gets one file out of
-      another — which is why `euchre-3p.json` is eight lines — but a player still picks
-      between two entries in the list instead of picking Euchre and then a number.
-      Needs **One game, several configurations** under Definitions; this is its first
-      case, and 2-player Euchre above is the second.
-      (`LogicRegistry` is empty and every definition runs on `DefaultGameLogic`), but
-      Euchre is the game the shared engine knows most about by name, and some of it is a
-      game hiding in the vocabulary rather than vocabulary a game uses:
-      - `scoring.type: "euchre"` is a scoring method whose *shape* is Euchre's — a maker,
-        thresholds at three and five tricks, a loner — parameterised only in what those
-        are worth. It even reads two spellings of its own key (`tricks_3_or_4` and
-        `tricks_3_to_5`) because the 3- and 4-player files disagree. A declarative
-        "score the side that named trump, by tricks taken, against a table of bands"
-        would cover it, Spades' contracts and Pinochle's bid alike.
-      - `euchre_maker` is a metadata key written by the generic bidding handler. The
-        rest of the engine calls the same idea `bid_winner`.
-      - `left_bower` is a rule stated as a flag. The rule underneath — a card is promoted
-        into another suit for the hand — has no general form, so a game with a different
-        promotion cannot say it.
-      Not urgent: Euchre plays, and the engine's Euchre-named parameters are read from
-      the definition rather than assumed. It is worth naming as debt because each is a
-      place where a second game would find the vocabulary shaped around the first.
+- [x] One game, 3 or 4 players — `games/euchre.json`, with a configuration per seat
+      count. Partners at four and none at three, each shape scoring by its own rules,
+      and going alone skipping a partner only where there is one. Replaces
+      `euchre-4p.json` and `euchre-3p.json`, which were one game written twice
+- [ ] 2-player — a third shape, once the two-handed rules are settled (a 24-card deck
+      is thin for two, and most tables play with a stripped kitty or a dummy hand)
 
 ### Other Games
 - [x] Hand and Foot
@@ -185,14 +163,18 @@ heuristics, and conservative poker betting; everything else falls through to ran
 
 
 ### Definitions
-- [ ] **One game, several configurations** — a definition should carry what is common
-      (name, help, tags, artwork, the shape of the game) once, and then the parts that
-      differ by what is known at setup — the player count first, and later the enabled
-      house rules or the chosen deck. Today those are separate games: `euchre-4p` and
-      `euchre-3p` are two entries in the picker for one game, and a player chooses
-      between them instead of choosing Euchre and then how many are playing.
+- [ ] **One game, several configurations** — a definition carries what is common once
+      and then the parts that differ by what is known at setup. **Built** (see
+      `docs/game-schema.md`), and Euchre is on it: one file, a shape per seat count.
+      What is left:
+      - Poker as one entry — Hold'em, Stud and the wild variants as named shapes, which
+        exercises the `name` route the way Euchre exercised `when`.
+      - The setup screen offering the named shapes, and the resume list showing which
+        shape a save was written under.
+      - Golf's grid size, Hand and Foot's pack count and Spades' 3-player rules, each a
+        tier table or a hard-wired default today.
 
-      A sketch of the shape, to be argued with when it is picked up:
+      The shape as built:
 
       ```json
       "name": "Euchre",
@@ -206,37 +188,13 @@ heuristics, and conservative poker betting; everything else falls through to ran
       ]
       ```
 
-      What it needs, roughly in order:
-      - Resolution: the matching configurations merge onto the common part once, when
-        the game is dealt, using the patch rules `overrides` already has. Most specific
-        match wins; no match is a definition error rather than a silent default.
-      - Validation of every configuration at load, not only of the one a given table
-        picks — a definition whose 6-player rules are malformed should fail when it is
-        written, not when six people finally sit down.
-      - The setup screen offering the seat range for the game rather than a list of
-        games that differ only by a number, and the resume list recording which
-        configuration a save was written under.
-      - `extends` stays for building one definition on another file; whether it
-        survives at all is worth asking once configurations exist, since poker-wilds
-        on poker is exactly a variant by another route.
+      What it does to the catalogue: sixteen entries are already fifteen, and become
+      about thirteen once poker follows. A save records which shape it was written
+      under, so resuming a Stud game does not deal Hold'em.
 
-      Two ways a configuration gets chosen, and the mechanism wants both:
-      - **Implied by the data** — Euchre. `"when": { "players": 3 }` matches and nobody
-        is asked anything; the player picks Euchre and how many are playing.
-      - **Named and picked** — Poker. Hold'em, Stud and the wild variants share nothing
-        but the umbrella: a deck, a betting vocabulary and the word poker. There is no
-        datum that selects between them, so a configuration may carry a `name` and a
-        `description` and appear in a picker on the setup screen, with one marked
-        default. The same shape serves both — a configuration with a `when` is matched,
-        one with a `name` is offered, and one with both is offered only where it fits.
-
-      What it does to the catalogue: sixteen entries become about thirteen, and the
-      picker stops listing near-duplicates. A save records which configuration it was
-      written under, so resuming a Stud game does not deal Hold'em.
-
-      Euchre is the case in hand — see the Euchre section — but Golf's grid size, Hand
-      and Foot's pack count and Spades' 3-player variant all want the same thing, and
-      each is currently either a tier table or a second file.
+      `extends` stays for building one definition on another file; whether it survives
+      at all is worth asking now that configurations exist, since poker-wilds on
+      texas-holdem is exactly a variant by another route.
 - [ ] **Swapping the language** — every sentence the table says already goes through
       `GameText`, keyed, with a definition able to replace any of them. That is most of
       the foundation; what is missing is a way to hold more than one language at a time

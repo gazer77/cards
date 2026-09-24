@@ -34,7 +34,7 @@ public sealed class DefinitionAuditTests
             "phases[0].blackjack_pays",     // a natural pays even money today
             "roles",                        // a dealer seat with fixed rules; every seat is alike
         ],
-        ["euchre-4p.json"]     = ["dealer", "phases[0].order", "phases[0].prompt", "phases[1].order"],
+
         ["gin-rummy.json"]     = ["dealer"],
         ["go-fish.json"]       = ["dealer"],
         ["golf.json"]          = ["dealer"],

@@ -54,11 +54,31 @@ public static class GameConfiguration
         {
             if (configuration.Extra is null) continue;
             foreach (var (key, value) in configuration.Extra)
+            {
+                if (key == "overrides") continue;   // paths, applied after the merge
                 Merge(node, key, value);
+            }
         }
 
         var resolved = node.Deserialize<GameDefinition>(_opts);
         if (resolved is null) return definition;
+
+        // A shape may also patch by path, the way a definition extending another does.
+        // Merging cannot reach inside an array — a phase's one parameter lives in the
+        // phase list — and replacing the whole list to change one word is how a second
+        // copy of a game gets written by accident.
+        foreach (var configuration in applied)
+        {
+            if (configuration.Extra?.TryGetValue("overrides", out var paths) != true) continue;
+            if (paths.ValueKind != JsonValueKind.Object) continue;
+
+            foreach (var patch in paths.EnumerateObject())
+                HouseRuleEngine.ApplyPath(resolved, patch.Name, patch.Value);
+        }
+
+        // The base game's own overrides were applied when it was loaded; carrying them
+        // forward would apply them twice.
+        resolved.Overrides = null;
 
         // House rule state is runtime, not serialised, so it does not survive the trip.
         foreach (var rule in resolved.HouseRules)

@@ -26,8 +26,7 @@ public class GameLoader
         "texas-holdem",
         "poker-wilds",
         "poker-stud",
-        "euchre-4p",
-        "euchre-3p",
+        "euchre",
         "pinochle",
         "hand-and-foot",
     ];

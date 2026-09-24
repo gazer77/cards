@@ -5,7 +5,7 @@ namespace Cards.Tests;
 /// <summary>
 /// Guards the two paths that deep-clone a GameDefinition through a JSON round-trip:
 /// inheritance ("extends") and house-rule application. Both used to throw on any
-/// definition holding an unset JsonElement, and both failed silently — euchre-3p and
+/// definition holding an unset JsonElement, and both failed silently — a child definition and
 /// poker-wilds never loaded at all, and nothing surfaced it.
 /// </summary>
 public sealed class DefinitionIntegrityTests
@@ -28,11 +28,12 @@ public sealed class DefinitionIntegrityTests
     {
         var loader = NewLoader();
 
-        // euchre-3p extends euchre-4p and narrows the seat count to exactly 3.
-        var euchre3 = await loader.LoadAsync("euchre-3p");
-        Assert.NotNull(euchre3);
-        Assert.Equal(3, euchre3!.MinPlayers);
-        Assert.Equal(3, euchre3.MaxPlayers);
+        // Euchre is one game with a shape per seat count now, and seats 3 and 4 both
+        // resolve into games rather than into a definition with a hole in it.
+        var euchre = await loader.LoadAsync("euchre");
+        Assert.NotNull(euchre);
+        Assert.Equal(3, euchre!.MinPlayers);
+        Assert.Equal(4, euchre.MaxPlayers);
 
         // poker-wilds extends texas-holdem and adds deuces wild.
         var wilds = await loader.LoadAsync("poker-wilds");

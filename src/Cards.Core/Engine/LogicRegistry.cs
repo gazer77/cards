@@ -7,7 +7,7 @@ namespace Cards.Engine;
 ///
 /// The key is the <c>implementation</c> field from the game definition, which
 /// defaults to the game's <c>id</c> when absent.  This decouples the game
-/// definition ID (e.g. "euchre-4p") from the logic module (e.g. "euchre").
+/// definition ID (e.g. "poker-stud") from the logic module (e.g. "poker").
 ///
 /// War, Blackjack, and Go Fish are now fully declarative — they no longer
 /// require a custom logic class and have no entry here.

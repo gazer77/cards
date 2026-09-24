@@ -1,26 +1,20 @@
 {
   "$schema": "cards-game/v1",
-  "id": "euchre-4p",
-  "name": "Euchre (4-Player)",
+  "id": "euchre",
+  "name": "Euchre",
   "version": "1.0",
   "deck": "euchre-24",
-  "players": { "min": 4, "max": 4 },
-  "teams": {
-    "count": 2,
-    "size": 2,
-    "arrangement": "alternating"
-  },
-  "dealer": "random",
+  "players": { "min": 3, "max": 4 },
+  "teams": false,
   "rounds": {
     "repeat_until": "win_condition",
     "dealer": "rotates_left"
   },
   "deal": {
-    "pattern": "3-2-3-2",
+    "cards_per_player": 5,
     "face": "owner",
     "remainder_to": "kitty",
-    "then_flip_top_of": "kitty",
-    "anim_deal_steps": [[0,3],[1,2],[2,3],[3,2],[0,2],[1,3],[2,2],[3,3]]
+    "then_flip_top_of": "kitty"
   },
   "zones": [
     { "id": "deck",       "type": "deck",   "visibility": "none" },
@@ -36,8 +30,6 @@
       "id": "order_up",
       "type": "bidding",
       "style": "accept_or_pass",
-      "order": "left_of_dealer",
-      "prompt": "Order up?",
       "once_around": true,
       "if_accepted": {
         "sets": { "trump": "turned_card_suit", "maker": "accepting_player" },
@@ -50,7 +42,6 @@
       "id": "call_trump",
       "type": "bidding",
       "style": "suit_or_pass",
-      "order": "left_of_dealer",
       "exclude_suit": "turned_card_suit",
       "stick_the_dealer": true,
       "going_alone": true,
@@ -92,6 +83,37 @@
     "count_by": "team",
     "accumulate": true
   },
+  "configurations": [
+    {
+      "when": { "players": 3 },
+      "teams": false,
+      "deal": {
+        "anim_deal_steps": [[0,3],[1,2],[2,3],[0,2],[1,3],[2,2]]
+      },
+      "scoring": {
+        "type": "euchre",
+        "makers_win": { "tricks_3_to_5": 1 },
+        "euchred": { "opponents_each_score": 2 },
+        "loner_win": null,
+        "count_by": "player",
+        "accumulate": true
+      },
+      "overrides": {
+        "play.loner_skips_partner": false
+      }
+    },
+    {
+      "when": { "players": 4 },
+      "teams": {
+        "count": 2,
+        "size": 2,
+        "arrangement": "alternating"
+      },
+      "deal": {
+        "anim_deal_steps": [[0,3],[1,2],[2,3],[3,2],[0,2],[1,3],[2,2],[3,3]]
+      }
+    }
+  ],
   "ui": {
     "default_sort": "suit_value",
     "sort_modes": ["suit_value", "suit_stable", "rank_ace_high"]

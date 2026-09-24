@@ -10,7 +10,7 @@ namespace Cards.Tests;
 /// </summary>
 public sealed class EuchreTests
 {
-    private static (GameState State, IGameLogic Logic) Table(string id = "euchre-4p", int seats = 4)
+    private static (GameState State, IGameLogic Logic) Table(string id = "euchre", int seats = 4)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
         var definition = loader.LoadAsync(id).GetAwaiter().GetResult()!;
@@ -164,7 +164,7 @@ public sealed class TrickInputTests
         // The reported artifact: a trick phase offers the engine an action with no label,
         // meaning "the table is the affordance". The action bar drew it as a button
         // reading "tap", which did nothing a player could see.
-        var vm = await Playing("euchre-4p", 4);
+        var vm = await Playing("euchre", 4);
 
         Assert.Contains(vm.Logic!.GetValidActions(vm.State!), a => a.Type == "tap");
         Assert.DoesNotContain(vm.Actions, a => a.Type == "tap");
@@ -174,7 +174,7 @@ public sealed class TrickInputTests
     [Fact]
     public async Task A_double_tap_plays_the_card()
     {
-        var vm = await Playing("euchre-4p", 4);
+        var vm = await Playing("euchre", 4);
         var state = vm.State!;
         string me = state.CurrentPlayer.Id;
 
@@ -200,7 +200,7 @@ public sealed class TrickInputTests
     {
         // The shortcut is past the asking, never past the rules: following suit still
         // applies, so a card that is not on offer does nothing.
-        var vm = await Playing("euchre-4p", 4);
+        var vm = await Playing("euchre", 4);
         var state = vm.State!;
         string me = state.CurrentPlayer.Id;
 
@@ -226,7 +226,7 @@ public sealed class HandFacingTests
     private static (GameState State, IGameLogic Logic) Euchre()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("euchre-4p").GetAwaiter().GetResult()!;
+        var definition = loader.LoadAsync("euchre").GetAwaiter().GetResult()!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(4) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 4, []);
@@ -303,7 +303,7 @@ public sealed class CardMovementLogTests
     [Fact]
     public void Taking_up_the_turned_card_says_which_card()
     {
-        var (state, logic) = Game("euchre-4p", 4);
+        var (state, logic) = Game("euchre", 4);
         logic.GetAutoAdvanceDelay(state);
 
         var turned = state.Zones["kitty"].TopCard!;
@@ -315,7 +315,7 @@ public sealed class CardMovementLogTests
     [Fact]
     public void The_dealers_discard_is_recorded_without_naming_it()
     {
-        var (state, logic) = Game("euchre-4p", 4);
+        var (state, logic) = Game("euchre", 4);
         logic.GetAutoAdvanceDelay(state);
 
         var dealerHand = state.Zones[$"hand:{state.DealerId}"].Cards.ToList();
@@ -370,7 +370,7 @@ public sealed class DealerTests
     private static (GameState State, IGameLogic Logic) Euchre(ulong seed = 4)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("euchre-4p").GetAwaiter().GetResult()!;
+        var definition = loader.LoadAsync("euchre").GetAwaiter().GetResult()!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(seed) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 4, []);
@@ -451,7 +451,7 @@ public sealed class DealerTests
 
         // Unset means "when the game has a dealer at all", which is exactly the games
         // whose rounds rotate one.
-        foreach (var id in new[] { "euchre-4p", "pinochle", "hearts", "golf" })
+        foreach (var id in new[] { "euchre", "pinochle", "hearts", "golf" })
         {
             var definition = loader.LoadAsync(id).GetAwaiter().GetResult()!;
             bool shows = definition.Ui?.ShowDealer
@@ -476,7 +476,7 @@ public sealed class TrickLogTests
     private static (GameState State, IGameLogic Logic) Euchre(ulong seed = 4)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("euchre-4p").GetAwaiter().GetResult()!;
+        var definition = loader.LoadAsync("euchre").GetAwaiter().GetResult()!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(seed) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 4, []);

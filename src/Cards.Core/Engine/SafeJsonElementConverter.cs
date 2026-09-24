@@ -15,7 +15,7 @@ namespace Cards.Engine;
 /// Both places that deep-clone a definition via a JSON round-trip hit this:
 /// GameLoader.MergeWithParent (used by every game with "extends") and
 /// HouseRuleEngine.Apply (used whenever a house rule is switched on). The result was
-/// silent: euchre-3p and poker-wilds simply never appeared, and enabling a house rule
+/// silent: a child definition and poker-wilds simply never appeared, and enabling a house rule
 /// could fail the same way.
 ///
 /// Nothing in the engine distinguishes Undefined from Null — no code reads
