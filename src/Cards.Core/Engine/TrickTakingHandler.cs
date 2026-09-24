@@ -235,6 +235,16 @@ public sealed class TrickTakingHandler : IPhaseHandler
         // Record who played what
         state.Metadata[$"trick_played:{player.Id}"] = cardId;
 
+        // And say so in the log. Named when the trick is played face-up, which is all
+        // of them today — a game that played to a face-down trick would be telling
+        // everyone something it had not shown them.
+        bool seen = trick.Visibility is "all" or "top" && card.IsFaceUp;
+        if (seen)
+            GameText.Log(state, "log_played", "{player} played the {card}",
+                         player.Id, ("card", GameText.CardName(card)));
+        else
+            GameText.Log(state, "log_played_hidden", "{player} played a card", player.Id);
+
         // Record lead suit on first card of trick
         string trump = ResolveTrump(state);
         if (string.IsNullOrEmpty(state.Metadata.GetValueOrDefault("trick_lead_suit", "")))

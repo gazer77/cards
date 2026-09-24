@@ -95,7 +95,8 @@ public sealed class GameTextTests
         var said = new Dictionary<string, HashSet<string>>();
         // key, then the default string — which may hold \" escapes.
         var call = new System.Text.RegularExpressions.Regex(
-            "GameText\\.(Message|TeamMessage|Action|Log)\\(state,\\s*\"([a-z_{}]+)\",\\s*\"((?:[^\"\\\\]|\\\\.)*)\"",
+            // Announce names the speaker before the key, so one argument may sit between.
+            "GameText\\.(Message|TeamMessage|Action|Log|Announce)\\(state,\\s*(?:[^\",]+,\\s*)?\"([a-z_{}]+)\",\\s*\"((?:[^\"\\\\]|\\\\.)*)\"",
             System.Text.RegularExpressions.RegexOptions.Singleline);
 
         foreach (var file in files)

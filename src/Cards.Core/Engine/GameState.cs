@@ -78,6 +78,17 @@ public class GameState
     public string? EnteredPhase { get; set; }
 
     /// <summary>
+    /// Things a player has just said, waiting to be shown beside their seat — "spades",
+    /// when they name trump.
+    ///
+    /// Drained by whatever is drawing the table, and never saved: a resumed game should
+    /// not re-announce a bid made an hour ago. The log keeps the record; this is only
+    /// the speaking.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<(string PlayerId, string Text)> Announcements { get; } = [];
+
+    /// <summary>
     /// AI agents registered for this game session, keyed by player ID.
     /// Not persisted to save files.
     /// </summary>

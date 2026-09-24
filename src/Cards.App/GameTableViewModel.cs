@@ -249,6 +249,16 @@ public sealed class GameTableViewModel
     {
         if (_logic is null || _state is null) return;
 
+        // Anything a player said on their own account — naming trump — is theirs, and
+        // goes to their seat whoever is on turn by the time it is drawn. The engine
+        // has already written these to the log; this is only the speaking.
+        if (_state.Announcements.Count > 0)
+        {
+            foreach (var (speaker, said) in _state.Announcements.ToList())
+                MessagePosted?.Invoke(speaker, said);
+            _state.Announcements.Clear();
+        }
+
         string text = _logic.GetStatusText(_state);
         if (string.IsNullOrEmpty(text) || text == _lastLoggedStatus) return;
 

@@ -175,11 +175,22 @@ public sealed class BiddingHandler : IPhaseHandler
                 state.Metadata["bid_high"] = newBid.ToString();
         }
 
-        // If bid sets trump (suit or accept), record it
+        // If bid sets trump (suit or accept), record it — and say so. Naming trump
+        // changes what every card on the table is worth and moves none of them, so
+        // without a word from the player it happens silently.
         if (IsSuit(bidValue))
+        {
             state.Metadata["bid_trump"] = bidValue;
+            GameText.Announce(state, player.Id, "log_named_trump", "{player} named {suit} trump",
+                              ("suit", Capitalize(bidValue)));
+        }
         else if (action.Type == "bid_accept")
+        {
             RecordAcceptedTrump(state);
+            if (state.Metadata.GetValueOrDefault("bid_trump") is { Length: > 0 } accepted)
+                GameText.Announce(state, player.Id, "log_ordered_up", "{player} ordered up {suit}",
+                                  ("suit", Capitalize(accepted)));
+        }
 
         // In once_around mode a non-pass bid ends bidding immediately (Euchre-style).
         if (_onceAround)

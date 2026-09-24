@@ -674,6 +674,15 @@ public partial class GameTablePage : ContentPage
     private void RefreshStatus()
     {
         if (_logic is null) return;
+
+        // Anything a player said on their own account — naming trump — is shown first
+        // and in their own right; the engine has already written it to the log.
+        if (_state is not null && _state.Announcements.Count > 0)
+        {
+            foreach (var (_, said) in _state.Announcements.ToList()) ShowMessage(said);
+            _state.Announcements.Clear();
+        }
+
         string text = _logic.GetStatusText(_state!);
         if (string.IsNullOrEmpty(text) || text == _lastShownStatus) return;
 

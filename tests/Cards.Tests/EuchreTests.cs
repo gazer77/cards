@@ -465,3 +465,83 @@ public sealed class DealerTests
                   ?? (war.Rounds?.Dealer is not null || war.Rounds?.FirstDealer is not null));
     }
 }
+
+/// <summary>
+/// What the log says about the two things a trick game does: naming trump, and playing
+/// a card. Neither was in it — the log read as a list of whose turn it was, with the
+/// trump suit repeated on every line and no word of what anybody played.
+/// </summary>
+public sealed class TrickLogTests
+{
+    private static (GameState State, IGameLogic Logic) Euchre(ulong seed = 4)
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync("euchre-4p").GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(seed) };
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, 4, []);
+        return (state, logic);
+    }
+
+    [Fact]
+    public void Naming_trump_gets_a_line_of_its_own_and_is_said_at_the_table()
+    {
+        var (state, logic) = Euchre();
+        logic.GetAutoAdvanceDelay(state);
+
+        string bidder = state.CurrentPlayer.Id;
+        var turned = state.Zones["kitty"].TopCard!;
+        logic.Apply(state, new GameAction("bid_accept"));
+
+        string suit = turned.Suit.ToString();
+        Assert.Contains(state.GameLog, l => l.Contains("ordered up") && l.Contains(suit));
+
+        // And the player says it, beside their own seat, whoever is on turn by then.
+        var said = Assert.Single(state.Announcements);
+        Assert.Equal(bidder, said.PlayerId);
+        Assert.Contains(suit, said.Text);
+    }
+
+    [Fact]
+    public void Trump_called_in_the_second_round_is_announced_too()
+    {
+        var (state, logic) = Euchre(seed: 11);
+        logic.GetAutoAdvanceDelay(state);
+
+        // Everyone passes the turned card, then someone names a suit.
+        for (int i = 0; i < 12 && state.CurrentPhaseId == "order_up"; i++)
+            logic.Apply(state, new GameAction("bid_pass"));
+        if (state.CurrentPhaseId != "call_trump") return;
+
+        state.Announcements.Clear();
+        string caller = state.CurrentPlayer.Id;
+        var suit = logic.GetValidActions(state).First(a => a.Type.StartsWith("bid_")
+                                                        && a.Type != "bid_pass"
+                                                        && a.Type != "bid_alone");
+        logic.Apply(state, suit);
+
+        Assert.Contains(state.GameLog, l => l.Contains("named") && l.Contains("trump"));
+        Assert.Contains(state.Announcements, a => a.PlayerId == caller);
+    }
+
+    [Fact]
+    public void Every_card_played_face_up_is_named_in_the_log()
+    {
+        var (state, logic) = Euchre();
+        logic.GetAutoAdvanceDelay(state);
+        logic.Apply(state, new GameAction("bid_accept"));
+        while (state.CurrentPhaseId == "dealer_discard")
+            logic.Apply(state, logic.GetAutoAction(state));
+
+        Assert.Equal("play", state.CurrentPhaseId);
+
+        // Whoever leads may be a computer seat; take the first card the phase offers.
+        var offered = logic.GetSelectableCardIds(state);
+        var hand = state.Zones[$"hand:{state.CurrentPlayer.Id}"];
+        var card = hand.Cards.FirstOrDefault(c => offered.Contains(c.Id));
+        if (card is null) return;
+        logic.Apply(state, new GameAction("play_card", CardId: card.Id, CardUid: card.Uid));
+
+        Assert.Contains(state.GameLog, l => l.Contains("played") && l.Contains(GameText.CardName(card)));
+    }
+}

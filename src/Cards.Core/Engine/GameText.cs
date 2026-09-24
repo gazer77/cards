@@ -73,6 +73,24 @@ public static class GameText
         GameState state, string key, string fallback,
         string? forPlayerId = null, params (string Name, object? Value)[] values)
         => state.GameLog.Add(Message(state, key, fallback, forPlayerId, values));
+
+    /// <summary>
+    /// Records something a player did, and has them say it at the table.
+    ///
+    /// The log keeps the line; the bubble beside their seat is the saying. Used where a
+    /// choice is not visible in the cards — naming trump changes every card on the
+    /// table and moves none of them, so without this it happened silently and the
+    /// status line mentioned it afterwards as a footnote.
+    /// </summary>
+    public static void Announce(
+        GameState state, string playerId, string key, string fallback,
+        params (string Name, object? Value)[] values)
+    {
+        string line = Message(state, key, fallback, playerId, values);
+        state.GameLog.Add(line);
+        state.Announcements.Add((playerId, line));
+    }
+
     /// <summary>The label for an action button.</summary>
     public static string Action(GameState state, string key, string fallback,
         params (string Name, object? Value)[] values)
@@ -153,6 +171,10 @@ public static class GameText
         ["rank_unmeldable"] = "{rank}s cannot be melded.",
         ["dealer_discarded"] = "Dealer discarded. Let's play!",
         ["log_drew"] = "{player} drew a card",
+        ["log_named_trump"] = "{player} named {suit} trump",
+        ["log_ordered_up"] = "{player} ordered up {suit}",
+        ["log_played"] = "{player} played the {card}",
+        ["log_played_hidden"] = "{player} played a card",
         ["log_swapped"] = "{player} played the {card} and discarded the {discarded}",
         ["log_took_card"] = "{player} took the {card}",
         ["log_took_pile"] = "{player} took the pile — {count} cards",
@@ -253,6 +275,10 @@ public static class GameText
         ["reveal_one"]       = "Tap a card to turn over",
         ["reveal_more"]      = "Tap {count} cards to turn over",
         ["log_drew"]           = "You drew a card",
+        ["log_named_trump"]    = "You named {suit} trump",
+        ["log_ordered_up"]     = "You ordered up {suit}",
+        ["log_played"]         = "You played the {card}",
+        ["log_played_hidden"]  = "You played a card",
         ["log_swapped"]        = "You played the {card} and discarded the {discarded}",
         ["log_took_card"]      = "You took the {card}",
         ["log_took_pile"]      = "You took the pile — {count} cards",

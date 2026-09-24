@@ -220,9 +220,11 @@ public static class PhaseHandlerRegistry
             state.Metadata["bid_trump"] = suit;
             state.Metadata.Remove("bid_winner");
 
-            string player = state.CurrentPlayer == state.Players[0]
-                ? "You" : state.CurrentPlayer.Name;
-            state.Metadata["status"] = $"{player} named {Capitalize(suit)} trump.";
+            // Said at the table and written in the log, like any other naming of trump.
+            GameText.Announce(state, state.CurrentPlayer.Id, "log_named_trump",
+                              "{player} named {suit} trump", ("suit", Capitalize(suit)));
+            state.Metadata["status"] = GameText.Message(state, "log_named_trump",
+                "{player} named {suit} trump", state.CurrentPlayer.Id, ("suit", Capitalize(suit)));
 
             state.CurrentPhaseId = _nextPhaseId;
         }

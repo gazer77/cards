@@ -1088,6 +1088,10 @@ name a player) addresses the person at this screen.
 | `turn_owed` | {player}'s turn — Meld the {card} they took |
 | `turn_swap` | {player}'s turn — Tap a card to swap, or discard the drawn card |
 | `log_drew` | {player} drew a card |
+| `log_named_trump` | {player} named {suit} trump |
+| `log_ordered_up` | {player} ordered up {suit} |
+| `log_played` | {player} played the {card} |
+| `log_played_hidden` | {player} played a card |
 | `log_took_card` | {player} took the {card} |
 | `log_took_pile` | {player} took the pile — {count} cards |
 | `log_took_up` | {player} took up the {card} |
@@ -1099,10 +1103,13 @@ name a player) addresses the person at this screen.
 | `turn_trump` | {player}'s turn  \|  Trump: {trump} |
 | `war_flip` | Tap to flip! |
 
-The `log_*` keys are what the game log records when cards move, as opposed to the status
-line's account of whose turn it is. A card is named only where the table could see it: a
-card off the face-down deck is "a card", one taken from the discard or turned up for the
-bidding is named. Wording is a definition's to change like any other message.
+The `log_*` keys are what the game log records when something happens, as opposed to the
+status line's account of whose turn it is: cards moving, cards played, and trump being
+named. A card is named only where the table could see it — a card off the face-down deck is
+"a card", one taken from the discard or played to a face-up trick is named. Naming trump
+also puts the words beside the seat that said them, because it changes what every card on
+the table is worth and moves none of them. Wording is a definition's to change like any
+other message.
 
 
 ### Action keys and their defaults
