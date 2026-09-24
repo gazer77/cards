@@ -149,7 +149,8 @@ public abstract class GameLogicBase : IGameLogic
 
             // Also include knock / gin / go_out so the agent can choose to end the hand
             // instead of always playing a card, and a lay the selection makes legal —
-            // the agent picks its cards with select_card and presses meld itself. (meld_done / confirm_pass are NOT included
+            // the agent picks its cards with select_card and presses meld itself.
+            // (meld_done / confirm_pass are NOT included
             // here because they would be randomly selected before all melds/passes are done.)
             cardActs.AddRange(valid.Where(a => a.Type is "knock" or "gin" or "go_out" or "meld" or "add_to_meld"));
 
