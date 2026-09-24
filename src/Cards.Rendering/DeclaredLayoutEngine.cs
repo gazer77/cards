@@ -403,6 +403,10 @@ public static class DeclaredLayoutEngine
         bool revealed = owner is not null && IsShowdownRevealed(state, owner.Id);
         bool faceUp   = zone.Visibility is "all" or "top"
                      || (zone.Visibility is "owner" or "mixed" && mine)
+                     // A pile only the dealer may look into. The mask already knew this
+                     // word and the table did not, so such a zone drew face-down for
+                     // everybody — including the dealer it was turned for.
+                     || (zone.Visibility == "top_to_dealer" && state.DealerId == state.Players.FirstOrDefault()?.Id)
                      || revealed;
 
         // What the table says about a zone is the definition's to say. With no label

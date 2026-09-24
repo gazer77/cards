@@ -59,6 +59,19 @@ when they require a phase type that doesn't exist yet.
 - [x] 4-player — `games/euchre-4p.json`
 - [x] 3-player — `games/euchre-3p.json`
 - [ ] 2-player
+- [ ] **One Euchre, with a seat count** — the 3- and 4-player games are separate
+      definitions because a definition cannot yet say "this rule depends on how many are
+      playing". Euchre changes with the count in ways the vocabulary has no words for:
+      teams at four and none at three, a different deck at two (24 cards down to 24 with
+      a stripped kitty, or 32 at six), `loner_skips_partner` where there is a partner,
+      and scoring that pays the makers differently. `extends` + `overrides` gets one file
+      out of another, which is why euchre-3p is eight lines, but the player still picks
+      between two entries in the list rather than picking Euchre and then a number.
+      What this needs: definition values that may vary by seat count — an object keyed by
+      count beside the plain value, resolved once when the game is dealt — after which
+      euchre-4p and euchre-3p become one file, the setup screen offers 2 to 6, and the
+      rules that change with the count are written where the rule is rather than in a
+      second copy of the game. Also the honest home for 2-player Euchre, below.
 
 ### Other Games
 - [x] Hand and Foot

@@ -75,6 +75,9 @@ public sealed class BiddingHandler : IPhaseHandler
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
 
+    /// <summary>Whose bid it is, decided before anyone asks whose turn it is.</summary>
+    public void OnPhaseEnter(GameState state) => EnsureInitialized(state);
+
     public IReadOnlyList<GameAction> GetValidActions(GameState state)
     {
         EnsureInitialized(state);

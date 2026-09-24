@@ -48,5 +48,17 @@ public interface IPhaseHandler
     /// asking without losing it for everyone else.
     /// </summary>
     GameAction? DefaultCardAction(GameState state, string cardId, int? uid) => null;
+
+    /// <summary>
+    /// Called once when this phase becomes the current one, before anything else is
+    /// asked of it — in particular before the client asks whose turn it is.
+    ///
+    /// A phase that decides who acts first (bidding starts left of the dealer, a reveal
+    /// starts at seat 0) used to do it inside GetValidActions, which is the second
+    /// question a client asks. The first is "is this a person's turn or an agent's", and
+    /// that was answered about whoever the previous phase happened to leave current: a
+    /// person was shown Order Up and Pass while the bid belonged to the seat beside them.
+    /// </summary>
+    void OnPhaseEnter(GameState state) { }
     void OnGameStart(GameState state) { }
 }

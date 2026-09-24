@@ -64,6 +64,9 @@ public sealed class RevealHandler : IPhaseHandler
         }
     }
 
+    /// <summary>The seat to act is settled on entry, not on the first question asked.</summary>
+    public void OnPhaseEnter(GameState state) => Ensure(state);
+
     public IReadOnlyList<GameAction> GetValidActions(GameState state)
     {
         Ensure(state);

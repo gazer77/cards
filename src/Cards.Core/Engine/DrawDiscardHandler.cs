@@ -127,6 +127,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
 
+    /// <summary>The turn sub-state is settled on entry, before anything is asked.</summary>
+    public void OnPhaseEnter(GameState state) => EnsureInitialized(state);
+
     public IReadOnlyList<GameAction> GetValidActions(GameState state)
     {
         EnsureInitialized(state);

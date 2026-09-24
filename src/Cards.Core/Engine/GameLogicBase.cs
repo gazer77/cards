@@ -41,15 +41,35 @@ public abstract class GameLogicBase : IGameLogic
         int playerCount,
         IReadOnlyList<string> enabledHouseRules);
 
+
+    /// <summary>
+    /// Lets the handler for the current phase set up the moment the phase changes, and
+    /// before any question is asked about it — in particular before a client asks whose
+    /// turn it is, which is the first thing it asks.
+    /// </summary>
+    private void EnterPhaseIfNeeded(GameState state)
+    {
+        if (state.EnteredPhase == state.CurrentPhaseId) return;
+        state.EnteredPhase = state.CurrentPhaseId;
+
+        if (_handlers.TryGetValue(state.CurrentPhaseId, out var handler))
+            handler.OnPhaseEnter(state);
+    }
     public IReadOnlyList<GameAction> GetValidActions(GameState state)
-        => _handlers.TryGetValue(state.CurrentPhaseId, out var h)
-            ? h.GetValidActions(state)
-            : [];
+    {
+        EnterPhaseIfNeeded(state);
+        return _handlers.TryGetValue(state.CurrentPhaseId, out var h) ? h.GetValidActions(state) : [];
+    }
 
     public void Apply(GameState state, GameAction action)
     {
+        EnterPhaseIfNeeded(state);
         if (_handlers.TryGetValue(state.CurrentPhaseId, out var h))
             h.Apply(state, action);
+
+        // An action usually is the phase change; entering the new one here means the
+        // next question asked — whose turn is it? — is answered by a settled phase.
+        EnterPhaseIfNeeded(state);
     }
 
     public virtual bool IsGameOver(GameState state)
@@ -59,19 +79,22 @@ public abstract class GameLogicBase : IGameLogic
         => state.Metadata.GetValueOrDefault("status", "");
 
     public IReadOnlyList<string> GetSelectableCardIds(GameState state)
-        => _handlers.TryGetValue(state.CurrentPhaseId, out var h)
-            ? h.GetSelectableCardIds(state)
-            : [];
+    {
+        EnterPhaseIfNeeded(state);
+        return _handlers.TryGetValue(state.CurrentPhaseId, out var h) ? h.GetSelectableCardIds(state) : [];
+    }
 
     public IReadOnlyList<string> GetDropZoneIds(GameState state, string cardId)
-        => _handlers.TryGetValue(state.CurrentPhaseId, out var h)
-            ? h.GetDropZoneIds(state, cardId)
-            : [];
+    {
+        EnterPhaseIfNeeded(state);
+        return _handlers.TryGetValue(state.CurrentPhaseId, out var h) ? h.GetDropZoneIds(state, cardId) : [];
+    }
 
     public GameAction? GetDefaultCardAction(GameState state, string cardId, int? uid)
-        => _handlers.TryGetValue(state.CurrentPhaseId, out var h)
-            ? h.DefaultCardAction(state, cardId, uid)
-            : null;
+    {
+        EnterPhaseIfNeeded(state);
+        return _handlers.TryGetValue(state.CurrentPhaseId, out var h) ? h.DefaultCardAction(state, cardId, uid) : null;
+    }
 
     /// <summary>
     /// Returns the auto-advance delay from the current phase handler, or 800 ms
@@ -80,6 +103,8 @@ public abstract class GameLogicBase : IGameLogic
     /// </summary>
     public TimeSpan? GetAutoAdvanceDelay(GameState state)
     {
+        EnterPhaseIfNeeded(state);
+
         if (_handlers.TryGetValue(state.CurrentPhaseId, out var h))
         {
             var d = h.GetAutoAdvanceDelay(state);

@@ -69,6 +69,15 @@ public class GameState
     public DealResult? LastDealResult { get; set; }
 
     /// <summary>
+    /// Which phase has had its handler set itself up — see IPhaseHandler.OnPhaseEnter.
+    /// Kept on the state rather than in the logic so a fresh deal onto a fresh state is
+    /// never mistaken for a phase already entered, and not saved: a restored game enters
+    /// its phase again, which every handler's setup is written to survive.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? EnteredPhase { get; set; }
+
+    /// <summary>
     /// AI agents registered for this game session, keyed by player ID.
     /// Not persisted to save files.
     /// </summary>
