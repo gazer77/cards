@@ -94,6 +94,13 @@ public class GameDefinition
     [JsonPropertyName("score_card")]
     public ScoreCardDefinition? ScoreCard { get; set; }
 
+    /// <summary>
+    /// The shapes this game can take — by seat count, or by a name the player picks.
+    /// See <see cref="ConfigurationDefinition"/>. Empty for a game with one shape.
+    /// </summary>
+    [JsonPropertyName("configurations")]
+    public List<ConfigurationDefinition> Configurations { get; set; } = [];
+
     // Helpers
     public string DeckType => Deck.ValueKind == JsonValueKind.String
         ? Deck.GetString() ?? "standard-52"
@@ -875,4 +882,75 @@ public class ScoreCardDefinition
     /// <summary>Where it sits. Required: a score card with no place has nowhere to go.</summary>
     [JsonPropertyName("place")]
     public PlaceDefinition? Place { get; set; }
+}
+
+/// <summary>
+/// One shape a game can take, on top of what every shape of it shares.
+///
+/// Two games in the catalogue were really one game twice: Euchre at three players and
+/// at four, differing in four rules; and poker, where Hold'em and Stud share a deck, a
+/// betting vocabulary and nothing else. A configuration is the difference written where
+/// the difference is, rather than as a second copy of the game.
+///
+/// A configuration is chosen one of two ways, and may use both:
+///   • <c>when</c> — matched against what is known when the table sits down. Every
+///     configuration that matches is applied, in declaration order, and nobody is asked
+///     anything. Euchre's three-player rules work this way.
+///   • <c>name</c> — offered to the player at setup. Exactly one named configuration
+///     applies: the one chosen, or the one marked <c>default</c>. Poker's variants work
+///     this way, because no fact about the table says whether you meant Stud.
+///
+/// Everything else in the object is a fragment of a game definition, merged onto the
+/// base: objects merge key by key, and anything else replaces. So a configuration says
+/// only what it changes.
+/// </summary>
+public class ConfigurationDefinition
+{
+    /// <summary>What to call this shape where a player picks one. Null: never offered.</summary>
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    /// <summary>A sentence for the picker, saying what this shape is.</summary>
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    /// <summary>What must be true for this shape to apply, or to be offered.</summary>
+    [JsonPropertyName("when")]
+    public ConfigurationMatch? When { get; set; }
+
+    /// <summary>The named shape chosen when the player has not chosen one.</summary>
+    [JsonPropertyName("default")]
+    public bool Default { get; set; }
+
+    /// <summary>The definition fragment this configuration merges in.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+/// <summary>
+/// What a configuration matches against. Only the player count today — the one fact a
+/// table knows about itself before a card is dealt.
+/// </summary>
+public class ConfigurationMatch
+{
+    /// <summary>An exact seat count.</summary>
+    [JsonPropertyName("players")]
+    public int? Players { get; set; }
+
+    /// <summary>The fewest seats this applies to, inclusive.</summary>
+    [JsonPropertyName("min_players")]
+    public int? MinPlayers { get; set; }
+
+    /// <summary>The most seats this applies to, inclusive.</summary>
+    [JsonPropertyName("max_players")]
+    public int? MaxPlayers { get; set; }
+
+    /// <summary>Whether a table of this size is described by this match.</summary>
+    public bool Matches(int players)
+        => (Players is null    || players == Players)
+        && (MinPlayers is null || players >= MinPlayers)
+        && (MaxPlayers is null || players <= MaxPlayers);
+
+    /// <summary>Whether the match says anything at all.</summary>
+    public bool IsEmpty => Players is null && MinPlayers is null && MaxPlayers is null;
 }

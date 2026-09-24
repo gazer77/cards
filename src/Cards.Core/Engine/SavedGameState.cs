@@ -10,6 +10,9 @@ public sealed class SavedGameState
     public string         GameId       { get; set; } = string.Empty;
     public int            PlayerCount  { get; set; }
     public List<string>   EnabledRules { get; set; } = [];
+
+    /// <summary>The named shape played — a poker variant — or null for the default.</summary>
+    public string?        Configuration { get; set; }
     public string         PhaseId      { get; set; } = string.Empty;
     public int            PlayerIndex  { get; set; }
     public int            RoundNumber  { get; set; } = 1;

@@ -88,6 +88,11 @@ public static class DefinitionValidator
             ValidatePlace("score_card", card.Place, problems);
         }
 
+
+        // Every shape the game can take has to be a legal game, checked when the file is
+        // written rather than when a table of that size finally sits down. A definition
+        // whose six-player rules are malformed should fail now, not in six months.
+        ValidateConfigurations(definition, problems);
         // A misspelt text key would override nothing and say nothing about it.
         if (definition.Text is { } text)
         {
@@ -102,6 +107,77 @@ public static class DefinitionValidator
         return problems;
     }
 
+
+    /// <summary>
+    /// Checks each declared shape of the game: that it says when it applies or what it
+    /// is called, that the named ones are distinct and no two claim to be the default,
+    /// and that every one of them resolves into a definition this engine can read.
+    /// </summary>
+    private static void ValidateConfigurations(GameDefinition definition, List<string> problems)
+    {
+        if (definition.Configurations.Count == 0) return;
+
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int defaults = 0;
+
+        for (int i = 0; i < definition.Configurations.Count; i++)
+        {
+            var configuration = definition.Configurations[i];
+            string where = $"configurations[{i}]";
+
+            bool named   = configuration.Name is { Length: > 0 };
+            bool matched = configuration.When is { } when && !when.IsEmpty;
+
+            if (!named && !matched)
+                problems.Add($"{where}: give it a name to be offered by, or a when to be matched by. "
+                           + "A configuration that is neither always applies, which is what the game itself is for.");
+
+            if (named && !names.Add(configuration.Name!))
+                problems.Add($"{where}: another configuration is already called '{configuration.Name}'.");
+
+            if (configuration.Default && !named)
+                problems.Add($"{where}: only a named configuration can be the default — an unnamed one always applies.");
+
+            if (configuration.Default) defaults++;
+
+            if (configuration.When is { } m)
+            {
+                if (m.Players is { } exact && exact < 1)
+                    problems.Add($"{where}.when: players must be at least 1.");
+                if (m.MinPlayers is { } min && m.MaxPlayers is { } max && min > max)
+                    problems.Add($"{where}.when: min_players {min} is more than max_players {max}.");
+            }
+        }
+
+        if (defaults > 1)
+            problems.Add("configurations: two of them are marked default; only one shape can be the one nobody chose.");
+
+        // And the shapes themselves: resolve each at a seat count it applies to, and
+        // check the result as a whole game.
+        foreach (int seats in SeatsToCheck(definition))
+        {
+            foreach (var named in GameConfiguration.Offered(definition, seats).DefaultIfEmpty(null))
+            {
+                var resolved = GameConfiguration.Resolve(definition, seats, named?.Name);
+                if (ReferenceEquals(resolved, definition)) continue;
+
+                foreach (var problem in Validate(resolved))
+                    problems.Add($"configurations at {seats} players"
+                               + (named?.Name is { } n ? $" ({n})" : "") + $": {problem}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// The seat counts worth resolving at: every count the game advertises, so a shape
+    /// declared for a table nobody can sit at is found as easily as a broken one.
+    /// </summary>
+    private static IEnumerable<int> SeatsToCheck(GameDefinition definition)
+    {
+        int min = Math.Max(1, definition.MinPlayers);
+        int max = Math.Max(min, definition.MaxPlayers);
+        for (int seats = min; seats <= max; seats++) yield return seats;
+    }
     private static void ValidateLabel(string zoneId, string field, ZoneLabelDefinition? label, List<string> problems)
     {
         if (label is null) return;

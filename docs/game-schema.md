@@ -1422,6 +1422,58 @@ the person at the screen is drawn brightest, since it is the one they look for.
 
 ---
 
+
+## Configurations — one game, several shapes
+
+A game whose rules differ by how many are playing, or which has variants a player chooses
+between, declares those differences as `configurations` rather than as a second file. Each
+one is a fragment of a definition merged onto the common part, so it says only what it
+changes.
+
+```json
+"name": "Euchre",
+"players": { "min": 3, "max": 4 },
+"teams": false,
+"configurations": [
+  { "when": { "players": 4 },
+    "teams": { "count": 2, "size": 2 },
+    "scoring": { "makers_win": { "tricks_3_or_4": 1 } } },
+
+  { "name": "Stick the Dealer", "description": "The dealer must name trump.",
+    "default": true,
+    "overrides": { "call_trump.stick_the_dealer": true } }
+]
+```
+
+| Field | Meaning |
+|---|---|
+| `when` | What must be true for this shape to apply: `players`, `min_players`, `max_players`. Every matching shape applies, in declaration order, and nobody is asked anything |
+| `name` | Offered to the player at setup. Exactly one named shape applies — the one chosen, or the `default` |
+| `description` | A sentence for the picker |
+| `default` | The named shape used when nobody chose. At most one |
+| anything else | A fragment of a game definition, merged in |
+
+**Merging** is by JSON, deeply: an object merges key by key, and anything else — a value,
+an array, a null — replaces. So a configuration that mentions `scoring.makers_win` changes
+that one key and leaves the rest of the scoring alone, while one that mentions `zones`
+replaces the zone list entire, because half a zone list is not a thing anyone means.
+
+**Order**: matched shapes first, in declaration order, then the named one, so a variant has
+the last word on anything the seat count also touched.
+
+**When it happens**: once, when the table sits down, before house rules are applied and
+before anything is dealt. The rest of the engine reads one definition and never learns that
+shapes exist; `configurations` is gone from the definition it reads.
+
+**Validation**: every shape is resolved and checked as a whole game when the file loads, at
+every seat count the game advertises — a definition whose six-player rules are malformed
+fails when it is written, not when six people finally sit down. Its body is audited as a
+definition fragment too, so a misspelt property inside a configuration is found like any
+other.
+
+**Saves** record the named shape, so resuming a Stud game does not deal Hold'em.
+
+---
 ## UI Config
 
 Optional `ui` block for display hints.

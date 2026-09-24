@@ -31,6 +31,11 @@ public sealed class DefaultGameLogic : GameLogicBase
         _playerCount       = playerCount;
         _enabledHouseRules = enabledHouseRules;
 
+        // The shape this table is playing, resolved once and first: a house rule patches
+        // the game being played rather than the game as written, and everything after
+        // this reads one definition without knowing that shapes exist.
+        state.Definition = GameConfiguration.Resolve(state.Definition, playerCount, state.ConfigurationName);
+
         // Apply house rule overrides to a definition clone before any setup runs.
         state.Definition = HouseRuleEngine.Apply(state.Definition, enabledHouseRules);
 

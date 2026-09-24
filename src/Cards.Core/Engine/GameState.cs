@@ -7,6 +7,16 @@ public class GameState
     public required string GameId { get; init; }
     public required GameDefinition Definition { get; set; }
 
+    /// <summary>
+    /// The named shape of the game this table is playing — a poker variant, say — or
+    /// null for the default. Saved, so a resumed Stud game does not deal Hold'em.
+    ///
+    /// Set before <see cref="IGameLogic.Initialize"/>, which resolves the definition
+    /// down to this shape; afterwards <see cref="Definition"/> IS the shape, and
+    /// nothing downstream needs to know a choice was made.
+    /// </summary>
+    public string? ConfigurationName { get; set; }
+
     public List<Player> Players { get; } = [];
     public List<Team> Teams { get; } = [];
     public Dictionary<string, Zone> Zones { get; } = [];

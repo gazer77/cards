@@ -138,7 +138,17 @@ public static class DefinitionAudit
             }
 
             if (!BagAccepts(bag, element, property.Name))
+            {
                 problems.Add($"{here}: nothing reads this{BagHint(bag, element)}.");
+                continue;
+            }
+
+            // A configuration patches a definition, so what it says is audited as a
+            // definition: a shape that misspells a zone property is as wrong as a game
+            // that does, and harder to notice because only some tables see it.
+            if (bag == "configuration"
+                && KnownProperties(typeof(GameDefinition)).TryGetValue(property.Name, out var fragment))
+                Descend(property.Value, fragment, here, problems);
         }
     }
 
@@ -202,12 +212,18 @@ public static class DefinitionAudit
 
     /// <summary>Which extension bag a type has, or null when it has none.</summary>
     private static string? ExtensionBagContext(Type type)
-        => type == typeof(PhaseDefinition)   ? "phase"
-         : type == typeof(ScoringDefinition) ? "scoring"
+        => type == typeof(PhaseDefinition)         ? "phase"
+         : type == typeof(ScoringDefinition)       ? "scoring"
+         : type == typeof(ConfigurationDefinition) ? "configuration"
          : null;
 
     private static bool BagAccepts(string bag, JsonElement owner, string name)
     {
+        // A configuration's body is a fragment of a game definition, so it takes
+        // whatever a definition takes — and its contents are walked as one.
+        if (bag == "configuration")
+            return KnownProperties(typeof(GameDefinition)).ContainsKey(name);
+
         if (bag == "scoring") return ScoringKeys.Contains(name, StringComparer.OrdinalIgnoreCase);
 
         if (CommonPhaseKeys.Contains(name, StringComparer.OrdinalIgnoreCase)) return true;
@@ -222,6 +238,9 @@ public static class DefinitionAudit
 
     private static string BagHint(string bag, JsonElement owner)
     {
+        if (bag == "configuration")
+            return ". a configuration patches a game definition, and that is not one of its properties";
+
         if (bag == "scoring")
             return $". scoring reads: {string.Join(", ", ScoringKeys)}";
 

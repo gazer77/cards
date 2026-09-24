@@ -352,6 +352,16 @@ heuristics, and conservative poker betting; everything else falls through to ran
       Depends on the definition validator, which already reports what is wrong with
       a definition and why; an editor is mostly a UI over that. Export/import also
       gives players a way to share a game they wrote.
+- [ ] **Blackjack plays a smaller game than it declares** — `allow_split`,
+      `allow_double_down`, `allow_surrender` and `blackjack_pays` are stated in
+      `games/blackjack.json` and offered by nothing: no split button, no double, no
+      surrender, and a natural pays even money. Its `roles` block — a dealer seat with
+      fixed rules — is the same story. It is the only shipped game that plays
+      differently from what its own definition says, which makes it the one correctness
+      gap in the catalogue rather than a missing feature. Split is the real work (two
+      hands to a seat, each betting and drawing on its own); the other three are small.
+      If they are not going to be implemented, the honest fix is deleting the lines so
+      the game stops claiming them.
 - [ ] **Declared but not implemented** — the audit (`DefinitionAudit`, warnings in
       `GameLoader.LoadWarnings`) now names every definition property nothing reads, and
       `DefinitionAuditTests` pins today's list so no new one can join it quietly. What

@@ -18,6 +18,7 @@ public static class GameStateSerializer
             GameId       = state.GameId,
             PlayerCount  = playerCount,
             EnabledRules = enabledRules.ToList(),
+            Configuration = state.ConfigurationName,
             PhaseId      = state.CurrentPhaseId,
             PlayerIndex  = state.CurrentPlayerIndex,
             RoundNumber  = state.RoundNumber,
