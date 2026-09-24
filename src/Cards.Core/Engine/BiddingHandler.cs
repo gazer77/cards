@@ -204,6 +204,11 @@ public sealed class BiddingHandler : IPhaseHandler
                     // its back — to them.
                     kittyCard.IsFaceUp = true;
                     dealerHand.Add(kittyCard);
+
+                    // Public knowledge: the whole table watched it turned and watched
+                    // it taken, so the log says which card it was.
+                    GameText.Log(state, "log_took_up", "{player} took up the {card}",
+                                 dealerId, ("card", GameText.CardName(kittyCard)));
                     // Point dealer_discard phase back to its configured next phase.
                     state.Metadata["dealer_discard_next"] = _ifAcceptedNext ?? _nextPhaseId;
                     // Set current player to dealer for the discard phase.

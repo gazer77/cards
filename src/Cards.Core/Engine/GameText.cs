@@ -59,6 +59,20 @@ public static class GameText
         return Fill(state, template.Replace("{team}", team.Name), null, values);
     }
 
+
+    /// <summary>
+    /// Records something that happened, in the words the definition chose.
+    ///
+    /// The log was a history of the status line and nothing else, so it read as a list
+    /// of whose turn it was. What a player wants from it is what moved: who drew, who
+    /// took what. A card is named only where the table could see it — a card off the
+    /// deck goes into the log as "drew a card", because writing its name would be the
+    /// log telling everyone something the game had not.
+    /// </summary>
+    public static void Log(
+        GameState state, string key, string fallback,
+        string? forPlayerId = null, params (string Name, object? Value)[] values)
+        => state.GameLog.Add(Message(state, key, fallback, forPlayerId, values));
     /// <summary>The label for an action button.</summary>
     public static string Action(GameState state, string key, string fallback,
         params (string Name, object? Value)[] values)
@@ -137,6 +151,14 @@ public static class GameText
         ["pass_select"] = "Select {count} cards to pass {direction}.",
         ["pot_won_by_fold"] = "Everyone folded. {player} wins the pot ({pot}).",
         ["rank_unmeldable"] = "{rank}s cannot be melded.",
+        ["dealer_discarded"] = "Dealer discarded. Let's play!",
+        ["log_drew"] = "{player} drew a card",
+        ["log_swapped"] = "{player} played the {card} and discarded the {discarded}",
+        ["log_took_card"] = "{player} took the {card}",
+        ["log_took_pile"] = "{player} took the pile — {count} cards",
+        ["log_took_up"] = "{player} took up the {card}",
+        ["log_discarded"] = "{player} discarded a card",
+        ["log_discarded_card"] = "{player} discarded the {card}",
         ["reveal_more"] = "{player}'s turn — Tap {count} cards to turn over",
         ["reveal_ready"] = "{player}'s turn — Press Flip to turn {count} over",
         ["reveal_one"] = "{player}'s turn — Tap a card to turn over",
@@ -230,6 +252,13 @@ public static class GameText
         ["showdown_won"]     = "You win with {hand}: {cards}",
         ["reveal_one"]       = "Tap a card to turn over",
         ["reveal_more"]      = "Tap {count} cards to turn over",
+        ["log_drew"]           = "You drew a card",
+        ["log_swapped"]        = "You played the {card} and discarded the {discarded}",
+        ["log_took_card"]      = "You took the {card}",
+        ["log_took_pile"]      = "You took the pile — {count} cards",
+        ["log_took_up"]        = "You took up the {card}",
+        ["log_discarded"]      = "You discarded a card",
+        ["log_discarded_card"] = "You discarded the {card}",
         ["reveal_ready"]     = "Press Flip to turn {count} over",
         ["turn_flip_ready"]  = "Press Flip to turn it over",
     };

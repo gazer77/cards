@@ -278,3 +278,86 @@ public sealed class HandFacingTests
                        c => Assert.True(c.IsFaceUp, $"{p.Id} holds {c.Id} face-down."));
     }
 }
+
+/// <summary>
+/// What the game log records when cards move.
+///
+/// The log was a history of the status line, so it read as a list of whose turn it
+/// was: "Player 3's bid", "Your turn | Trump: diamonds", and then "Dealer discarded"
+/// with no word of the card the dealer had just been ordered up. A card is named where
+/// the table could see it and not otherwise — naming a card off the deck would be the
+/// log telling everyone something the game had not.
+/// </summary>
+public sealed class CardMovementLogTests
+{
+    private static (GameState State, IGameLogic Logic) Game(string id, int seats, ulong seed = 4)
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync(id).GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(seed) };
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, seats, []);
+        return (state, logic);
+    }
+
+    [Fact]
+    public void Taking_up_the_turned_card_says_which_card()
+    {
+        var (state, logic) = Game("euchre-4p", 4);
+        logic.GetAutoAdvanceDelay(state);
+
+        var turned = state.Zones["kitty"].TopCard!;
+        logic.Apply(state, new GameAction("bid_accept"));
+
+        Assert.Contains(state.GameLog, line => line.Contains("took up") && line.Contains(GameText.CardName(turned)));
+    }
+
+    [Fact]
+    public void The_dealers_discard_is_recorded_without_naming_it()
+    {
+        var (state, logic) = Game("euchre-4p", 4);
+        logic.GetAutoAdvanceDelay(state);
+
+        var dealerHand = state.Zones[$"hand:{state.DealerId}"].Cards.ToList();
+        logic.Apply(state, new GameAction("bid_accept"));
+        while (state.CurrentPhaseId == "dealer_discard")
+            logic.Apply(state, logic.GetAutoAction(state));
+
+        Assert.Contains(state.GameLog, line => line.Contains("discarded a card"));
+
+        // It went face-down onto the kitty; no line may name it.
+        var buried = state.Zones["kitty"].TopCard!;
+        Assert.DoesNotContain(state.GameLog, line => line.Contains(GameText.CardName(buried)));
+    }
+
+    [Fact]
+    public void A_card_off_the_deck_is_never_named_and_one_off_the_discard_always_is()
+    {
+        var (state, logic) = Game("gin-rummy", 2, seed: 7);
+
+        // Wind to a draw.
+        for (int i = 0; i < 50 && !logic.GetValidActions(state).Any(a => a.Type == "draw_from_deck"); i++)
+            logic.Apply(state, logic.GetAutoAction(state));
+
+        var deckTop = state.Zones["deck"].TopCard!;
+        logic.Apply(state, new GameAction("draw_from_deck"));
+
+        Assert.Contains(state.GameLog, line => line.Contains("drew a card"));
+        Assert.DoesNotContain(state.GameLog, line => line.Contains(GameText.CardName(deckTop)));
+    }
+
+    [Fact]
+    public void A_card_taken_from_the_discard_is_named()
+    {
+        var (state, logic) = Game("gin-rummy", 2, seed: 7);
+
+        for (int i = 0; i < 50 && !logic.GetValidActions(state).Any(a => a.Type == "draw_from_discard"); i++)
+            logic.Apply(state, logic.GetAutoAction(state));
+        if (!logic.GetValidActions(state).Any(a => a.Type == "draw_from_discard")) return;
+
+        var top = state.Zones["discard"].TopCard!;
+        logic.Apply(state, new GameAction("draw_from_discard"));
+
+        Assert.Contains(state.GameLog, line => line.Contains("took the") && line.Contains(GameText.CardName(top)));
+    }
+}

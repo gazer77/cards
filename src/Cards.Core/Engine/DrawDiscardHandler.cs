@@ -551,6 +551,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
         int count = _drawCounts.TryGetValue(fromZoneId, out int n) ? n : 1;
         bool entirePile = count == 0; // 0 = take everything
+        int taken = entirePile ? fromZone.Count : Math.Min(count, fromZone.Count);
 
         var dest = PlayerHand(state, state.CurrentPlayer.Id);
 
@@ -586,6 +587,19 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         }
 
         if (dest is not null) ZoneIntake.Settle(state, dest);
+
+        // What the table saw. A card off the face-down deck is "a card"; a card taken
+        // from the discard was lying face-up for everyone, so it is named.
+        string me = state.CurrentPlayer.Id;
+        bool publicPile = fromZone.Visibility is "all" or "top" && claimed?.IsFaceUp == true;
+        if (entirePile)
+            GameText.Log(state, "log_took_pile", "{player} took the pile — {count} cards",
+                         me, ("count", taken));
+        else if (publicPile && claimed is not null)
+            GameText.Log(state, "log_took_card", "{player} took the {card}",
+                         me, ("card", GameText.CardName(claimed)));
+        else
+            GameText.Log(state, "log_drew", "{player} drew a card", me);
 
         // Claiming a pile can come with a condition attached: in Hand and Foot the card
         // you claimed it for must go down this turn, which is what stops the pickup
@@ -641,6 +655,10 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         var discard = state.FindZone("discard");
         discard?.Add(card);
 
+        // A discard lands face-up, so it is named: the table saw it go down.
+        GameText.Log(state, "log_discarded_card", "{player} discarded the {card}",
+                     state.CurrentPlayer.Id, ("card", GameText.CardName(card)));
+
         if (drawnCardDiscarded)
             state.Metadata.Remove("dd_drawn_card");
 
@@ -683,6 +701,13 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         grid.Cards.Insert(slotIdx, drawnCard);
         gridCard.IsFaceUp = true;
         discard.Add(gridCard);
+
+        // Both halves were on the table by the end of it: the card that went into the
+        // grid and the one it pushed onto the discard.
+        GameText.Log(state, "log_swapped", "{player} played the {card} and discarded the {discarded}",
+                     state.CurrentPlayer.Id,
+                     ("card", GameText.CardName(drawnCard)),
+                     ("discarded", GameText.CardName(gridCard)));
 
         state.Metadata.Remove("dd_drawn_card");
         state.Metadata.Remove("selected_card");

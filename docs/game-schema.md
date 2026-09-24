@@ -1070,9 +1070,23 @@ name a player) addresses the person at this screen.
 | `turn_meld` | {player}'s turn — Select cards to meld or tap Done. |
 | `turn_owed` | {player}'s turn — Meld the {card} they took |
 | `turn_swap` | {player}'s turn — Tap a card to swap, or discard the drawn card |
+| `log_drew` | {player} drew a card |
+| `log_took_card` | {player} took the {card} |
+| `log_took_pile` | {player} took the pile — {count} cards |
+| `log_took_up` | {player} took up the {card} |
+| `log_discarded` | {player} discarded a card |
+| `log_discarded_card` | {player} discarded the {card} |
+| `log_swapped` | {player} played the {card} and discarded the {discarded} |
+| `dealer_discarded` | Dealer discarded. Let's play! |
 | `turn_flip` | {player}'s turn — Tap a face-down card to turn over |
 | `turn_trump` | {player}'s turn  \|  Trump: {trump} |
 | `war_flip` | Tap to flip! |
+
+The `log_*` keys are what the game log records when cards move, as opposed to the status
+line's account of whose turn it is. A card is named only where the table could see it: a
+card off the face-down deck is "a card", one taken from the discard or turned up for the
+bidding is named. Wording is a definition's to change like any other message.
+
 
 ### Action keys and their defaults
 

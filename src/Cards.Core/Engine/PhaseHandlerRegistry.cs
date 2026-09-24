@@ -417,12 +417,18 @@ public static class PhaseHandlerRegistry
                     hand.Remove(card);
                     card.IsFaceUp = false;
                     kitty?.Add(card);
+
+                    // Unnamed on purpose: it went face-down, and the log says what the
+                    // table could see, not what the engine knows.
+                    GameText.Log(state, "log_discarded", "{player} discarded a card",
+                                 state.DealerId);
                 }
             }
 
             string next = state.Metadata.GetValueOrDefault("dealer_discard_next") ?? _fallbackNextPhaseId;
             state.Metadata.Remove("dealer_discard_next");
-            state.Metadata["status"] = "Dealer discarded. Let's play!";
+            state.Metadata["status"] = GameText.Message(state, "dealer_discarded",
+                "Dealer discarded. Let's play!");
             state.CurrentPhaseId     = next;
         }
 
