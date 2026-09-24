@@ -72,6 +72,28 @@ when they require a phase type that doesn't exist yet.
       euchre-4p and euchre-3p become one file, the setup screen offers 2 to 6, and the
       rules that change with the count are written where the rule is rather than in a
       second copy of the game. Also the honest home for 2-player Euchre, below.
+- [ ] **Euchre's shape in the engine** — no game has a logic class any more
+      (`LogicRegistry` is empty and every definition runs on `DefaultGameLogic`), but
+      Euchre is the game the shared engine knows most about by name, and some of it is a
+      game hiding in the vocabulary rather than vocabulary a game uses:
+      - `scoring.type: "euchre"` is a scoring method whose *shape* is Euchre's — a maker,
+        thresholds at three and five tricks, a loner — parameterised only in what those
+        are worth. It even reads two spellings of its own key (`tricks_3_or_4` and
+        `tricks_3_to_5`) because the 3- and 4-player files disagree. A declarative
+        "score the side that named trump, by tricks taken, against a table of bands"
+        would cover it, Spades' contracts and Pinochle's bid alike.
+      - `euchre_maker` is a metadata key written by the generic bidding handler. The
+        rest of the engine calls the same idea `bid_winner`.
+      - `left_bower` is a rule stated as a flag. The rule underneath — a card is promoted
+        into another suit for the hand — has no general form, so a game with a different
+        promotion cannot say it.
+      Not urgent: Euchre plays, and the engine's Euchre-named parameters are read from
+      the definition rather than assumed. It is worth naming as debt because each is a
+      place where a second game would find the vocabulary shaped around the first.
+- [ ] **Delete the three orphaned logic classes** — `BlackjackLogic`, `WarLogic` and
+      `GoFishLogic` in `src/Cards.Core/Logic/` are constructed by nothing: those games
+      went declarative and `LogicRegistry` is empty. `GoFishAiAgent` beside them is live
+      and stays. Dead code that still compiles is code a reader has to rule out.
 
 ### Other Games
 - [x] Hand and Foot

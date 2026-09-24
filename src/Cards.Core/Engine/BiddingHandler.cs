@@ -42,7 +42,14 @@ public sealed class BiddingHandler : IPhaseHandler
     private readonly string? _ifAcceptedNext;       // phase to go to when someone accepts
     private readonly string? _ifCalledNext;         // phase to go to when someone calls trump
     private readonly string? _ifAllPassNext;        // phase to go to when all pass
-    private readonly string? _dealerAction;         // "swap_turned_card": dealer picks up kitty on accept
+    private readonly string? _dealerAction;         // "swap_turned_card": dealer picks up the turned card on accept
+
+    /// <summary>
+    /// The pile the turned card sits on — Euchre's kitty. Declared as "turned_card_zone"
+    /// so the rule is about a pile the definition names, not about a zone this handler
+    /// happens to know the name of. Defaults to "kitty" for the games that already say it.
+    /// </summary>
+    private readonly string  _turnedZone;
     private readonly bool   _competitive;           // true: each bid must exceed current high bid (Pinochle)
     private readonly string  _direction;            // "clockwise" | "counter_clockwise"
 
@@ -65,6 +72,7 @@ public sealed class BiddingHandler : IPhaseHandler
         _ifCalledNext   = GetNestedString(def, "if_called",   "next");
         _ifAllPassNext  = GetString(def, "if_all_pass");
         _dealerAction   = GetNestedString(def, "if_accepted", "dealer_action");
+        _turnedZone     = GetString(def, "turned_card_zone") ?? "kitty";
         _competitive    = GetBool(def, "competitive_bidding") ?? false;
         _direction      = GetString(def, "direction") ?? "clockwise";
 
@@ -183,7 +191,7 @@ public sealed class BiddingHandler : IPhaseHandler
             // The dealer will then discard via the dealer_discard phase.
             if (_dealerAction == "swap_turned_card" && state.DealerId is { } dealerId)
             {
-                var kitty     = state.FindZone("kitty");
+                var kitty     = state.FindZone(_turnedZone);
                 var dealerHand = state.FindZone($"hand:{dealerId}") ?? state.FindZone("hand");
                 if (kitty?.TopCard is { } kittyCard && dealerHand is not null)
                 {
@@ -228,7 +236,7 @@ public sealed class BiddingHandler : IPhaseHandler
         if (_excludeSuit is not null)
         {
             string excluded = _excludeSuit == "turned_card_suit"
-                ? (state.FindZone("kitty")?.TopCard?.Suit.ToString().ToLower() ?? "")
+                ? (state.FindZone(_turnedZone)?.TopCard?.Suit.ToString().ToLower() ?? "")
                 : _excludeSuit;
             if (excluded.Length > 0)
                 state.Metadata["bid_excluded_suit"] = excluded;
@@ -326,7 +334,7 @@ public sealed class BiddingHandler : IPhaseHandler
     private void RecordAcceptedTrump(GameState state)
     {
         // For accept_or_pass: trump is the turned-up kitty card's suit
-        var kitty = state.FindZone("kitty");
+        var kitty = state.FindZone(_turnedZone);
         if (kitty?.TopCard is { } top)
             state.Metadata["bid_trump"] = top.Suit.ToString().ToLower();
     }

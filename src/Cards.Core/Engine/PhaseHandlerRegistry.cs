@@ -35,7 +35,7 @@ public static class PhaseHandlerRegistry
             ["go_fish"]             = (def, next) => new GoFishHandler(def, next),
             ["deal"]                = (def, next) => new DealPhaseHandler(def, next),
             ["name_trump"]          = (def, next) => new NameTrumpHandler(def, next),
-            ["dealer_discard"]      = (def, next) => new DealerDiscardHandler(next),
+            ["dealer_discard"]      = (def, next) => new DealerDiscardHandler(def, next),
             ["reveal"]              = (def, next) => new RevealHandler(def, next),
         };
 
@@ -364,8 +364,19 @@ public static class PhaseHandlerRegistry
     // Reads the target next phase from metadata["dealer_discard_next"] so BiddingHandler
     // can set the correct continuation without hard-coding it here.
 
-    private sealed class DealerDiscardHandler(string fallbackNextPhaseId) : IPhaseHandler
+    private sealed class DealerDiscardHandler : IPhaseHandler
     {
+        private readonly string _fallbackNextPhaseId;
+
+        /// <summary>Where the discard goes: a pile the definition names, "kitty" by default.</summary>
+        private readonly string _toZone;
+
+        public DealerDiscardHandler(PhaseDefinition def, string fallbackNextPhaseId)
+        {
+            _fallbackNextPhaseId = fallbackNextPhaseId;
+            _toZone = GetExtra(def, "to") ?? "kitty";
+        }
+
         public IReadOnlyList<string> GetSelectableCardIds(GameState state)
         {
             EnsureDealer(state);
@@ -399,7 +410,7 @@ public static class PhaseHandlerRegistry
             if (cardId is not null)
             {
                 var hand   = DealerHand(state);
-                var kitty  = state.FindZone("kitty");
+                var kitty  = state.FindZone(_toZone);
                 var card   = hand?.Cards.FirstOrDefault(c => c.Id == cardId);
                 if (card is not null && hand is not null)
                 {
@@ -409,7 +420,7 @@ public static class PhaseHandlerRegistry
                 }
             }
 
-            string next = state.Metadata.GetValueOrDefault("dealer_discard_next") ?? fallbackNextPhaseId;
+            string next = state.Metadata.GetValueOrDefault("dealer_discard_next") ?? _fallbackNextPhaseId;
             state.Metadata.Remove("dealer_discard_next");
             state.Metadata["status"] = "Dealer discarded. Let's play!";
             state.CurrentPhaseId     = next;

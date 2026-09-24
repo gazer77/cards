@@ -46,7 +46,8 @@ public static class DefinitionAudit
         ["bidding"]             = ["bid_increment", "competitive_bidding", "direction", "exclude_suit",
                                    "if_accepted", "if_called",
                                    "going_alone", "if_all_pass", "max_bid", "min_bid", "once_around",
-                                   "pass_allowed", "special_bids", "stick_the_dealer", "style"],
+                                   "pass_allowed", "special_bids", "stick_the_dealer", "style",
+                                   "turned_card_zone"],
         ["pass_cards"]          = ["count", "direction", "targets"],
         ["free_play"]           = ["end_game", "end_turn"],
         ["draw_discard"]        = ["discard_count", "draw_count", "draw_from", "flip_after_discard",
@@ -64,7 +65,7 @@ public static class DefinitionAudit
         ["go_fish"]             = ["book_size", "collect_to"],
         ["deal"]                = ["burn_first", "cards", "count", "face", "to"],
         ["name_trump"]          = ["exclude_suit"],
-        ["dealer_discard"]      = [],
+        ["dealer_discard"]      = ["to"],
         ["reveal"]              = ["count", "zone", "confirm", "distinct"],
     };
 
