@@ -215,7 +215,7 @@ public sealed class MeldHandler : IPhaseHandler
                     while (!meld.IsEmpty)
                     {
                         var c = meld.Draw()!;
-                        c.IsFaceUp = false;
+                        c.IsFaceUp = true;   // back in a hand: the zone hides it, not the card
                         hand.Add(c);
                     }
                 }

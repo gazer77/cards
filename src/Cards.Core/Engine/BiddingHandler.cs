@@ -196,7 +196,13 @@ public sealed class BiddingHandler : IPhaseHandler
                 if (kitty?.TopCard is { } kittyCard && dealerHand is not null)
                 {
                     kitty.Remove(kittyCard);
-                    kittyCard.IsFaceUp = false;   // dealer holds it face-down
+
+                    // Face-up, like every other card in a hand. "Face-down" is about the
+                    // card; "hidden from the other players" is about the zone, and the
+                    // hand already says visibility: owner. Conflating them put the card
+                    // the dealer had just been ordered up into their own hand showing
+                    // its back — to them.
+                    kittyCard.IsFaceUp = true;
                     dealerHand.Add(kittyCard);
                     // Point dealer_discard phase back to its configured next phase.
                     state.Metadata["dealer_discard_next"] = _ifAcceptedNext ?? _nextPhaseId;

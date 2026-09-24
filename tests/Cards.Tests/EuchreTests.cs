@@ -212,3 +212,69 @@ public sealed class TrickInputTests
         Assert.Contains(state.Zones[$"hand:{me}"].Cards, c => c.Uid == refused.Uid);
     }
 }
+
+/// <summary>
+/// A card in your own hand shows you its face.
+///
+/// "Face-down" is a property of the card; "hidden from the other players" is a
+/// property of the zone, and a hand already says <c>visibility: owner</c>. Conflating
+/// the two put the card the dealer had just been ordered up into their own hand
+/// showing its back — to them.
+/// </summary>
+public sealed class HandFacingTests
+{
+    private static (GameState State, IGameLogic Logic) Euchre()
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync("euchre-4p").GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(4) };
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, 4, []);
+        return (state, logic);
+    }
+
+    [Fact]
+    public void The_card_ordered_up_joins_the_dealers_hand_face_up()
+    {
+        var (state, logic) = Euchre();
+        logic.GetAutoAdvanceDelay(state);       // settle whose bid it is
+
+        var turned = state.Zones["kitty"].TopCard!;
+        logic.Apply(state, new GameAction("bid_accept"));
+
+        var dealerHand = state.Zones[$"hand:{state.DealerId}"];
+        var taken = dealerHand.Cards.FirstOrDefault(c => c.Uid == turned.Uid);
+
+        Assert.NotNull(taken);
+        Assert.True(taken.IsFaceUp, "The card the dealer took up is face-down in their own hand.");
+        Assert.All(dealerHand.Cards, c => Assert.True(c.IsFaceUp));
+    }
+
+    [Fact]
+    public void A_meld_returned_to_hand_comes_back_face_up()
+    {
+        // Pinochle shows its melds for scoring and then picks them up again.
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync("pinochle").GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(2) };
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, 4, []);
+
+        for (int i = 0; i < 2000 && state.CurrentPhaseId != "play"; i++)
+        {
+            var cards = logic.GetSelectableCardIds(state);
+            var actions = logic.GetValidActions(state);
+            if (actions.FirstOrDefault(a => a.Type is "meld_done" or "continue") is { } done)
+                logic.Apply(state, done);
+            else if (actions.Count > 0) logic.Apply(state, actions[0]);
+            else if (cards.Count > 0) logic.Apply(state, new GameAction("play_card", CardId: cards[0]));
+            else break;
+        }
+
+        if (state.CurrentPhaseId != "play") return;   // never reached the pickup this deal
+
+        foreach (var p in state.Players)
+            Assert.All(state.Zones[$"hand:{p.Id}"].Cards,
+                       c => Assert.True(c.IsFaceUp, $"{p.Id} holds {c.Id} face-down."));
+    }
+}
