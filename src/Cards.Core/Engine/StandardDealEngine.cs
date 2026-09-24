@@ -260,8 +260,8 @@ public sealed class StandardDealEngine : IDealStrategy
 
     /// <summary>
     /// Stores a <see cref="DealResult"/> on <paramref name="state"/> and returns it.
-    /// Call this from custom deal logic (e.g. BlackjackLogic) that doesn't use
-    /// <see cref="Deal"/> but still wants the animation layer to consume the result.
+    /// Call this from a phase handler that deals for itself — the blackjack round deals
+    /// its own opening cards — and still wants the animation layer to see the result.
     /// </summary>
     public static DealResult RecordResult(
         GameState state,

@@ -36,8 +36,9 @@ changes what "add a game" means:
   `hand_rank`, `deadwood`, `blackjack`, `grid_values`, `none`.
 - House rules are JSON patches over a game definition (`HouseRuleEngine`), applied to a
   clone at setup time.
-- The legacy per-game C# in `src/Cards/Logic/` (`WarLogic`, `BlackjackLogic`, `GoFishLogic`)
-  is superseded by the declarative path and is dead except `GoFishAiAgent`.
+- There is no per-game C# left. `src/Cards.Core/Logic/` holds one file, `GoFishAiAgent`,
+  which is a computer player and not a rule; the legacy WarLogic, BlackjackLogic and
+  GoFishLogic went with the games that stopped needing them.
 
 **Consequence:** most new games are a JSON file, not a code change. New games only need C#
 when they require a phase type that doesn't exist yet.
@@ -90,10 +91,6 @@ when they require a phase type that doesn't exist yet.
       Not urgent: Euchre plays, and the engine's Euchre-named parameters are read from
       the definition rather than assumed. It is worth naming as debt because each is a
       place where a second game would find the vocabulary shaped around the first.
-- [ ] **Delete the three orphaned logic classes** — `BlackjackLogic`, `WarLogic` and
-      `GoFishLogic` in `src/Cards.Core/Logic/` are constructed by nothing: those games
-      went declarative and `LogicRegistry` is empty. `GoFishAiAgent` beside them is live
-      and stays. Dead code that still compiles is code a reader has to rule out.
 
 ### Other Games
 - [x] Hand and Foot

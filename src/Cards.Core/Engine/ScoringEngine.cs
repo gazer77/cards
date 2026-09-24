@@ -16,7 +16,7 @@ namespace Cards.Engine;
 ///   meld_points  — canasta-style meld scoring with canasta bonuses and go-out bonus.
 ///   pinochle     — trick-point scoring with bid-set penalty.
 ///   hand_rank    — poker hand-rank winner (handled by ShowdownHandler; no-op here).
-///   blackjack    — chip tracking (handled by BlackjackLogic; no-op here).
+///   blackjack    — chip tracking (handled by the blackjack_round phase; no-op here).
 /// </summary>
 public static class ScoringEngine
 {
