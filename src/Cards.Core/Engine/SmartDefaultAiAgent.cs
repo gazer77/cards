@@ -66,6 +66,12 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         if (validActions.Any(a => a.Type is "call" or "check" or "fold" or "raise"))
             return ChoosePokerAction(state, validActions);
 
+        // Blackjack — basic strategy, not a coin toss. Random play was harmless while
+        // the choice was hit or stand; with split and surrender on offer it threw hands
+        // away at random.
+        if (validActions.Any(a => a.Type == "hit") && validActions.Any(a => a.Type == "stand"))
+            return ChooseBlackjackAction(state, validActions);
+
         // Bidding — number, accept/pass, suit/pass styles
         if (validActions.Any(a => a.Type.StartsWith("bid_")))
             return ChooseBid(state, validActions);
@@ -82,6 +88,78 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         return validActions[_rng.Next(validActions.Count)];
     }
 
+
+    // ── Blackjack strategy ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A compact basic strategy: the plays a careful player makes from their own total
+    /// and the dealer's up-card, and nothing cleverer. Not perfect — no deviations, no
+    /// counting — but it never splits tens or stands on eight.
+    /// </summary>
+    private GameAction ChooseBlackjackAction(GameState state, IReadOnlyList<GameAction> actions)
+    {
+        GameAction? Offer(string type) => actions.FirstOrDefault(a => a.Type == type);
+
+        // The hand in play — the split hand once the first is finished.
+        string active = state.Metadata.GetValueOrDefault($"bj_active:{PlayerId}", "hand");
+        var zone = active == "split"
+            ? state.Zones.GetValueOrDefault($"split:{PlayerId}")
+            : state.Zones.GetValueOrDefault($"hand:{PlayerId}");
+        var dealer = state.Players.FirstOrDefault(p => p.Role is not null);
+        var upCard = dealer is null ? null
+            : state.Zones.GetValueOrDefault($"hand:{dealer.Id}")?.Cards.FirstOrDefault(c => c.IsFaceUp);
+
+        if (zone is null || upCard is null) return Offer("stand") ?? actions[0];
+
+        var cards = zone.Cards.ToList();
+        var (total, soft) = BlackjackTotal(cards);
+        int up = upCard.Rank == Rank.Ace ? 11 : upCard.Rank >= Rank.Jack ? 10 : (int)upCard.Rank;
+
+        // Pairs: always aces and eights, never tens, fives or fours; the rest against a weak dealer.
+        if (Offer("split") is { } split && cards.Count == 2)
+        {
+            var rank = cards[0].Rank;
+            int pip  = rank == Rank.Ace ? 11 : rank >= Rank.Jack ? 10 : (int)rank;
+            if (rank is Rank.Ace or Rank.Eight) return split;
+            if (pip is 2 or 3 or 6 or 7 && up is >= 2 and <= 7) return split;
+            if (pip == 9 && up is >= 2 and <= 9 && up != 7) return split;
+        }
+
+        // Surrender a hard sixteen against a nine, ten or ace — the one hand worse than half.
+        if (Offer("surrender") is { } surrender && !soft && total == 16 && up >= 9)
+            return surrender;
+
+        // Doubles: eleven always, ten against anything short of a ten, nine against a
+        // weak dealer, and the soft middle against a five or six.
+        if (Offer("double_down") is { } dbl)
+        {
+            if (!soft && total == 11) return dbl;
+            if (!soft && total == 10 && up <= 9) return dbl;
+            if (!soft && total == 9 && up is >= 3 and <= 6) return dbl;
+            if (soft && total is >= 13 and <= 18 && up is 5 or 6) return dbl;
+        }
+
+        bool hit = soft
+            ? total <= 17 || (total == 18 && up >= 9)
+            : total <= 11
+              || (total == 12 && (up <= 3 || up >= 7))
+              || (total is >= 13 and <= 16 && up >= 7);
+
+        return (hit ? Offer("hit") : Offer("stand")) ?? actions[0];
+    }
+
+    private static (int Total, bool Soft) BlackjackTotal(IEnumerable<Card> cards)
+    {
+        int total = 0, aces = 0;
+        foreach (var c in cards)
+        {
+            if      (c.Rank == Rank.Ace)  { aces++; total += 11; }
+            else if (c.Rank >= Rank.Jack) total += 10;
+            else                          total += (int)c.Rank;
+        }
+        while (total > 21 && aces > 0) { total -= 10; aces--; }
+        return (total, aces > 0);
+    }
     // ── Trick-taking strategy ─────────────────────────────────────────────────
 
     private GameAction ChooseTrickCard(GameState state, List<GameAction> plays)

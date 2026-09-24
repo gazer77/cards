@@ -4,24 +4,26 @@
   "name": "Blackjack",
   "version": "1.0",
   "deck": "standard-52",
-  "players": { "min": 1, "max": 6, "names": ["You", "Dealer"] },
+  "players": { "min": 1, "max": 6, "starting_score": 100, "names": ["You"] },
   "teams": false,
   "roles": [
-    { "id": "dealer", "count": 1, "type": "fixed_rules", "fills": "ai" }
+    { "id": "dealer", "name": "Dealer" }
   ],
   "deal": {
-    "cards_per_player": 0,
-    "note": "BlackjackRoundHandler deals internally via OnGameStart to control face orientation."
+    "cards_per_player": 0
   },
   "zones": [
-    { "id": "deck", "type": "deck", "visibility": "none" },
-    { "id": "hand", "type": "hand", "owner": "each_player", "visibility": "all", "layout": { "region": "seat" } },
+    { "id": "deck",    "type": "deck", "visibility": "none" },
+    { "id": "hand",    "type": "hand", "owner": "each_player", "visibility": "all", "layout": { "region": "seat" } },
+    { "id": "split",   "type": "hand", "owner": "each_player", "visibility": "all", "layout": { "region": "seat-front" },
+      "label": { "text": "" } },
     { "id": "discard", "type": "pile", "visibility": "none" }
   ],
   "phases": [
     {
       "id": "round",
       "type": "blackjack_round",
+      "bet": 10,
       "dealer_hits_soft": 16,
       "blackjack_pays": "3:2",
       "allow_split": true,
@@ -32,11 +34,17 @@
   ],
   "scoring": { "type": "blackjack" },
   "win_condition": { "type": "fixed_rounds", "count": 5, "winner": "highest_score" },
+  "score_card": {
+    "label": "Chips",
+    "view": "total",
+    "collapsible": false,
+    "place": { "x": "1%", "y": "95%", "anchor": "bottom-left", "width": "12%", "height": "30%" }
+  },
   "house_rules": [
     {
       "id": "dealer_hits_hard_17",
-      "name": "Dealer Hits Hard 17",
-      "description": "Dealer hits on hard 17 in addition to soft 17.",
+      "name": "Dealer Hits Soft 17",
+      "description": "Dealer hits on soft 17 instead of standing.",
       "default": false,
       "affects": { "round.dealer_hits_soft": 17 }
     },

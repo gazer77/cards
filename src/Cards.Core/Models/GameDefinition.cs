@@ -35,6 +35,12 @@ public class GameDefinition
     [JsonPropertyName("players")]
     public PlayerConfig? Players { get; set; }
 
+    /// <summary>
+    /// Seats the game fills itself, after the players' — see <see cref="RoleDefinition"/>.
+    /// </summary>
+    [JsonPropertyName("roles")]
+    public List<RoleDefinition> Roles { get; set; } = [];
+
     [JsonPropertyName("teams")]
     public JsonElement Teams { get; set; }
 
@@ -953,4 +959,27 @@ public class ConfigurationMatch
 
     /// <summary>Whether the match says anything at all.</summary>
     public bool IsEmpty => Players is null && MinPlayers is null && MaxPlayers is null;
+}
+
+/// <summary>
+/// A seat the game itself fills, beside the ones the players choose — Blackjack's
+/// dealer. Chosen seat counts are players; a role seat is added on top of them and is
+/// always driven by the engine, never by a person.
+///
+/// Before this, Blackjack counted the dealer as one of its "players", so the setup
+/// screen offered one player and dealt a table with nobody at it but the dealer.
+/// </summary>
+public class RoleDefinition
+{
+    /// <summary>What the role is — used for the seat's name when none is given.</summary>
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>The seat's name on the table. Defaults to the id, capitalised.</summary>
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    /// <summary>How many seats this role takes. Default one.</summary>
+    [JsonPropertyName("count")]
+    public int Count { get; set; } = 1;
 }

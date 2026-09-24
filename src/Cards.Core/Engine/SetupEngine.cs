@@ -43,6 +43,17 @@ public sealed class SetupEngine : ISetupStrategy
             state.Players.Add(new Player(id, name));
             if (startScore > 0) state.Scores[id] = startScore;
         }
+
+        // Role seats after the players', so the chosen count is the number of people
+        // playing and the dealer is extra. They get no chips: the house is not a player.
+        int next = playerCount;
+        foreach (var role in state.Definition.Roles)
+            for (int r = 0; r < Math.Max(1, role.Count); r++, next++)
+            {
+                string name = role.Name
+                           ?? (role.Id.Length > 0 ? char.ToUpper(role.Id[0]) + role.Id[1..] : "Seat");
+                state.Players.Add(new Player($"player{next}", name, PlayerType.AI) { Role = role.Id });
+            }
     }
 
     internal static void AssignTeams(GameState state, int playerCount)

@@ -63,7 +63,7 @@ public sealed class WinConditionEngine : IWinCondition
 
     private static WinResult ResolveLastWithCards(GameState state)
     {
-        var ranked = state.Players
+        var ranked = state.Players.Where(p => p.Role is null)   // the house is never in the running
             .Select(p => (Player: p, Count: OwnedCardCount(state, p)))
             .OrderByDescending(x => x.Count)
             .ToList();
@@ -94,7 +94,7 @@ public sealed class WinConditionEngine : IWinCondition
 
     private static WinResult ResolveMostBooks(GameState state)
     {
-        var ranked = state.Players
+        var ranked = state.Players.Where(p => p.Role is null)   // the house is never in the running
             .Select(p => (Player: p, Score: state.GetScore(p.Id)))
             .OrderByDescending(x => x.Score)
             .ToList();
@@ -146,7 +146,7 @@ public sealed class WinConditionEngine : IWinCondition
 
     private static WinResult ResolveLowestScore(GameState state)
     {
-        var ranked = state.Players
+        var ranked = state.Players.Where(p => p.Role is null)   // the house is never in the running
             .Select(p => (Player: p, Score: state.GetScore(p.Id)))
             .OrderBy(x => x.Score)
             .ToList();
@@ -227,7 +227,7 @@ public sealed class WinConditionEngine : IWinCondition
         if (state.Teams.Count > 0)
             return ResolveByTeamScore(state);
 
-        var ranked = state.Players
+        var ranked = state.Players.Where(p => p.Role is null)   // the house is never in the running
             .Select(p => (Player: p, Score: state.GetScore(p.Id)))
             .OrderByDescending(x => x.Score)
             .ToList();

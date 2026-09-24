@@ -92,7 +92,23 @@ different cards from the same definition with no error on either side.
 
 `names`: display names indexed by seat (index 0 = human player). Defaults to "Player 1", "Player 2", … when absent.
 
-`starting_score`: initial chip/score count per player. Used by poker variants with `win_condition: last_with_chips`. Default `0`.
+`starting_score`: initial chip/score count per player. Used by poker variants with `win_condition: last_with_chips`, and by Blackjack as each player's chips. Default `0`.
+
+---
+
+## Roles
+
+Seats the engine plays by the rules rather than as a player — Blackjack's dealer.
+
+```json
+"roles": [ { "id": "dealer", "name": "Dealer" } ]
+```
+
+A role seat is added after the player seats (so "1 player" is one player *and* a
+dealer), gets its own copies of every per-seat zone, holds no starting score, never
+appears on the score card, and is never ranked by the win condition. `count` (default
+`1`) adds several seats of the same role. The phase that uses the role finds it by
+`Player.Role`; today only `blackjack_round` reads one, as its dealer.
 
 ---
 
@@ -800,19 +816,38 @@ Ask-for-ranks loop. Repeats per player until no cards remain.
 ---
 
 ### `blackjack_round`
-Full blackjack round: initial deal, player actions, dealer reveal, payout.
+Full blackjack round against the dealer role seat: bets, deal, each seat's turn, the
+dealer's draw, and settlement of every seat's hand(s) in chips (the player's score).
 ```json
 {
   "id": "round",
   "type": "blackjack_round",
+  "bet": 10,
   "dealer_hits_soft": 16,
   "blackjack_pays": "3:2",
   "allow_split": true,
   "allow_double_down": true,
   "allow_surrender": false,
+  "split_zone": "split",
   "next": { "if": "win_condition", "then": "end", "else": "round" }
 }
 ```
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `bet` | `10` | Chips staked on each hand as it is dealt |
+| `dealer_hits_soft` | `16` | The dealer draws while at or below this total; `17` makes the dealer hit soft 17 |
+| `blackjack_pays` | `"3:2"` | Payout on a natural, `"num:den"` of the stake, rounded down. A dealer natural pushes it |
+| `allow_double_down` | `true` | On a two-card hand: stake doubles, exactly one card, the hand stands |
+| `allow_split` | `true` | On a pair: the second card moves to `split_zone` as a second hand with its own stake, each takes a card and is played in turn. A split 21 is not a natural |
+| `allow_surrender` | `false` | On a two-card hand: give up half the stake and sit the hand out |
+| `split_zone` | `"split"` | The per-seat zone that holds a split hand |
+
+Needs a `roles` entry: the first role seat deals and plays by `dealer_hits_soft`. A
+seat dealt a natural is not asked to act. After settlement the table shows each seat's
+result and waits for a tap; the next tap sweeps the hands to the discard zone,
+reshuffling it into the deck when the deck runs short. Text keys: `bj_result_*`,
+`bj_split`, `bj_doubled`, `bj_surrendered`, `bj_dealer_had`, `bj_continue`.
 
 ---
 

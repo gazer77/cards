@@ -2727,7 +2727,9 @@ public sealed class CardTableRenderer
 
         // The person at this screen always sits at seat 0, and their own row is the one
         // they look for first, so it is the one drawn brightest.
-        return [.. _state.Players.Select((p, i) => (p.Id, p.Name, _state.GetScore(p.Id), i == 0))];
+        // Role seats hold no score — the house is not a player — so they get no row.
+        return [.. _state.Players.Where(p => p.Role is null)
+                                 .Select((p, i) => (p.Id, p.Name, _state.GetScore(p.Id), i == 0))];
     }
 
     /// <summary>

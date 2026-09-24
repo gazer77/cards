@@ -309,23 +309,16 @@ heuristics, and conservative poker betting; everything else falls through to ran
       Depends on the definition validator, which already reports what is wrong with
       a definition and why; an editor is mostly a UI over that. Export/import also
       gives players a way to share a game they wrote.
-- [ ] **Blackjack plays a smaller game than it declares** — `allow_split`,
-      `allow_double_down`, `allow_surrender` and `blackjack_pays` are stated in
-      `games/blackjack.json` and offered by nothing: no split button, no double, no
-      surrender, and a natural pays even money. Its `roles` block — a dealer seat with
-      fixed rules — is the same story. It is the only shipped game that plays
-      differently from what its own definition says, which makes it the one correctness
-      gap in the catalogue rather than a missing feature. Split is the real work (two
-      hands to a seat, each betting and drawing on its own); the other three are small.
-      If they are not going to be implemented, the honest fix is deleting the lines so
-      the game stops claiming them.
+- [x] **Blackjack plays the game it declares** — chips (`starting_score` 100, a `bet`
+      per hand), a real dealer seat from `roles` (one player is now one player and a
+      dealer), every seat settled rather than only the first, split into a second
+      hand, double down, surrender (house rule), a natural paid at `blackjack_pays`, a
+      natural no longer skips the other seats, and the computer players follow basic
+      strategy instead of choosing at random.
 - [ ] **Declared but not implemented** — the audit (`DefinitionAudit`, warnings in
       `GameLoader.LoadWarnings`) now names every definition property nothing reads, and
       `DefinitionAuditTests` pins today's list so no new one can join it quietly. What
       is on that list and worth doing:
-      - Blackjack's `allow_split`, `allow_double_down`, `allow_surrender` and
-        `blackjack_pays` — four real rules the definition states and the table does not
-        offer. Its `roles` block (a dealer seat with fixed rules) is the same story.
       - `dealer: "random"` on ten games — a duplicate of `rounds.first_dealer`, which the
         engine does read and which already defaults to random. These lines should be
         deleted rather than implemented.

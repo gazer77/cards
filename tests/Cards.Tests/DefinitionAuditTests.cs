@@ -25,16 +25,6 @@ public sealed class DefinitionAuditTests
     {
         // A top-level "dealer": "random" — who deals first. The engine always starts
         // the deal at seat 0 and rotates from there.
-        ["blackjack.json"] =
-        [
-            "deal.note",                    // a note to the reader, addressed to nobody
-            "phases[0].allow_double_down",  // none of the four are offered as actions
-            "phases[0].allow_split",
-            "phases[0].allow_surrender",
-            "phases[0].blackjack_pays",     // a natural pays even money today
-            "roles",                        // a dealer seat with fixed rules; every seat is alike
-        ],
-
         ["gin-rummy.json"]     = ["dealer"],
         ["go-fish.json"]       = ["dealer"],
         ["golf.json"]          = ["dealer"],
@@ -123,12 +113,13 @@ public sealed class DefinitionAuditTests
     public void A_loaded_game_carries_its_warnings_without_being_stopped_by_them()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var game   = loader.LoadAsync("blackjack").GetAwaiter().GetResult();
+        // Hearts still states a deal order that nothing reads.
+        var game   = loader.LoadAsync("hearts").GetAwaiter().GetResult();
 
         Assert.NotNull(game);                                   // a warning never blocks a game
-        Assert.True(loader.LoadWarnings.ContainsKey("blackjack"));
-        Assert.Contains("allow_split", loader.LoadWarnings["blackjack"]);
-        Assert.False(loader.LoadErrors.ContainsKey("blackjack"));
+        Assert.True(loader.LoadWarnings.ContainsKey("hearts"));
+        Assert.Contains("deal.order", loader.LoadWarnings["hearts"]);
+        Assert.False(loader.LoadErrors.ContainsKey("hearts"));
     }
 }
 
