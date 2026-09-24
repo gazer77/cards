@@ -50,13 +50,34 @@ else
             <h2>@(_saved.Count > 0 ? "Or start a new game" : "Players")</h2>
             <div class="stepper">
                 <button class="step" disabled="@(_players <= _game.MinPlayers)"
-                        @onclick="@(() => _players--)">&minus;</button>
+                        @onclick="@(() => { _players--; SeatsChanged(); })">&minus;</button>
                 <span class="step-value">@_players</span>
                 <button class="step" disabled="@(_players >= _game.MaxPlayers)"
-                        @onclick="@(() => _players++)">+</button>
+                        @onclick="@(() => { _players++; SeatsChanged(); })">+</button>
             </div>
             <p class="muted">You take the first seat; the rest are AI.</p>
         </section>
+
+        @if (_variants.Count > 1)
+        {
+            @* A game with named shapes asks which one. Where the shape follows from the
+               seat count — Euchre — nothing is asked and nothing appears here. *@
+            <section class="setup-block">
+                <h2>Which game</h2>
+                <div class="choices">
+                    @foreach (var variant in _variants)
+                    {
+                        var captured = variant;
+                        <button class="choice @(_variant == captured.Name ? "chosen" : "")"
+                                @onclick="() => Choose(captured.Name!)">@captured.Name</button>
+                    }
+                </div>
+                @if (_variants.FirstOrDefault(v => v.Name == _variant)?.Description is { Length: > 0 } blurb)
+                {
+                    <p class="muted">@blurb</p>
+                }
+            </section>
+        }
 
         @if (_rules.Count > 0)
         {
@@ -104,14 +125,57 @@ else
         _saved = Saves.SavesFor(GameId).ToList();
 
         _players = _game.MinPlayers;
-        _rules   = _game.HouseRules;
 
-        // A rule marked default-on in the definition starts checked, as on mobile.
-        foreach (var rule in _rules)
-            rule.IsEnabled = rule.Default;
+        // Which shapes this seat count offers, and the rules of the one in hand. A rule
+        // marked default-on in the definition starts checked, as on mobile.
+        SeatsChanged();
     }
 
     /// <summary>
+
+    /// <summary>
+    /// The named shapes this game offers at the chosen seat count — poker's variants.
+    /// A game whose shapes follow from the seat count offers none, and is not asked.
+    /// </summary>
+    private IReadOnlyList<Cards.Models.ConfigurationDefinition> _variants = [];
+    private string? _variant;
+
+    private void Choose(string name)
+    {
+        _variant = name;
+        _rules   = RulesFor(name);
+    }
+
+    /// <summary>
+    /// House rules belong to the shape, not to the umbrella: Razz is a stud rule and
+    /// One-Eyed Jacks a wild-card one, and offering either against the wrong game would
+    /// be offering a rule that patches a phase the game does not have.
+    /// </summary>
+    private List<Cards.Models.HouseRule> RulesFor(string? variant)
+    {
+        var rules = _game is null
+            ? []
+            : Cards.Engine.GameConfiguration.Resolve(_game, _players, variant).HouseRules;
+
+        foreach (var rule in rules) rule.IsEnabled = rule.Default;
+        return rules;
+    }
+
+    /// <summary>
+    /// Re-reads what the seat count changes: which shapes are offered, and the rules of
+    /// the one in hand. Stud seats eight and Hold'em nine, so the ninth seat takes Stud
+    /// off the table rather than dealing a game that cannot be dealt.
+    /// </summary>
+    private void SeatsChanged()
+    {
+        if (_game is null) return;
+
+        _variants = Cards.Engine.GameConfiguration.Offered(_game, _players);
+        if (_variants.Count > 0 && !_variants.Any(v => v.Name == _variant))
+            _variant = (Cards.Engine.GameConfiguration.DefaultFor(_game, _players) ?? _variants[0]).Name;
+
+        _rules = RulesFor(_variant);
+    }
     /// Resumes a save. Its seat count and rules come from the save itself, so nothing
     /// chosen on this page is carried across — the position defines its own table.
     /// </summary>
@@ -127,10 +191,14 @@ else
     private void Start()
     {
         var enabled = _rules.Where(r => r.IsEnabled).Select(r => r.Id).ToList();
-        string query = enabled.Count > 0
-            ? "?rules=" + Uri.EscapeDataString(string.Join(",", enabled))
-            : string.Empty;
 
-        Nav.NavigateTo($"/play/{GameId}/{_players}{query}");
+        var query = new List<string>();
+        if (enabled.Count > 0)
+            query.Add("rules=" + Uri.EscapeDataString(string.Join(",", enabled)));
+        if (_variant is { Length: > 0 } && _variants.Count > 1)
+            query.Add("variant=" + Uri.EscapeDataString(_variant));
+
+        Nav.NavigateTo($"/play/{GameId}/{_players}"
+                     + (query.Count > 0 ? "?" + string.Join("&", query) : ""));
     }
 }

@@ -25,19 +25,32 @@ public sealed class GoldenMasterTests
 
     private static GameLoader NewLoader() => new(new FileSystemGameAssetSource(RepoRoot));
 
-    /// <summary>Every (game, playerCount, seed) combination, derived from the shipped definitions.</summary>
-    public static TheoryData<string, int, ulong> Cases
+    /// <summary>
+    /// Every (game, shape, playerCount, seed) combination, derived from the shipped
+    /// definitions. A named shape is a game in its own right — Stud and Hold'em are one
+    /// file and two games — so each is recorded separately, and merging three poker
+    /// files into one does not quietly drop two games' worth of cover.
+    /// </summary>
+    public static TheoryData<string, string?, int, ulong> Cases
     {
         get
         {
-            var data = new TheoryData<string, int, ulong>();
+            var data = new TheoryData<string, string?, int, ulong>();
             foreach (var def in NewLoader().LoadAllAsync().GetAwaiter().GetResult())
             {
                 // Min and max seats exercise the seating/teams branches that differ by count.
                 var counts = new SortedSet<int> { def.MinPlayers, def.MaxPlayers };
                 foreach (var count in counts)
-                    foreach (var seed in Seeds)
-                        data.Add(def.Id, count, seed);
+                {
+                    var shapes = Cards.Engine.GameConfiguration.Offered(def, count)
+                        .Select(c => c.Name)
+                        .DefaultIfEmpty(null)
+                        .ToList();
+
+                    foreach (var shape in shapes)
+                        foreach (var seed in Seeds)
+                            data.Add(def.Id, shape, count, seed);
+                }
             }
             return data;
         }
@@ -45,10 +58,10 @@ public sealed class GoldenMasterTests
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public async Task Run_matches_recorded_behaviour(string gameId, int playerCount, ulong seed)
+    public async Task Run_matches_recorded_behaviour(string gameId, string? shape, int playerCount, ulong seed)
     {
-        var result = await EngineRunner.RunAsync(NewLoader(), gameId, playerCount, seed);
-        string key = Key(gameId, playerCount, seed);
+        var result = await EngineRunner.RunAsync(NewLoader(), gameId, playerCount, seed, shape);
+        string key = Key(gameId, shape, playerCount, seed);
 
         var golden = LoadGolden();
 
@@ -76,7 +89,7 @@ public sealed class GoldenMasterTests
     /// </summary>
     [Theory]
     [InlineData("hearts", 4)]
-    [InlineData("texas-holdem", 4)]
+    [InlineData("poker", 4)]
     [InlineData("hand-and-foot", 4)]
     public async Task Same_seed_produces_identical_run(string gameId, int playerCount)
     {
@@ -107,8 +120,8 @@ public sealed class GoldenMasterTests
     private static bool Recording =>
         Environment.GetEnvironmentVariable("RECORD_GOLDEN") is "1" or "true";
 
-    private static string Key(string gameId, int playerCount, ulong seed)
-        => $"{gameId}/{playerCount}p/seed{seed}";
+    private static string Key(string gameId, string? shape, int playerCount, ulong seed)
+        => $"{gameId}{(shape is null ? "" : "[" + shape + "]")}/{playerCount}p/seed{seed}";
 
     private static string Encode(EngineRunner.Result r)
         => $"{r.Digest} steps={r.Steps} over={r.ReachedGameOver} phase={r.FinalPhase}";

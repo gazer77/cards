@@ -45,9 +45,7 @@ public sealed class DefinitionAuditTests
         ["high-card.json"]     = ["deal.order"],
         // meld_table: pinochle's meld values are a table in the scoring engine.
         ["pinochle.json"]      = ["deal.order", "dealer", "phases[0].order", "scoring.meld_table"],
-        ["poker-stud.json"]    = ["dealer"],
         ["spades.json"]        = ["deal.order", "dealer", "phases[0].order"],
-        ["texas-holdem.json"]  = ["dealer"],
         // deal.order / phase order: "clockwise", "left_of_dealer". The deal and the
         // bidding both go clockwise from the dealer's left already, so these describe
         // what happens without being what decides it.

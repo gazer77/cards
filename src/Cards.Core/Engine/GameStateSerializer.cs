@@ -83,6 +83,10 @@ public static class GameStateSerializer
         int playerCount,
         IReadOnlyList<string> enabledRules)
     {
+        // The shape first: Initialize resolves the definition down to it, so a saved
+        // Stud game must say so before the table is built, or it is built as Hold'em.
+        state.ConfigurationName = dto.Configuration;
+
         logic.Initialize(state, playerCount, enabledRules);
 
         var initZones = new Dictionary<string, Zone>(state.Zones);

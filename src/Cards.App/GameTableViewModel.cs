@@ -286,7 +286,8 @@ public sealed class GameTableViewModel
         bool resume = true,
         string? resumeSlotId = null,
         ulong? seed = null,
-        string? initialSort = null)
+        string? initialSort = null,
+        string? configuration = null)
     {
         var definition = await _loader.LoadAsync(gameId);
         if (definition is null) return false;
@@ -294,7 +295,14 @@ public sealed class GameTableViewModel
         _playerCount  = playerCount;
         _enabledRules = enabledRules ?? [];
 
-        var state = new GameState { GameId = definition.Id, Definition = definition };
+        // The shape this table plays, set before anything is initialised: it decides what
+        // the definition even says. A resumed game overwrites it from the save.
+        var state = new GameState
+        {
+            GameId = definition.Id,
+            Definition = definition,
+            ConfigurationName = configuration,
+        };
         if (seed is not null)
         {
             state.Rng  = new SeededRandomSource(seed.Value);

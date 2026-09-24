@@ -24,23 +24,31 @@ public static class EngineRunner
     /// Games that are both expensive per step and never reach game over under all-AI
     /// play, so a lower budget truncates a run that was going to be truncated anyway.
     ///
-    /// poker-wilds evaluates every wild substitution when ranking a hand, which is
+    /// Deuces Wild evaluates every wild substitution when ranking a hand, which is
     /// combinatorial; at 9 seats and 5000 steps a single case took over four minutes.
+    /// Keyed by game id or by the name of a shape of one.
     /// </summary>
     private static readonly Dictionary<string, int> StepBudget = new()
     {
-        ["poker-wilds"] = 500,
+        ["Deuces Wild"] = 500,
     };
 
     public sealed record Result(string Digest, int Steps, bool ReachedGameOver, string FinalPhase);
 
     public static async Task<Result> RunAsync(
-        GameLoader loader, string gameId, int playerCount, ulong seed)
+        GameLoader loader, string gameId, int playerCount, ulong seed, string? configuration = null)
     {
         var definition = await loader.LoadAsync(gameId)
             ?? throw new InvalidOperationException($"Game definition '{gameId}' failed to load.");
 
-        var state = new GameState { GameId = definition.Id, Definition = definition };
+        // A named shape is a game in its own right — Stud and Hold'em share a file and
+        // nothing else — so each is run and recorded on its own.
+        var state = new GameState
+        {
+            GameId = definition.Id,
+            Definition = definition,
+            ConfigurationName = configuration,
+        };
 
         // Seed BEFORE Initialize: setup deals cards and picks the first dealer.
         var rng    = new SeededRandomSource(seed);
@@ -59,7 +67,7 @@ public static class EngineRunner
         using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         Fold(sha, state);
 
-        int budget = StepBudget.GetValueOrDefault(gameId, MaxSteps);
+        int budget = StepBudget.GetValueOrDefault(configuration ?? gameId, MaxSteps);
         int steps  = 0;
         bool over  = logic.IsGameOver(state);
 

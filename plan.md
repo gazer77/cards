@@ -48,9 +48,9 @@ when they require a phase type that doesn't exist yet.
 ## Games
 
 ### Poker
-- [x] Texas Hold'em — `games/texas-holdem.json`
-- [x] Stud — `games/poker-stud.json`
-- [x] Wilds — `games/poker-wilds.json` (one-eyed-jacks house rule)
+- [x] One game, three variants — `games/poker.json`, with Texas Hold'em as the shape
+      the file is written in and Deuces Wild and Seven-Card Stud as named shapes beside
+      it. Replaces `texas-holdem.json`, `poker-wilds.json` and `poker-stud.json`
 - [ ] Trips or Better
 - [ ] Follow the Queens / Kings — needs dynamic wilds; `scoring.wilds` is static today
 - [ ] Low Hole — needs per-player wilds; `scoring.wilds` is static today
@@ -165,12 +165,11 @@ heuristics, and conservative poker betting; everything else falls through to ran
 ### Definitions
 - [ ] **One game, several configurations** — a definition carries what is common once
       and then the parts that differ by what is known at setup. **Built** (see
-      `docs/game-schema.md`), and Euchre is on it: one file, a shape per seat count.
+      `docs/game-schema.md`), and Euchre and poker are both on it: Euchre a shape per
+      seat count, poker three named shapes with a picker on the setup screen.
       What is left:
-      - Poker as one entry — Hold'em, Stud and the wild variants as named shapes, which
-        exercises the `name` route the way Euchre exercised `when`.
-      - The setup screen offering the named shapes, and the resume list showing which
-        shape a save was written under.
+      - The resume list showing which shape a save was written under. The save records
+        it and resumes correctly; the list does not say it.
       - Golf's grid size, Hand and Foot's pack count and Spades' 3-player rules, each a
         tier table or a hard-wired default today.
 

@@ -189,6 +189,10 @@
     [Parameter, SupplyParameterFromQuery(Name = "slot")]
     public string? Slot { get; set; }
 
+    /// <summary>Which named shape of the game to play — a poker variant.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "variant")]
+    public string? Variant { get; set; }
+
     private GameTableCanvas? _canvas;
     private bool _failed;
     private bool _diagnostics;
@@ -272,7 +276,8 @@
         _sort = Settings.GetHandSort(GameId) ?? Settings.DefaultHandSort;
 
         _failed = !await Vm.StartAsync(GameId, Seats, EnabledRules, resume: Slot is not null,
-                                       resumeSlotId: Slot, initialSort: _sort);
+                                       resumeSlotId: Slot, initialSort: _sort,
+                                       configuration: Variant);
         _title      = Vm.State?.Definition.Name ?? GameId;
         _sortModes  = Vm.SortModes;
         _sort       = Vm.ActiveSortMode;   // reflects the definition's default if we passed none
@@ -494,7 +499,8 @@
         _gameOverDismissed = false;
         await Vm.DeleteSaveAsync();
         _canvas?.Renderer?.ClearMessages();   // last game's bubbles are not this game's
-        await Vm.StartAsync(GameId, Seats, EnabledRules, resume: false, initialSort: _sort);
+        await Vm.StartAsync(GameId, Seats, EnabledRules, resume: false, initialSort: _sort,
+                            configuration: Variant);
     }
 
     private async Task GoHome()

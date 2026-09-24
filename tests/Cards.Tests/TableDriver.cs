@@ -75,9 +75,12 @@ public static class TableDriver
             return StepResult.Moved;
         }
 
-        // Buttons appear only for a real choice; a lone action is the canvas-tap path.
-        bool buttonsShown = actions.Count > 1
-                         || (actions.Count == 1 && actions[0].Type == "ready");
+        // A button is an action with a label, which is the rule the clients follow: an
+        // action without one is the table's own gesture and has no button to press.
+        // Counting actions instead meant a phase offering one labelled action — Flip,
+        // Discard — was driven by re-tapping cards forever, toggling its own pick off
+        // and reporting a livelock in a game a person can play perfectly well.
+        bool buttonsShown = actions.Any(a => a.Label is not null);
 
         if (buttonsShown)
         {

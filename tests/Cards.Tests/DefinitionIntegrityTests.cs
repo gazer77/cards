@@ -6,7 +6,7 @@ namespace Cards.Tests;
 /// Guards the two paths that deep-clone a GameDefinition through a JSON round-trip:
 /// inheritance ("extends") and house-rule application. Both used to throw on any
 /// definition holding an unset JsonElement, and both failed silently — a child definition and
-/// poker-wilds never loaded at all, and nothing surfaced it.
+/// a child definition never loaded at all, and nothing surfaced it.
 /// </summary>
 public sealed class DefinitionIntegrityTests
 {
@@ -35,11 +35,10 @@ public sealed class DefinitionIntegrityTests
         Assert.Equal(3, euchre!.MinPlayers);
         Assert.Equal(4, euchre.MaxPlayers);
 
-        // poker-wilds extends texas-holdem and adds deuces wild.
-        var wilds = await loader.LoadAsync("poker-wilds");
-        Assert.NotNull(wilds);
-        Assert.Equal("Wilds", wilds!.Name);
-        Assert.Contains(wilds.HouseRules, r => r.Id == "one_eyed_jacks");
+        // Poker is one game whose variants are named shapes inside it.
+        var poker = await loader.LoadAsync("poker");
+        Assert.NotNull(poker);
+        Assert.Contains(poker!.Configurations, c => c.Name == "Deuces Wild");
     }
 
     /// <summary>

@@ -299,15 +299,16 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         if (_targetZone == "grid" && state.Metadata.ContainsKey("dd_must_flip")
             && action.Type is "select_card" or "play_card" or "flip_card" && action.CardId is not null)
         {
+            // The card may arrive as a uid — what a tap carries and what the selection
+            // holds — or as an id from a drag or an agent. Reading only ids meant a
+            // picked card played onto its own zone matched nothing and did nothing.
             var grid = PlayerGrid(state, state.CurrentPlayer.Id);
-            var toFlip = action.CardUid is int flipUid
-                ? grid?.Cards.FirstOrDefault(c => c.Uid == flipUid)
-                : grid?.Cards.FirstOrDefault(c => c.Id == action.CardId && !c.IsFaceUp);
+            var toFlip = CardInZone(grid, action.CardUid, action.CardId);
             if (toFlip is null || toFlip.IsFaceUp) return;
 
-            // Picked rather than turned, when this game asks first — a double tap
-            // (flip_card) says the player is sure and skips the asking.
-            if (action.Type != "flip_card" && Confirming(state))
+            // Picked rather than turned, when this game asks first. A tap proposes; a
+            // play — dropped onto the grid, or double-tapped — commits.
+            if (action.Type == "select_card" && Confirming(state))
             {
                 string pick = toFlip.Uid.ToString();
                 if (state.Metadata.GetValueOrDefault("selected_card") == pick)
@@ -1263,6 +1264,23 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     private static Zone? PlayerHand(GameState state, string playerId)
         => state.FindZone($"hand:{playerId}") ?? state.FindZone("hand");
 
+
+    /// <summary>
+    /// The card a zone holds under whichever token names it: the uid a tap carries, a
+    /// uid written as text (which is what a selection holds), or a card id from a drag
+    /// or an outside agent.
+    /// </summary>
+    private static Card? CardInZone(Zone? zone, int? uid, string? token)
+    {
+        if (zone is null) return null;
+
+        if (uid is int u) return zone.Cards.FirstOrDefault(c => c.Uid == u);
+        if (token is null) return null;
+
+        return int.TryParse(token, out int parsed)
+            ? zone.Cards.FirstOrDefault(c => c.Uid == parsed)
+            : zone.Cards.FirstOrDefault(c => c.Id == token);
+    }
     private static Zone? PlayerGrid(GameState state, string playerId)
         => state.FindZone($"grid:{playerId}") ?? state.FindZone("grid");
 

@@ -1473,6 +1473,11 @@ other.
 
 **Saves** record the named shape, so resuming a Stud game does not deal Hold'em.
 
+**The setup screen** offers the named shapes for the seat count in hand, with the default
+selected, and the house rules it shows are the ones that shape declares — Razz belongs to
+Stud and One-Eyed Jacks to the wild variant, and offering either against Hold'em would be
+offering a rule with nothing to change.
+
 ---
 ## UI Config
 

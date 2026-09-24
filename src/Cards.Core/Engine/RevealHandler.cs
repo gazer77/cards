@@ -160,9 +160,12 @@ public sealed class RevealHandler : IPhaseHandler
         var zone = ZoneFor(state);
         if (zone is null) return;
 
+        // A uid from a tap, a uid as text from the selection, or an id from a drag.
         var chosen = action.CardUid is int tapped
             ? zone.Cards.FirstOrDefault(c => c.Uid == tapped)
-            : zone.Cards.FirstOrDefault(c => c.Id == action.CardId && !c.IsFaceUp);
+            : int.TryParse(action.CardId, out int token)
+                ? zone.Cards.FirstOrDefault(c => c.Uid == token)
+                : zone.Cards.FirstOrDefault(c => c.Id == action.CardId && !c.IsFaceUp);
         if (chosen is null || chosen.IsFaceUp) return;
 
         // The same rule the selectable list expresses, held here too: an agent or an
@@ -174,7 +177,10 @@ public sealed class RevealHandler : IPhaseHandler
         // Picking, when this game asks before turning and there is a person to ask. An
         // agent has no mind to change, and waiting for it to press its own button would
         // only be a pause.
-        if (action.Type != "flip_card" && Confirming(state))
+        // A tap proposes; a play — a drag onto the zone, or a double tap — commits. Only
+        // select_card is the proposing kind, and treating a play as one meant a card
+        // dropped where it was meant to go silently unpicked itself.
+        if (action.Type == "select_card" && Confirming(state))
         {
             var picked = Picked(state);
             if (!picked.Remove(chosen.Uid))
