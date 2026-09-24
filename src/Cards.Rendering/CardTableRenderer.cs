@@ -2108,6 +2108,50 @@ public sealed class CardTableRenderer
             canvas.DrawCircle(x - r * 2.2f, y - labelSz * 0.32f, r, paint);
         }
         canvas.DrawText(layout.Label!, x, y, font, paint);
+
+        DrawDealerMark(canvas, layout, x + w + labelSz * 0.5f, y, labelSz);
+    }
+
+    /// <summary>
+    /// The dealer's mark, beside that seat's name — a card table puts a button in front
+    /// of the dealer, and a player who has to work out who dealt from whose turn it is
+    /// cannot work it out at all once the first card is played.
+    ///
+    /// Drawn in the seat's own frame, so it reads the right way up at every seat.
+    /// </summary>
+    private void DrawDealerMark(SKCanvas canvas, ZoneLayout layout, float x, float baseline, float size)
+    {
+        if (_state is null || layout.Zone.Type != "hand") return;
+        if (layout.Zone.OwnerId is not { } owner || owner != _state.DealerId) return;
+
+        var ui = _state.Definition.Ui;
+        bool show = ui?.ShowDealer
+                 ?? (_state.Definition.Rounds?.Dealer is not null
+                  || _state.Definition.Rounds?.FirstDealer is not null);
+        if (!show) return;
+
+        string mark = ui?.DealerLabel ?? "D";
+        if (mark.Length == 0) return;
+
+        float r = size * 0.62f;
+        float cy = baseline - size * 0.32f;
+
+        // Cream with dark letters, like the button a card room slides in front of the
+        // dealer: it has to read at a glance from across the table, which the muted
+        // colour the seat names use does not.
+        using var disc = new SKPaint { Color = new SKColor(0xF5, 0xE6, 0xC8), IsAntialias = true };
+        using var edge = new SKPaint
+        {
+            Color = new SKColor(0x10, 0x20, 0x18, 0x99),
+            Style = SKPaintStyle.Stroke, StrokeWidth = MathF.Max(1f, size * 0.08f), IsAntialias = true,
+        };
+        using var ink  = new SKPaint { Color = new SKColor(0x10, 0x20, 0x18), IsAntialias = true };
+        using var font = new SKFont(SKTypeface.Default, size * 0.85f);
+
+        canvas.DrawCircle(x + r, cy, r, disc);
+        canvas.DrawCircle(x + r, cy, r, edge);
+        float w = font.MeasureText(mark);
+        canvas.DrawText(mark, x + r - w / 2f, cy + size * 0.3f, font, ink);
     }
 
     /// <summary>

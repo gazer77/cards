@@ -371,11 +371,24 @@ public static class PhaseHandlerRegistry
         /// <summary>Where the discard goes: a pile the definition names, "kitty" by default.</summary>
         private readonly string _toZone;
 
+        /// <summary>
+        /// Whether a tap picks the card out and a button commits it. On by default: the
+        /// only thing to do in this phase is throw a card away for good, and the hand it
+        /// comes out of is the one the dealer just took a card into. A definition may
+        /// say "confirm": false to have a tap discard at once.
+        /// </summary>
+        private readonly bool _confirm;
+
         public DealerDiscardHandler(PhaseDefinition def, string fallbackNextPhaseId)
         {
             _fallbackNextPhaseId = fallbackNextPhaseId;
-            _toZone = GetExtra(def, "to") ?? "kitty";
+            _toZone  = GetExtra(def, "to") ?? "kitty";
+            _confirm = def.Extra?.TryGetValue("confirm", out var c) != true
+                    || c.ValueKind != System.Text.Json.JsonValueKind.False;
         }
+
+        /// <summary>The dealer is the one acting, settled before anyone asks whose turn it is.</summary>
+        public void OnPhaseEnter(GameState state) => EnsureDealer(state);
 
         public IReadOnlyList<string> GetSelectableCardIds(GameState state)
         {
@@ -384,20 +397,48 @@ public static class PhaseHandlerRegistry
             return hand is null ? [] : hand.Cards.Select(c => c.Id).ToList();
         }
 
-        public IReadOnlyList<string> GetDropZoneIds(GameState _) => [];
+        public IReadOnlyList<string> GetDropZoneIds(GameState _, string __) => [];
 
         public IReadOnlyList<GameAction> GetValidActions(GameState state)
         {
             EnsureDealer(state);
+
+            // The button appears once a card is picked, and says what it will do. Before
+            // the confirm rule this phase offered only a label-less "tap", so the one
+            // irreversible act in it had no button at all and no second chance either.
+            if (Confirming(state) && state.Metadata.GetValueOrDefault("selected_card") is { Length: > 0 })
+                return [new GameAction("discard", Label: GameText.Action(state, "discard", "Discard"))];
+
             return [new GameAction("tap")];
         }
+
+        /// <summary>A double tap throws the card, for a dealer who knows which one it is.</summary>
+        public GameAction? DefaultCardAction(GameState state, string cardId, int? uid)
+            => new GameAction("discard_card", CardId: cardId, CardUid: uid);
+
+        private bool Confirming(GameState state)
+            => _confirm && !state.PlayerAgents.ContainsKey(state.DealerId ?? "");
 
         public void Apply(GameState state, GameAction action)
         {
             EnsureDealer(state);
 
+            // Picking, when the dealer is a person and the game asks first.
+            if (action.Type == "select_card" && action.CardId is { } picked && Confirming(state))
+            {
+                string token = action.CardUid?.ToString() ?? picked;
+                if (state.Metadata.GetValueOrDefault("selected_card") == token)
+                    state.Metadata.Remove("selected_card");
+                else
+                    state.Metadata["selected_card"] = token;
+                return;
+            }
+
             // Expect a play_card action carrying the selected card id.
             string? cardId = action.CardId ?? (action.Type.StartsWith("play_card:") ? action.Type["play_card:".Length..] : null);
+
+            if (cardId is null && action.Type == "discard")
+                cardId = CardFromSelection(state);
 
             if (cardId is null)
             {
@@ -425,11 +466,27 @@ public static class PhaseHandlerRegistry
                 }
             }
 
+            state.Metadata.Remove("selected_card");
+
             string next = state.Metadata.GetValueOrDefault("dealer_discard_next") ?? _fallbackNextPhaseId;
             state.Metadata.Remove("dealer_discard_next");
             state.Metadata["status"] = GameText.Message(state, "dealer_discarded",
                 "Dealer discarded. Let's play!");
             state.CurrentPhaseId     = next;
+        }
+
+        /// <summary>The picked card, whichever token form the selection holds.</summary>
+        private static string? CardFromSelection(GameState state)
+        {
+            string sel = state.Metadata.GetValueOrDefault("selected_card", "");
+            if (sel.Length == 0) return null;
+
+            var hand = DealerHand(state);
+            if (hand is null) return null;
+
+            return int.TryParse(sel, out int uid)
+                ? hand.Cards.FirstOrDefault(c => c.Uid == uid)?.Id
+                : sel;
         }
 
         private static void EnsureDealer(GameState state)

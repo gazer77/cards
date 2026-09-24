@@ -901,6 +901,23 @@ Optional `exclude_suit` parameter excludes one suit from the selection (same for
 
 ---
 
+
+### `dealer_discard`
+The dealer throws one card away after taking the turned card up — Euchre's, and anyone
+else's who wants it.
+
+```json
+{ "id": "dealer_discard", "type": "dealer_discard", "to": "kitty", "confirm": true, "next": "play" }
+```
+
+`to`: the pile the card goes on, face-down. Default `"kitty"`.
+
+`confirm`: `true` (default) — a tap picks a card out and a **Discard** button throws it, so
+a finger landing on the wrong card costs nothing. `false` discards on the tap. A double tap
+throws the card either way, and a computer dealer acts on its own taps, having no mind to
+change.
+
+---
 ### `score`
 Calculate and apply scores for the round using the game's `scoring` config, then check the win condition.  Auto-advances after 2.5 seconds (player can also tap).
 
@@ -1418,6 +1435,8 @@ Optional `ui` block for display hints.
 | `auto_sort_hand` | `"none"` | Auto-sort after every action: `"none"` \| `"rank"` \| `"rank_ace_high"` \| `"suit"` |
 | `allow_sort` | `true` | Show a Sort button in the HUD |
 | `show_game_log` | `true` | Show a Log button in the HUD |
+| `show_dealer` | when the game has one | Mark the dealing seat with a button beside its name, the way a card table does. Unset means "when `rounds` names a `dealer` or `first_dealer`" — the games that rotate a dealer are the games where knowing who dealt matters |
+| `dealer_label` | `"D"` | What the dealer's mark says |
 | `show_card_values` | set by the game | Whether the bubble naming a tapped card also says what it is worth — "Jack of Clubs — 10". Unset means true for any game whose `scoring` states `card_values`, which is exactly the games where a card is worth something its face does not say. Set `false` for a game that would rather not tell. The corner pip on the card face is a player setting and is separate. |
 
 ---

@@ -65,7 +65,7 @@ public static class DefinitionAudit
         ["go_fish"]             = ["book_size", "collect_to"],
         ["deal"]                = ["burn_first", "cards", "count", "face", "to"],
         ["name_trump"]          = ["exclude_suit"],
-        ["dealer_discard"]      = ["to"],
+        ["dealer_discard"]      = ["to", "confirm"],
         ["reveal"]              = ["count", "zone", "confirm", "distinct"],
     };
 

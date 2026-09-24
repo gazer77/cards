@@ -361,3 +361,107 @@ public sealed class CardMovementLogTests
         Assert.Contains(state.GameLog, line => line.Contains("took the") && line.Contains(GameText.CardName(top)));
     }
 }
+
+/// <summary>
+/// The dealer's own discard, and the mark that says who the dealer is.
+/// </summary>
+public sealed class DealerTests
+{
+    private static (GameState State, IGameLogic Logic) Euchre(ulong seed = 4)
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync("euchre-4p").GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(seed) };
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, 4, []);
+        return (state, logic);
+    }
+
+    /// <summary>Winds to the dealer's discard with the dealer being the person at seat 0.</summary>
+    private static (GameState State, IGameLogic Logic)? AtHumanDiscard()
+    {
+        for (ulong seed = 1; seed < 40; seed++)
+        {
+            var (state, logic) = Euchre(seed);
+            logic.GetAutoAdvanceDelay(state);
+            if (state.DealerId != state.Players[0].Id) continue;
+
+            logic.Apply(state, new GameAction("bid_accept"));
+            if (state.CurrentPhaseId == "dealer_discard") return (state, logic);
+        }
+        return null;
+    }
+
+    [Fact]
+    public void A_tap_picks_the_card_and_a_button_throws_it()
+    {
+        // Reported: one click threw a card away for good, which is an easy thing to do
+        // by accident in a hand you have just taken a card into.
+        if (AtHumanDiscard() is not var (state, logic)) return;
+
+        var hand = state.Zones[$"hand:{state.DealerId}"];
+        var card = hand.Cards[2];
+        int before = hand.Count;
+
+        logic.Apply(state, new GameAction("select_card", CardId: card.Id, CardUid: card.Uid));
+
+        Assert.Equal("dealer_discard", state.CurrentPhaseId);
+        Assert.Equal(before, hand.Count);
+        Assert.Contains(logic.GetValidActions(state), a => a.Type == "discard" && a.Label is not null);
+
+        logic.Apply(state, new GameAction("discard"));
+
+        Assert.DoesNotContain(hand.Cards, c => c.Uid == card.Uid);
+        Assert.Equal(before - 1, hand.Count);
+        Assert.NotEqual("dealer_discard", state.CurrentPhaseId);
+    }
+
+    [Fact]
+    public void A_second_tap_takes_the_pick_back()
+    {
+        if (AtHumanDiscard() is not var (state, logic)) return;
+
+        var card = state.Zones[$"hand:{state.DealerId}"].Cards[1];
+        logic.Apply(state, new GameAction("select_card", CardId: card.Id, CardUid: card.Uid));
+        logic.Apply(state, new GameAction("select_card", CardId: card.Id, CardUid: card.Uid));
+
+        Assert.False(state.Metadata.ContainsKey("selected_card"));
+        Assert.DoesNotContain(logic.GetValidActions(state), a => a.Type == "discard");
+    }
+
+    [Fact]
+    public void A_double_tap_throws_it_without_the_button()
+    {
+        if (AtHumanDiscard() is not var (state, logic)) return;
+
+        var hand = state.Zones[$"hand:{state.DealerId}"];
+        var card = hand.Cards[0];
+
+        var shortcut = logic.GetDefaultCardAction(state, card.Id, card.Uid);
+        Assert.NotNull(shortcut);
+
+        logic.Apply(state, shortcut);
+        Assert.DoesNotContain(hand.Cards, c => c.Uid == card.Uid);
+    }
+
+    [Fact]
+    public void A_game_that_rotates_a_dealer_marks_one()
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+
+        // Unset means "when the game has a dealer at all", which is exactly the games
+        // whose rounds rotate one.
+        foreach (var id in new[] { "euchre-4p", "pinochle", "hearts", "golf" })
+        {
+            var definition = loader.LoadAsync(id).GetAwaiter().GetResult()!;
+            bool shows = definition.Ui?.ShowDealer
+                      ?? (definition.Rounds?.Dealer is not null || definition.Rounds?.FirstDealer is not null);
+            Assert.True(shows, $"{id} rotates a dealer but marks nobody.");
+        }
+
+        // War deals once and has no dealer to speak of.
+        var war = loader.LoadAsync("war").GetAwaiter().GetResult()!;
+        Assert.False(war.Ui?.ShowDealer
+                  ?? (war.Rounds?.Dealer is not null || war.Rounds?.FirstDealer is not null));
+    }
+}

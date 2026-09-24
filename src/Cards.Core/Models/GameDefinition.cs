@@ -487,6 +487,22 @@ public class GameUiConfig
     public bool? ShowCardValues { get; set; }
 
     /// <summary>
+    /// Whether the table marks which seat is dealing, the way a card table puts a
+    /// button in front of the dealer.
+    ///
+    /// Unset means "when the game has a dealer at all" — any game whose <c>rounds</c>
+    /// names a dealer or a first dealer. In Euchre it decides who bids first and who
+    /// takes the turned card up; in Hearts it decides nothing at all, which is why the
+    /// games that rotate one are exactly the games that show one.
+    /// </summary>
+    [JsonPropertyName("show_dealer")]
+    public bool? ShowDealer { get; set; }
+
+    /// <summary>What the dealer's mark says. One or two characters; "D" by default.</summary>
+    [JsonPropertyName("dealer_label")]
+    public string DealerLabel { get; set; } = "D";
+
+    /// <summary>
     /// When true a Log button appears in the HUD so the player can review the
     /// full game event history.  Defaults to true.
     /// </summary>
