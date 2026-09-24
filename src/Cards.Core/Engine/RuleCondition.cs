@@ -294,12 +294,14 @@ public static class RuleCondition
         var phase = state.Definition?.Phases
             .FirstOrDefault(p => p.Id == state.CurrentPhaseId);
 
+        // A wild is never a meld by itself — a meld needs a natural for the wild to
+        // stand in for — so a pile topped by one cannot be claimed "to meld that card".
+        // Hand and Foot says the same in its own words: a wild on top freezes the pile.
+        if (MeldRules.IsWild(top, MeldRules.WildRanks(state.Definition))) return false;
+
         if (phase?.Extra?.TryGetValue("unmeldable_ranks", out var barred) != true
             || barred.ValueKind != JsonValueKind.Array)
-            return true;   // nothing is barred
-
-        var wilds = MeldRules.WildRanks(state.Definition);
-        if (MeldRules.IsWild(top, wilds)) return true;   // wilds are judged as wilds
+            return true;   // nothing else is barred
 
         foreach (var entry in barred.EnumerateArray())
             if (entry.ValueKind == JsonValueKind.String

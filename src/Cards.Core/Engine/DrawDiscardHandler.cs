@@ -166,6 +166,10 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         {
             // A card owed to the table blocks everything that would end the turn: the
             // obligation is the price of the pickup, so it cannot be walked away from.
+            // Unless it cannot be paid at all — then holding the player to it leaves a
+            // turn with no legal move and an empty action bar, which is a table that has
+            // stopped. A debt nobody can pay is forgiven.
+            ForgiveUnpayableDebt(state);
             bool owesMeld = state.Metadata.ContainsKey("dd_must_meld");
 
             // Grid mode asks before it acts, when the definition says to. Tapping the
@@ -754,6 +758,42 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             return new GameAction("discard_drawn");
 
         return null;   // a grid card already swaps on a single tap
+    }
+
+    /// <summary>
+    /// Drops an obligation the player has no way of meeting.
+    ///
+    /// The price of claiming the pile is laying the card it was claimed for. If that
+    /// card cannot go down — no meld it could join, nothing to build one from — the
+    /// player owes something impossible, and every route out of the turn is barred
+    /// behind it. Hand and Foot froze exactly there: a wild claimed the pile, a wild
+    /// cannot be a meld by itself, and the table stopped for good with no buttons.
+    ///
+    /// The rules come first — a payable debt is always exacted — but a rule that ends
+    /// the game rather than the turn is worse than a rule bent once, and the player is
+    /// told which it was.
+    /// </summary>
+    private void ForgiveUnpayableDebt(GameState state)
+    {
+        if (!state.Metadata.TryGetValue("dd_must_meld", out var owed)) return;
+
+        // Judged on what the debt itself could lay, not on what the player happens to
+        // have picked: a bad selection is a bad selection, not an impossible debt.
+        string? picked = state.Metadata.GetValueOrDefault("selected_card");
+        state.Metadata.Remove("selected_card");
+
+        bool payable = PlanMeld(state, addToExisting: false, out _) is not null
+                    || PlanMeld(state, addToExisting: true,  out _) is not null;
+
+        if (picked is not null) state.Metadata["selected_card"] = picked;
+        if (payable) return;
+
+        state.Metadata.Remove("dd_must_meld");
+        GameText.Log(state, "debt_forgiven", "{player} could not meld the {card} they took",
+                     state.CurrentPlayer.Id, ("card", CardName(state, owed)));
+        state.Metadata["status"] = GameText.Message(state, "debt_forgiven",
+            "{player} could not meld the {card} they took",
+            state.CurrentPlayer.Id, ("card", CardName(state, owed)));
     }
     private void AdvanceTurn(GameState state)
     {

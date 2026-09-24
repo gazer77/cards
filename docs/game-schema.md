@@ -708,6 +708,12 @@ Only `"meld_top_card"` today: the card the pile was claimed for must go down thi
 turn, which is what stops a conditional pickup being a free fistful of cards. Every
 route to a discard is refused while it stands.
 
+A debt that cannot be paid is forgiven rather than enforced: when no meld the player could
+lay would take that card, the obligation is dropped, the log says so, and the turn goes on.
+Holding someone to an impossible price leaves them a turn with no legal move and an empty
+action bar — a table that has simply stopped, which is worse than a rule bent once and said
+out loud.
+
 #### `unmeldable_ranks`
 
 Ranks that may never be laid in a meld, however many the player holds:
@@ -966,7 +972,7 @@ A condition is a term name, an object naming a term, or a combinator:
 | `{ "hand_count_of_rank": <rank>, "at_least": n }` | The player holds `n`+ of that rank. The rank is a literal (`"K"`) or `"top_discard"` |
 | `{ "meld_value_at_least": n }` | This side's melds are worth `n`+ points, valued as scoring values them |
 | `can_open_with_top_discard` | This side has not melded, and could lay an opening worth what this round demands using the top card of the discard |
-| `top_discard_is_meldable` | The discard's top card is not a rank the phase bars from melding — a 3 on top freezes the pile |
+| `top_discard_is_meldable` | The discard's top card could be melded: not a wild (a wild is never a meld by itself) and not a rank the phase bars. A wild or a 3 on top freezes the pile |
 | `{ "books_at_least": n, "kind": "natural" }` | This side has `n`+ complete books (groups of `scoring.book_size`). `kind` is `natural` (no wilds), `wild`, or `any` (default) |
 
 | Combinator | Meaning |
