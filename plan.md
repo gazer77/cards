@@ -223,6 +223,40 @@ heuristics, and conservative poker betting; everything else falls through to ran
       Euchre is the case in hand — see the Euchre section — but Golf's grid size, Hand
       and Foot's pack count and Spades' 3-player variant all want the same thing, and
       each is currently either a tier table or a second file.
+- [ ] **Swapping the language** — every sentence the table says already goes through
+      `GameText`, keyed, with a definition able to replace any of them. That is most of
+      the foundation; what is missing is a way to hold more than one language at a time
+      and a way to be sure a new sentence does not ship untranslated. Worth settling as
+      a practice before the catalogue grows, because the cost of retrofitting is the
+      whole catalogue.
+
+      Where the words are today, and what each needs:
+      - **Engine messages and buttons** (`GameText.MessageKeys` / `ActionKeys`) — a
+        catalogue per language, keyed the same way. A definition's `text` block becomes
+        per-language too (`"text": { "en": {…}, "fr": {…} }`, or a file beside the game),
+        so a translated game and a reworded one are the same mechanism.
+      - **Card names** — `GameText.CardName` builds "Jack of Clubs" from a rank table and
+        the suit enum's own name. Neither survives translation; both want a per-language
+        table, and the sentence order ("Jack of Clubs" vs "valet de trèfle") wants the
+        card name to be one lookup rather than two joined by a word.
+      - **Definition literals** — zone labels, badge `zero` text, score card headings,
+        house rule names and descriptions, the game's own name. Each is a literal in the
+        JSON today. Either they become keys, or the per-language `text` block covers
+        them; pick one and apply it everywhere rather than half each.
+      - **Help files** — `games/help/*.md` per language.
+      - **App chrome** — the setup, settings and menu wording in the Blazor pages and the
+        MAUI XAML, which is the one part that has never been keyed at all.
+      - **Numbers and plurals** — "{count} cards" has no plural form, and "{player}'s
+        turn" is a possessive that several languages do not build that way. The rule that
+        keeps this sane: a key is a whole sentence, never a fragment assembled in code.
+        It mostly holds today; the exceptions are worth finding before they multiply.
+
+      The practice that makes it stick: a test asserting every key in the default
+      catalogue exists in every shipped language, so an untranslated string fails the
+      build rather than appearing in English in the middle of a French table. The same
+      test the message keys already have, widened. A language setting beside the others,
+      with a fallback chain of chosen → English → the key itself, so a missing entry
+      degrades to something a person can still act on.
 ### Learning & Rules
 - [x] Rules reference for every game — `HelpPage` + `games/help/*.md`
       (gap: `high-card.json` has no help file)
