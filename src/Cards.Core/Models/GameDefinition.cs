@@ -320,8 +320,10 @@ public class BadgeDefinition
     public PlaceDefinition? Place { get; set; }
 
     /// <summary>
-    /// What it counts: "cards" (in the group), "books" (complete sets of book_size),
-    /// or "loose" (cards beyond the last complete book — the working stack).
+    /// What it shows: "cards" (in the group), "books" (complete sets of book_size),
+    /// "loose" (cards beyond the last complete book — the working stack), or "score"
+    /// (what the zone would score if the round ended now, by this game's own scoring —
+    /// not a count, so a zero is shown rather than hidden).
     /// </summary>
     [JsonPropertyName("shows")]
     public string Shows { get; set; } = "cards";

@@ -233,8 +233,8 @@ Small coloured counters beside each group — the "cards in the stack / books co
 readout a canasta table wants. Each badge shows one quantity; several sit in a row on
 the side they share, in declaration order.
 
-On a zone that does not group — a `deck`, `pile` or `hand` — the badges count the zone
-itself, and every `shows` means the cards that are there: a deck with
+On a zone that does not group — a `deck`, `pile`, `hand` or `grid` — the badges count the
+zone itself, and every counting `shows` means the cards that are there: a deck with
 `{ "shows": "cards" }` reads out how many are left to draw.
 
 ```json
@@ -246,10 +246,27 @@ itself, and every `shows` means the cards that are there: a deck with
 
 | Field | Values |
 |---|---|
-| `shows` | `cards` (in the group), `books` (complete sets of `scoring.book_size`), `loose` (cards beyond the last complete book — the working stack) |
+| `shows` | `cards` (in the group), `books` (complete sets of `scoring.book_size`), `loose` (cards beyond the last complete book — the working stack), `score` (see below) |
 | `color`, `text_color` | `#RRGGBB`. Text colour is picked for contrast when omitted |
 | `zero` | `hide` (default), or text to show instead of `0` — a dash, typically |
 | `placement`, `orientation`, `when` | As for [`label`](#label-and-group_label) |
+
+
+**`"shows": "score"`** puts a number on the table rather than a count: what that zone
+would score **if the round ended now**, by this game's own scoring. A `grid_values` game
+scores it as a grid — each card at its declared value, a column of matching ranks at the
+pair value, and each card still face-down at the `face_down_penalty` — so Golf's grid can
+read out what the player is holding without anyone adding it up every turn. Any other
+scoring type totals the face-up cards at their declared `card_values`.
+
+It is the same arithmetic the round runs, deliberately: a running figure that turned out
+to be a guess would be worse than no figure. A score of zero is a fact rather than an
+empty count, so it is shown rather than hidden, whatever `zero` says.
+
+```json
+{ "id": "grid", "type": "grid", "owner": "each_player", "rows": 2, "cols": 3,
+  "group_badges": [ { "shows": "score", "placement": "right" } ] }
+```
 
 What a book *is* comes from `scoring.book_size` (default 7), which the canasta bonus
 reads too — so the badge that says "1 book" and the bonus that pays for it can never

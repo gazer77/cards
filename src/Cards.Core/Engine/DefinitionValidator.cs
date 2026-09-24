@@ -127,8 +127,8 @@ public static class DefinitionValidator
     {
         string where = $"zone '{zoneId}'.group_badges[{index}]";
 
-        if (badge.Shows is not ("cards" or "books" or "loose"))
-            problems.Add($"{where}: shows '{badge.Shows}' is not cards, books, or loose.");
+        if (badge.Shows is not ("cards" or "books" or "loose" or "score"))
+            problems.Add($"{where}: shows '{badge.Shows}' is not cards, books, loose, or score.");
 
         if (badge.Placement is not ("top" or "bottom" or "left" or "right"))
             problems.Add($"{where}: placement '{badge.Placement}' is not top, bottom, left, or right.");

@@ -282,61 +282,13 @@ public static class ScoringEngine
 
     private static void ApplyGridValues(GameState state, ScoringDefinition scoring)
     {
-        bool accumulate      = GetBool(scoring, "accumulate") ?? true;
-        int  faceDownPenalty = GetInt(scoring, "face_down_penalty") ?? 2;
-        var  rules           = ParseGridValueRules(scoring);
-
-        int? pairValue = null;
-        if (scoring.Extra?.TryGetValue("matching_columns", out var mcEl) == true
-            && mcEl.ValueKind == JsonValueKind.Object
-            && mcEl.TryGetProperty("pair_value", out var pv))
-            pairValue = pv.GetInt32();
+        bool accumulate = GetBool(scoring, "accumulate") ?? true;
 
         var roundScores = new Dictionary<string, int>();
-
         foreach (var p in state.Players)
         {
             var zone = state.FindZone($"grid:{p.Id}") ?? state.FindZone("grid");
-            if (zone is null) { roundScores[p.Id] = 0; continue; }
-
-            var cards = zone.Cards.ToList();
-            int rows  = GetZoneDef(state, "grid")?.Rows ?? 2;
-            int cols  = GetZoneDef(state, "grid")?.Cols ?? 3;
-
-            int pts = 0;
-            // Determine column pairs if pair_value is configured.
-            var colPairs = new HashSet<int>();
-            if (pairValue.HasValue)
-            {
-                for (int c = 0; c < cols; c++)
-                {
-                    var colCards = Enumerable.Range(0, rows)
-                        .Select(r => r * cols + c)
-                        .Where(i => i < cards.Count)
-                        .Select(i => cards[i])
-                        .Where(card => card.IsFaceUp)
-                        .ToList();
-                    if (colCards.Count == rows && colCards.Select(card => card.Rank).Distinct().Count() == 1)
-                        colPairs.Add(c);
-                }
-            }
-
-            for (int i = 0; i < cards.Count; i++)
-            {
-                var card = cards[i];
-                if (!card.IsFaceUp)
-                {
-                    pts += faceDownPenalty;
-                    continue;
-                }
-                int col = i % cols;
-                if (pairValue.HasValue && colPairs.Contains(col))
-                    pts += pairValue.Value;
-                else
-                    pts += rules.GetGridValue(card);
-            }
-
-            roundScores[p.Id] = pts;
+            roundScores[p.Id] = zone is null ? 0 : GridZoneScore(state, scoring, zone);
         }
 
         foreach (var (pid, pts) in roundScores)
@@ -346,6 +298,78 @@ public static class ScoringEngine
         }
 
         WriteSummary(state, roundScores);
+    }
+
+    /// <summary>
+    /// What one grid is worth: each card at its declared value, a column of matching
+    /// ranks at the pair value, and each card still face-down at the face-down penalty.
+    ///
+    /// Split out from the round scoring so a table can show a player what they are
+    /// holding without waiting for the round to end — the same arithmetic, so the
+    /// number on screen is the number they will be charged.
+    /// </summary>
+    private static int GridZoneScore(GameState state, ScoringDefinition scoring, Zone zone)
+    {
+        int faceDownPenalty = GetInt(scoring, "face_down_penalty") ?? 2;
+        var rules           = ParseGridValueRules(scoring);
+
+        int? pairValue = null;
+        if (scoring.Extra?.TryGetValue("matching_columns", out var mcEl) == true
+            && mcEl.ValueKind == JsonValueKind.Object
+            && mcEl.TryGetProperty("pair_value", out var pv))
+            pairValue = pv.GetInt32();
+
+        var cards = zone.Cards.ToList();
+        int rows  = zone.Definition?.Rows ?? GetZoneDef(state, "grid")?.Rows ?? 2;
+        int cols  = zone.Definition?.Cols ?? GetZoneDef(state, "grid")?.Cols ?? 3;
+
+        // Columns whose cards match, and so count the pair value rather than themselves.
+        var colPairs = new HashSet<int>();
+        if (pairValue.HasValue)
+        {
+            for (int c = 0; c < cols; c++)
+            {
+                var colCards = Enumerable.Range(0, rows)
+                    .Select(r => r * cols + c)
+                    .Where(i => i < cards.Count)
+                    .Select(i => cards[i])
+                    .Where(card => card.IsFaceUp)
+                    .ToList();
+                if (colCards.Count == rows && colCards.Select(card => card.Rank).Distinct().Count() == 1)
+                    colPairs.Add(c);
+            }
+        }
+
+        int pts = 0;
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var card = cards[i];
+            if (!card.IsFaceUp) { pts += faceDownPenalty; continue; }
+
+            int col = i % cols;
+            pts += pairValue.HasValue && colPairs.Contains(col)
+                ? pairValue.Value
+                : rules.GetGridValue(card);
+        }
+        return pts;
+    }
+
+    /// <summary>
+    /// What a zone would score if the round ended now, by this game's own scoring.
+    ///
+    /// A grid is scored as a grid, matched columns and face-down penalties included;
+    /// anything else is the worth of the cards a player can see. Exposed so a badge can
+    /// put the number on the table — in Golf it is most of what a turn is about, and it
+    /// was arithmetic every player had to do in their head.
+    /// </summary>
+    public static int ZoneScore(GameState state, Zone zone)
+    {
+        var scoring = state.Definition.Scoring;
+        if (scoring is null) return 0;
+
+        return scoring.Type == "grid_values"
+            ? GridZoneScore(state, scoring, zone)
+            : CardPointValue(state.Definition, zone.Cards.Where(c => c.IsFaceUp));
     }
 
     // ── euchre ────────────────────────────────────────────────────────────────

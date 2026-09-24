@@ -86,3 +86,68 @@ public sealed class GolfScoringTests
         Assert.Equal(-2 + 2 * 5, Score("2d", "2c!", "JKR!", "As!", "Kd!", "4c!"));
     }
 }
+
+/// <summary>
+/// The badge that puts a zone's score on the table, so a Golf player can read what
+/// they are holding instead of adding it up every turn.
+/// </summary>
+public sealed class ZoneScoreBadgeTests
+{
+    private static (GameState State, IGameLogic Logic) Golf(int seats)
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(12) };
+        var logic = LogicRegistry.Create(definition);
+        logic.Initialize(state, seats, []);
+        return (state, logic);
+    }
+
+    [Fact]
+    public void Golf_shows_each_grid_what_it_is_worth()
+    {
+        var (state, _) = Golf(2);
+        var grid = state.Definition.Zones.Single(z => z.Id == "grid");
+
+        Assert.Contains(grid.GroupBadges, b => b.Shows == "score");
+    }
+
+    [Fact]
+    public void The_badge_is_the_number_the_round_would_charge()
+    {
+        // The whole point: a running figure that turns out to be a guess would be worse
+        // than no figure, so it is the same arithmetic the scoring engine runs.
+        var (state, _) = Golf(2);
+        var zone = state.Zones["grid:player0"];
+        foreach (var card in zone.Cards.Take(4)) card.IsFaceUp = true;
+
+        int badge = ScoringEngine.ZoneScore(state, zone);
+
+        state.Scores.Clear();
+        ScoringEngine.Apply(state);
+        Assert.Equal(state.GetScore("player0"), badge);
+    }
+
+    [Fact]
+    public void A_grid_nobody_has_turned_is_worth_its_face_down_penalty()
+    {
+        var (state, _) = Golf(2);
+        var zone = state.Zones["grid:player0"];
+
+        // Six cards down, at 2 apiece — what the round would charge for a grid nobody
+        // has opened, which is the honest reading of "your score if it ended now".
+        Assert.All(zone.Cards, c => Assert.False(c.IsFaceUp));
+        Assert.Equal(12, ScoringEngine.ZoneScore(state, zone));
+    }
+
+    [Fact]
+    public void Score_is_a_kind_of_badge_the_validator_knows()
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        Assert.Empty(DefinitionValidator.Validate(definition));
+
+        definition.Zones.Single(z => z.Id == "grid").GroupBadges[0].Shows = "vibes";
+        Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("shows 'vibes'"));
+    }
+}
