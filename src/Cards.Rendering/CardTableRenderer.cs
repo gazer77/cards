@@ -2202,10 +2202,13 @@ public sealed class CardTableRenderer
                     }
                     : cardCount;
 
-            // A score of zero is a fact about the game, not an empty count, so "hide"
-            // does not apply to it: a player reading "your score" wants to read 0.
+            // Nothing turned over is not a score of nothing: the zone has told the player
+            // nothing yet, and a readout that says 0 there is a number dressed up as
+            // knowledge. A zero with cards showing is a real zero and says so.
+            bool nothingKnown = badge.Shows == "score" && !zone.Cards.Any(c => c.IsFaceUp);
+
             string text;
-            if (value == 0 && badge.Shows != "score")
+            if (nothingKnown || (value == 0 && badge.Shows != "score"))
             {
                 if (badge.Zero == "hide") continue;
                 text = badge.Zero;

@@ -252,20 +252,26 @@ zone itself, and every counting `shows` means the cards that are there: a deck w
 | `placement`, `orientation`, `when` | As for [`label`](#label-and-group_label) |
 
 
-**`"shows": "score"`** puts a number on the table rather than a count: what that zone
-would score **if the round ended now**, by this game's own scoring. A `grid_values` game
-scores it as a grid — each card at its declared value, a column of matching ranks at the
-pair value, and each card still face-down at the `face_down_penalty` — so Golf's grid can
-read out what the player is holding without anyone adding it up every turn. Any other
-scoring type totals the face-up cards at their declared `card_values`.
+**`"shows": "score"`** puts a number on the table rather than a count: what the cards
+the zone is **showing** are worth, by this game's own scoring. A `grid_values` game
+scores it as a grid — each face-up card at its declared value, a column of matching ranks
+at the pair value — so Golf's grid reads out what the player is holding without anyone
+adding it up every turn. Any other scoring type totals the face-up cards at their
+declared `card_values`.
 
-It is the same arithmetic the round runs, deliberately: a running figure that turned out
-to be a guess would be worse than no figure. A score of zero is a fact rather than an
-empty count, so it is shown rather than hidden, whatever `zero` says.
+A card nobody has turned counts nothing. It is **not** charged the `face_down_penalty`
+here: that is what the round charges for leaving a card down, and putting it in a running
+readout would tell a player they hold twelve points before they know a single card. The
+numbers are otherwise the round's own arithmetic, deliberately — a running figure that
+turned out to be a guess would be worse than no figure.
+
+With nothing turned over there is nothing to report, and the badge shows its `zero` text:
+give it `"zero": "–"` to say "not yet" rather than hiding the readout altogether. A zero
+with cards showing is a real zero and prints as `0`.
 
 ```json
 { "id": "grid", "type": "grid", "owner": "each_player", "rows": 2, "cols": 3,
-  "group_badges": [ { "shows": "score", "placement": "right" } ] }
+  "group_badges": [ { "shows": "score", "placement": "right", "zero": "–" } ] }
 ```
 
 What a book *is* comes from `scoring.book_size` (default 7), which the canasta bonus

@@ -119,7 +119,10 @@ public sealed class ZoneScoreBadgeTests
         // than no figure, so it is the same arithmetic the scoring engine runs.
         var (state, _) = Golf(2);
         var zone = state.Zones["grid:player0"];
-        foreach (var card in zone.Cards.Take(4)) card.IsFaceUp = true;
+
+        // With every card turned there is nothing left to be unknown, so the readout and
+        // the charge must agree exactly — including the matched-column rule.
+        foreach (var card in zone.Cards) card.IsFaceUp = true;
 
         int badge = ScoringEngine.ZoneScore(state, zone);
 
@@ -129,15 +132,21 @@ public sealed class ZoneScoreBadgeTests
     }
 
     [Fact]
-    public void A_grid_nobody_has_turned_is_worth_its_face_down_penalty()
+    public void A_grid_nobody_has_turned_reads_as_nothing_known()
     {
         var (state, _) = Golf(2);
         var zone = state.Zones["grid:player0"];
 
-        // Six cards down, at 2 apiece — what the round would charge for a grid nobody
-        // has opened, which is the honest reading of "your score if it ended now".
+        // Not 12 — the six face-down cards would each be charged 2 at the end of the
+        // round, but charging them in a running readout tells a player they hold twelve
+        // points before they know a single card. The badge shows its zero text instead.
         Assert.All(zone.Cards, c => Assert.False(c.IsFaceUp));
-        Assert.Equal(12, ScoringEngine.ZoneScore(state, zone));
+        Assert.Equal(0, ScoringEngine.ZoneScore(state, zone));
+
+        // …while the round itself still charges for them.
+        state.Scores.Clear();
+        ScoringEngine.Apply(state);
+        Assert.Equal(12, state.GetScore("player0"));
     }
 
     [Fact]

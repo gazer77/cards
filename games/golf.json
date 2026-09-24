@@ -24,7 +24,8 @@
     { "id": "grid",    "type": "grid",   "owner": "each_player", "rows": 2, "cols": 3, "initial_face": "down",
       "layout": { "place": { "x": "50%", "y": "73%", "anchor": "center", "width": "40%", "height": "24%" } },
       "group_badges": [
-        { "shows": "score", "placement": "right", "color": "#0D2518", "text_color": "#F5E6C8" }
+        { "shows": "score", "placement": "right", "zero": "–",
+          "color": "#0D2518", "text_color": "#F5E6C8" }
       ] },
     { "id": "hand",    "type": "hand",   "owner": "each_player", "visibility": "owner",
       "layout": { "place": { "x": "50%", "y": "93%", "anchor": "center", "width": "10%", "height": "12%" } } }

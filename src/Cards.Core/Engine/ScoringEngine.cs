@@ -288,7 +288,7 @@ public static class ScoringEngine
         foreach (var p in state.Players)
         {
             var zone = state.FindZone($"grid:{p.Id}") ?? state.FindZone("grid");
-            roundScores[p.Id] = zone is null ? 0 : GridZoneScore(state, scoring, zone);
+            roundScores[p.Id] = zone is null ? 0 : GridZoneScore(state, scoring, zone, countHidden: true);
         }
 
         foreach (var (pid, pts) in roundScores)
@@ -308,7 +308,14 @@ public static class ScoringEngine
     /// holding without waiting for the round to end — the same arithmetic, so the
     /// number on screen is the number they will be charged.
     /// </summary>
-    private static int GridZoneScore(GameState state, ScoringDefinition scoring, Zone zone)
+    /// <param name="countHidden">
+    /// Whether a card still face-down is charged the face-down penalty. True when the
+    /// round is being scored, which is what that penalty is for. False when the table is
+    /// only reading out what it can see: a card nobody has turned is not worth two, it
+    /// is unknown, and printing a number for it would be inventing information.
+    /// </param>
+    private static int GridZoneScore(
+        GameState state, ScoringDefinition scoring, Zone zone, bool countHidden)
     {
         int faceDownPenalty = GetInt(scoring, "face_down_penalty") ?? 2;
         var rules           = ParseGridValueRules(scoring);
@@ -344,7 +351,7 @@ public static class ScoringEngine
         for (int i = 0; i < cards.Count; i++)
         {
             var card = cards[i];
-            if (!card.IsFaceUp) { pts += faceDownPenalty; continue; }
+            if (!card.IsFaceUp) { if (countHidden) pts += faceDownPenalty; continue; }
 
             int col = i % cols;
             pts += pairValue.HasValue && colPairs.Contains(col)
@@ -355,12 +362,16 @@ public static class ScoringEngine
     }
 
     /// <summary>
-    /// What a zone would score if the round ended now, by this game's own scoring.
+    /// What the cards a zone SHOWS are worth, by this game's own scoring.
     ///
-    /// A grid is scored as a grid, matched columns and face-down penalties included;
-    /// anything else is the worth of the cards a player can see. Exposed so a badge can
-    /// put the number on the table — in Golf it is most of what a turn is about, and it
-    /// was arithmetic every player had to do in their head.
+    /// A grid is scored as a grid — a column of matching ranks counts the pair value —
+    /// but a card nobody has turned counts nothing at all. It is not worth the
+    /// face-down penalty here: that penalty is what the round charges for leaving a
+    /// card down, and putting it in a running readout would tell a player they hold 12
+    /// before they know anything, which is a number dressed up as knowledge.
+    ///
+    /// Exposed so a badge can put the figure on the table — in Golf it is most of what
+    /// a turn is about, and it was arithmetic every player did in their head.
     /// </summary>
     public static int ZoneScore(GameState state, Zone zone)
     {
@@ -368,7 +379,7 @@ public static class ScoringEngine
         if (scoring is null) return 0;
 
         return scoring.Type == "grid_values"
-            ? GridZoneScore(state, scoring, zone)
+            ? GridZoneScore(state, scoring, zone, countHidden: false)
             : CardPointValue(state.Definition, zone.Cards.Where(c => c.IsFaceUp));
     }
 
