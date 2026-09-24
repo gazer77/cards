@@ -216,9 +216,23 @@ heuristics, and conservative poker betting; everything else falls through to ran
       - The setup screen offering the seat range for the game rather than a list of
         games that differ only by a number, and the resume list recording which
         configuration a save was written under.
-      - `extends` stays for what it is good at: a genuinely different game built on
-        another (poker-wilds on poker). Configurations are for one game played by a
-        different number of people.
+      - `extends` stays for building one definition on another file; whether it
+        survives at all is worth asking once configurations exist, since poker-wilds
+        on poker is exactly a variant by another route.
+
+      Two ways a configuration gets chosen, and the mechanism wants both:
+      - **Implied by the data** — Euchre. `"when": { "players": 3 }` matches and nobody
+        is asked anything; the player picks Euchre and how many are playing.
+      - **Named and picked** — Poker. Hold'em, Stud and the wild variants share nothing
+        but the umbrella: a deck, a betting vocabulary and the word poker. There is no
+        datum that selects between them, so a configuration may carry a `name` and a
+        `description` and appear in a picker on the setup screen, with one marked
+        default. The same shape serves both — a configuration with a `when` is matched,
+        one with a `name` is offered, and one with both is offered only where it fits.
+
+      What it does to the catalogue: sixteen entries become about thirteen, and the
+      picker stops listing near-duplicates. A save records which configuration it was
+      written under, so resuming a Stud game does not deal Hold'em.
 
       Euchre is the case in hand — see the Euchre section — but Golf's grid size, Hand
       and Foot's pack count and Spades' 3-player variant all want the same thing, and
@@ -345,8 +359,9 @@ heuristics, and conservative poker betting; everything else falls through to ran
       - Blackjack's `allow_split`, `allow_double_down`, `allow_surrender` and
         `blackjack_pays` — four real rules the definition states and the table does not
         offer. Its `roles` block (a dealer seat with fixed rules) is the same story.
-      - `dealer: "random"` on ten games — who deals first. The engine always starts at
-        seat 0 and rotates.
+      - `dealer: "random"` on ten games — a duplicate of `rounds.first_dealer`, which the
+        engine does read and which already defaults to random. These lines should be
+        deleted rather than implemented.
       - `deal.order` and a bidding phase's `order` ("clockwise", "left_of_dealer") —
         descriptive today; the deal and the bidding are both hard-wired to go clockwise
         from the dealer's left.
