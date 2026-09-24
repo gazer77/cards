@@ -118,3 +118,97 @@ public sealed class EuchreTests
         Assert.Same(kitty.TopCard, kitty.Cards.Single(c => c.IsFaceUp));
     }
 }
+
+/// <summary>
+/// What the table offers a player in a trick, and what the gestures do with it.
+/// </summary>
+public sealed class TrickInputTests
+{
+    private sealed class NoSaveStore : ISaveStore
+    {
+        public bool Exists(string key) => false;
+        public void Delete(string key) { }
+        public Task WriteAsync(string key, string contents) => Task.CompletedTask;
+        public Task<string?> ReadAsync(string key) => Task.FromResult<string?>(null);
+    }
+
+    private static async Task<Cards.App.GameTableViewModel> Playing(string game, int seats)
+    {
+        var vm = new Cards.App.GameTableViewModel(
+            new GameLoader(new EmbeddedGameAssetSource()),
+            new Cards.Services.GameSaveService(new NoSaveStore()));
+        vm.TurnPace = 0;
+        vm.MinimumTurnPause = TimeSpan.Zero;
+        await vm.StartAsync(game, seats, resume: false, seed: 8);
+
+        // Wind on to the person's turn to play a card.
+        var state = vm.State!;
+        var logic = vm.Logic!;
+        for (int i = 0; i < 400; i++)
+        {
+            if (state.CurrentPhaseId == "play" && vm.SelectableCardIds.Count > 0) break;
+            if (logic.GetAutoAdvanceDelay(state) is not null) logic.Apply(state, logic.GetAutoAction(state));
+            else
+            {
+                var actions = logic.GetValidActions(state).Where(a => a.Type != "bid_alone").ToList();
+                if (actions.Count > 0) logic.Apply(state, actions[0]);
+                else break;
+            }
+        }
+        return vm;
+    }
+
+    [Fact]
+    public async Task No_button_reads_tap()
+    {
+        // The reported artifact: a trick phase offers the engine an action with no label,
+        // meaning "the table is the affordance". The action bar drew it as a button
+        // reading "tap", which did nothing a player could see.
+        var vm = await Playing("euchre-4p", 4);
+
+        Assert.Contains(vm.Logic!.GetValidActions(vm.State!), a => a.Type == "tap");
+        Assert.DoesNotContain(vm.Actions, a => a.Type == "tap");
+        Assert.All(vm.Actions, a => Assert.NotNull(a.Label));
+    }
+
+    [Fact]
+    public async Task A_double_tap_plays_the_card()
+    {
+        var vm = await Playing("euchre-4p", 4);
+        var state = vm.State!;
+        string me = state.CurrentPlayer.Id;
+
+        string cardId = vm.SelectableCardIds[0];
+        var card = state.Zones[$"hand:{me}"].Cards.First(c => c.Id == cardId);
+
+        var shortcut = vm.Logic!.GetDefaultCardAction(state, card.Id, card.Uid);
+        Assert.NotNull(shortcut);
+        Assert.Equal("play_card", shortcut.Type);
+
+        int before = state.Zones[$"hand:{me}"].Count;
+        await vm.ActivateCard(card.Id, card.Uid);
+
+        // Played, not merely selected. Where it is afterwards depends on how far the
+        // table got — the other seats answer and the trick may already be collected —
+        // so what is asserted is that the card left the hand by one gesture.
+        Assert.DoesNotContain(state.Zones[$"hand:{me}"].Cards, c => c.Uid == card.Uid);
+        Assert.Equal(before - 1, state.Zones[$"hand:{me}"].Count);
+    }
+
+    [Fact]
+    public async Task A_card_the_rules_refuse_stays_put_however_it_is_tapped()
+    {
+        // The shortcut is past the asking, never past the rules: following suit still
+        // applies, so a card that is not on offer does nothing.
+        var vm = await Playing("euchre-4p", 4);
+        var state = vm.State!;
+        string me = state.CurrentPlayer.Id;
+
+        var offered = vm.SelectableCardIds.ToHashSet();
+        var refused = state.Zones[$"hand:{me}"].Cards.FirstOrDefault(c => !offered.Contains(c.Id));
+        if (refused is null) return;   // every card was legal this deal; nothing to prove
+
+        await vm.ActivateCard(refused.Id, refused.Uid);
+        Assert.Contains(state.Zones[$"hand:{me}"].Cards, c => c.Uid == refused.Uid);
+    }
+}

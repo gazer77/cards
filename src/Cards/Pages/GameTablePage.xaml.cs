@@ -862,13 +862,11 @@ public partial class GameTablePage : ContentPage
         ActionButtonsPanel.Children.Clear();
         if (_logic is null || _state is null) return;
 
-        var actions = _logic.GetValidActions(_state);
-
-        // Show buttons for multi-action choices, or for a single "ready" action.
-        // Single "tap" actions are handled by canvas tap, not a button.
-        bool showButtons = actions.Count > 1
-            || (actions.Count == 1 && actions[0].Type == "ready");
-        if (!showButtons) return;
+        // A button per action a player can press. An action with no label is the
+        // engine saying "the table itself is the affordance" — a trick phase waiting for
+        // a card — and drawing it as a button gave the player one reading "tap".
+        var actions = _logic.GetValidActions(_state).Where(a => a.Label is not null).ToList();
+        if (actions.Count == 0) return;
 
         object? primaryStyle = null;
         object? hudStyle     = null;

@@ -89,16 +89,26 @@ public sealed class GameTableViewModel
     public string StatusText =>
         _logic is not null && _state is not null ? _logic.GetStatusText(_state) : string.Empty;
 
+    /// <summary>
+    /// The actions a player can press — every legal action that has a label.
+    ///
+    /// An action with no label is not a button; it is the engine's way of saying "the
+    /// table itself is the affordance", as a trick-taking phase does while it waits for
+    /// a card. One of those reached the action bar and was drawn as a button reading
+    /// "tap", which did nothing a player could see and meant nothing they could read.
+    /// </summary>
     public IReadOnlyList<GameAction> Actions =>
-        _logic is not null && _state is not null ? _logic.GetValidActions(_state) : [];
+        _logic is not null && _state is not null
+            ? _logic.GetValidActions(_state).Where(a => a.Label is not null).ToList()
+            : [];
 
     /// <summary>
     /// Whether the action bar should be shown.
     ///
-    /// Every available action gets a button. A lone action used to get none — it was
-    /// reachable only by tapping bare felt, an affordance nothing on screen mentioned.
-    /// The result was a table saying "Draw a card" with no way to draw one that a
-    /// player could find.
+    /// Every action a player can press gets a button. A lone action used to get none —
+    /// it was reachable only by tapping bare felt, an affordance nothing on screen
+    /// mentioned. The result was a table saying "Draw a card" with no way to draw one
+    /// that a player could find.
     /// </summary>
     public bool ShowActionButtons => Actions.Count > 0;
 

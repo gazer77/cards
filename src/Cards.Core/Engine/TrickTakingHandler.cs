@@ -81,6 +81,16 @@ public sealed class TrickTakingHandler : IPhaseHandler
     public TimeSpan? GetAutoAdvanceDelay(GameState state)
         => IsCollecting(state) ? TimeSpan.FromMilliseconds(1400) : null;
 
+    /// <summary>
+    /// A double tap plays the card. The single tap selects it and a second gesture —
+    /// dropping it on the trick, or tapping the trick — commits; for a player who knows
+    /// which card they want, that second gesture is a step they never needed.
+    /// </summary>
+    public GameAction? DefaultCardAction(GameState state, string cardId, int? uid)
+        => IsCollecting(state) || !IsMyTurn(state)
+            ? null
+            : new GameAction("play_card", CardId: cardId, CardUid: uid);
+
     public IReadOnlyList<string> GetSelectableCardIds(GameState state)
     {
         EnsureInitialized(state);

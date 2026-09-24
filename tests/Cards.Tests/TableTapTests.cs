@@ -61,8 +61,11 @@ public sealed class TableTapTests
         var vm = Vm();
         await vm.StartAsync("war", 2, resume: false, seed: 3);
 
-        var action = Assert.Single(vm.Actions);
+        // Asked of the engine, not the button bar: the bar shows only what can be
+        // pressed, and this action is precisely the one that cannot be.
+        var action = Assert.Single(vm.Logic!.GetValidActions(vm.State!));
         Assert.Null(action.Label);
+        Assert.Empty(vm.Actions);
 
         string before = vm.State!.CurrentPhaseId;
         await vm.TapTable();
