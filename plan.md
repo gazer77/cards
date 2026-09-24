@@ -62,18 +62,12 @@ when they require a phase type that doesn't exist yet.
 - [ ] 2-player
 - [ ] **One Euchre, with a seat count** — the 3- and 4-player games are separate
       definitions because a definition cannot yet say "this rule depends on how many are
-      playing". Euchre changes with the count in ways the vocabulary has no words for:
-      teams at four and none at three, a different deck at two (24 cards down to 24 with
-      a stripped kitty, or 32 at six), `loner_skips_partner` where there is a partner,
-      and scoring that pays the makers differently. `extends` + `overrides` gets one file
-      out of another, which is why euchre-3p is eight lines, but the player still picks
-      between two entries in the list rather than picking Euchre and then a number.
-      What this needs: definition values that may vary by seat count — an object keyed by
-      count beside the plain value, resolved once when the game is dealt — after which
-      euchre-4p and euchre-3p become one file, the setup screen offers 2 to 6, and the
-      rules that change with the count are written where the rule is rather than in a
-      second copy of the game. Also the honest home for 2-player Euchre, below.
-- [ ] **Euchre's shape in the engine** — no game has a logic class any more
+      playing": teams at four and none at three, a different deck at two, and scoring
+      that pays the makers differently. `extends` + `overrides` gets one file out of
+      another — which is why `euchre-3p.json` is eight lines — but a player still picks
+      between two entries in the list instead of picking Euchre and then a number.
+      Needs **One game, several configurations** under Definitions; this is its first
+      case, and 2-player Euchre above is the second.
       (`LogicRegistry` is empty and every definition runs on `DefaultGameLogic`), but
       Euchre is the game the shared engine knows most about by name, and some of it is a
       game hiding in the vocabulary rather than vocabulary a game uses:
@@ -189,6 +183,46 @@ heuristics, and conservative poker betting; everything else falls through to ran
       at all and should adopt `SettingsService.GetHandSort` when it moves onto
       `GameTableViewModel`.
 
+
+### Definitions
+- [ ] **One game, several configurations** — a definition should carry what is common
+      (name, help, tags, artwork, the shape of the game) once, and then the parts that
+      differ by what is known at setup — the player count first, and later the enabled
+      house rules or the chosen deck. Today those are separate games: `euchre-4p` and
+      `euchre-3p` are two entries in the picker for one game, and a player chooses
+      between them instead of choosing Euchre and then how many are playing.
+
+      A sketch of the shape, to be argued with when it is picked up:
+
+      ```json
+      "name": "Euchre",
+      "players": { "min": 2, "max": 6 },
+      "configurations": [
+        { "when": { "players": 4 }, "teams": { "count": 2, "size": 2 },
+          "scoring": { "makers_win": { "tricks_3_or_4": 1, "tricks_5": 2 } } },
+        { "when": { "players": 3 }, "teams": false,
+          "scoring": { "makers_win": { "tricks_3_to_5": 1 } },
+          "play": { "loner_skips_partner": false } }
+      ]
+      ```
+
+      What it needs, roughly in order:
+      - Resolution: the matching configurations merge onto the common part once, when
+        the game is dealt, using the patch rules `overrides` already has. Most specific
+        match wins; no match is a definition error rather than a silent default.
+      - Validation of every configuration at load, not only of the one a given table
+        picks — a definition whose 6-player rules are malformed should fail when it is
+        written, not when six people finally sit down.
+      - The setup screen offering the seat range for the game rather than a list of
+        games that differ only by a number, and the resume list recording which
+        configuration a save was written under.
+      - `extends` stays for what it is good at: a genuinely different game built on
+        another (poker-wilds on poker). Configurations are for one game played by a
+        different number of people.
+
+      Euchre is the case in hand — see the Euchre section — but Golf's grid size, Hand
+      and Foot's pack count and Spades' 3-player variant all want the same thing, and
+      each is currently either a tier table or a second file.
 ### Learning & Rules
 - [x] Rules reference for every game — `HelpPage` + `games/help/*.md`
       (gap: `high-card.json` has no help file)
