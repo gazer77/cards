@@ -111,5 +111,4 @@ public static class TableHubContract
     // Server → client
     public const string RoomChanged = nameof(RoomChanged);
     public const string ViewChanged = nameof(ViewChanged);
-    public const string Refused     = nameof(Refused);
 }

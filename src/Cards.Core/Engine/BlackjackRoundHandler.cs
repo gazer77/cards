@@ -472,7 +472,7 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
                 "{player}: second hand {value}  |  Dealer shows: {dealer}",
                 seat, ("value", pv), ("dealer", dv))
             : GameText.Message(state, "blackjack_hand",
-                "You: {value}  |  Dealer shows: {dealer}", values: [("value", pv), ("dealer", dv)]);
+                "{player}: {value}  |  Dealer shows: {dealer}", seat, ("value", pv), ("dealer", dv));
         state.Metadata.Remove("sub");
     }
 

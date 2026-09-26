@@ -17,4 +17,9 @@
     <ProjectReference Include="..\Cards.Core\Cards.Core.csproj" />
   </ItemGroup>
 
+  <!-- Shared tables: one client for the browser and the phone. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0" />
+  </ItemGroup>
+
 </Project>

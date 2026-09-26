@@ -1,0 +1,148 @@
+@page "/room/{Code}"
+@inject Cards.App.TableConnection Table
+@inject NavigationManager Nav
+@inject Cards.Services.SettingsService Settings
+@implements IDisposable
+
+@*
+    A shared table before the deal: who is sitting where, the code to pass on, and —
+    for the host — the button that deals. Seats nobody takes are played by the computer.
+    Coming back here with a seat already held (a reload, a phone that slept) sits you
+    straight back down.
+*@
+
+<PageTitle>Table @Code</PageTitle>
+
+<div class="setup">
+    <button class="link" @onclick="LeaveAsync">&larr; Leave</button>
+
+    @if (_error is not null)
+    {
+        <p class="error">@_error</p>
+        <button class="action" @onclick="@(() => Nav.NavigateTo("/"))">Back to games</button>
+    }
+    else if (_joining)
+    {
+        <h1>Join table @Code</h1>
+        <section class="setup-block">
+            <h2>Your name</h2>
+            <form class="join" @onsubmit="JoinAsync">
+                <input class="join-name" maxlength="24" @bind="_name" @bind:event="oninput" />
+                <button class="action primary" type="submit" disabled="@(_busy || _name.Trim().Length == 0)">Sit down</button>
+            </form>
+        </section>
+    }
+    else if (Table.Room is not { } room)
+    {
+        <p class="muted">Finding the table…</p>
+    }
+    else
+    {
+        <h1>@room.GameName</h1>
+        <p class="tagline">
+            @room.PlayerCount seats@(room.Configuration is { Length: > 0 } c ? $" · {c}" : "")@(room.EnabledRules.Count > 0 ? $" · {room.EnabledRules.Count} house rule{(room.EnabledRules.Count == 1 ? "" : "s")}" : "")
+        </p>
+
+        <section class="setup-block">
+            <h2>Table code</h2>
+            <p class="room-code">@room.Code</p>
+            <p class="muted">Friends enter this on the home page, or open <span class="share">@ShareLink</span></p>
+        </section>
+
+        <section class="setup-block">
+            <h2>Seats</h2>
+            @foreach (var seat in room.Seats)
+            {
+                <div class="seat-row @(seat.Id == Table.Ticket?.SeatId ? "me" : "")">
+                    <span class="seat-dot @(seat.Name is null ? "open" : seat.IsConnected ? "on" : "away")"></span>
+                    <span>@(seat.Name ?? "Open — the computer plays if nobody sits here")</span>
+                    @if (seat.Id == Table.Ticket?.SeatId) { <span class="muted"> (you)</span> }
+                    @if (seat.Id == room.HostSeatId) { <span class="muted"> · host</span> }
+                </div>
+            }
+        </section>
+
+        @if (Table.Ticket?.SeatId == room.HostSeatId)
+        {
+            <button class="start" disabled="@_busy" @onclick="StartAsync">Deal</button>
+        }
+        else
+        {
+            <p class="muted">Waiting for @(room.Seats.FirstOrDefault(s => s.Id == room.HostSeatId)?.Name ?? "the host") to deal.</p>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public string Code { get; set; } = "";
+
+    private bool    _joining;
+    private bool    _busy;
+    private string  _name = "";
+    private string? _error;
+
+    private string ShareLink => $"{Nav.BaseUri}room/{Code.ToUpperInvariant()}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Table.RoomChanged += OnRoomChanged;
+        _name = Settings.PlayerName;
+
+        try
+        {
+            // Already sitting here? Straight back to the seat.
+            if (await Table.ResumeAsync(Code)) { FollowRoom(); return; }
+            _joining = true;
+        }
+        catch (Exception ex)
+        {
+            _error = Cards.App.TableErrors.Describe(ex);
+        }
+    }
+
+    private async Task JoinAsync()
+    {
+        _busy = true;
+        try
+        {
+            Settings.PlayerName = _name.Trim();
+            await Table.JoinAsync(Code, _name.Trim());
+            _joining = false;
+            FollowRoom();
+        }
+        catch (Exception ex)
+        {
+            _error = Cards.App.TableErrors.Describe(ex);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task StartAsync()
+    {
+        _busy = true;
+        try { await Table.StartAsync(); }
+        catch (Exception ex) { _error = Cards.App.TableErrors.Describe(ex); }
+        finally { _busy = false; }
+    }
+
+    private async Task LeaveAsync()
+    {
+        await Table.LeaveAsync();
+        Nav.NavigateTo("/");
+    }
+
+    private void OnRoomChanged()
+    {
+        FollowRoom();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Once the cards are dealt, everyone goes to the table.</summary>
+    private void FollowRoom()
+    {
+        if (Table.Room is { Started: true } room && Table.Ticket is not null)
+            Nav.NavigateTo($"/table/{room.Code}");
+    }
+
+    public void Dispose() => Table.RoomChanged -= OnRoomChanged;
+}

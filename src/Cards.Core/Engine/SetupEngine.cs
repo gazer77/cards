@@ -39,7 +39,8 @@ public sealed class SetupEngine : ISetupStrategy
         for (int i = 0; i < playerCount; i++)
         {
             string id   = $"player{i}";
-            string name = names is not null && i < names.Count ? names[i] : $"Player {i + 1}";
+            string name = state.SeatNames is { } seated && i < seated.Count && seated[i] is { Length: > 0 } person ? person
+                        : names is not null && i < names.Count ? names[i] : $"Player {i + 1}";
             state.Players.Add(new Player(id, name));
             if (startScore > 0) state.Scores[id] = startScore;
         }

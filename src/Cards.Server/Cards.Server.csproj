@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- The shared-table server: rooms, seats, and the one copy of each game's state.
+       It also serves the web client, so a browser reaches the table and the hub at one
+       address and there is a single thing to run. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Cards.Server</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cards.Core\Cards.Core.csproj" />
+    <ProjectReference Include="..\Cards.Web\Cards.Web.csproj" />
+  </ItemGroup>
+
+</Project>

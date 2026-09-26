@@ -9,6 +9,15 @@
         <h1>Cards</h1>
         <button class="link" @onclick="@(() => Nav.NavigateTo("/settings"))">Settings</button>
     </div>
+
+    @* A friend's table: their code is all it takes. Opening one of your own starts
+       from a game's setup page, where the seats and rules are chosen. *@
+    <form class="join" @onsubmit="Join">
+        <input class="join-code" placeholder="Table code" maxlength="5" autocapitalize="characters"
+               @bind="_code" @bind:event="oninput" />
+        <button class="action primary" type="submit" disabled="@(_code.Trim().Length != 5)">Join a table</button>
+    </form>
+
     <p class="tagline">Pick a game.</p>
 
     @if (_games is null)
@@ -31,10 +40,17 @@
 
 @code {
     private List<Cards.Models.GameDefinition>? _games;
+    private string _code = "";
 
     protected override async Task OnInitializedAsync()
         => _games = await Loader.LoadAllAsync();
 
     private void Play(Cards.Models.GameDefinition game)
         => Nav.NavigateTo($"/setup/{game.Id}");
+
+    private void Join()
+    {
+        if (_code.Trim().Length == 5)
+            Nav.NavigateTo($"/room/{_code.Trim().ToUpperInvariant()}");
+    }
 }

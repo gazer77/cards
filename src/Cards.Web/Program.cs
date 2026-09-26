@@ -29,6 +29,18 @@ builder.Services.AddSingleton<GameSaveService>();
 builder.Services.AddSingleton<HelpService>();
 builder.Services.AddTransient<GameTableViewModel>();
 
+// Shared tables. The table server also serves this app, so its hub is at the address the
+// page came from; "TableServer" in wwwroot/appsettings.json points elsewhere when the
+// app is run on its own (the dev server) against a server running separately.
+builder.Services.AddSingleton(sp =>
+{
+    var server = builder.Configuration["TableServer"] is { Length: > 0 } configured
+        ? new Uri(configured)
+        : new Uri(builder.HostEnvironment.BaseAddress);
+    return new TableConnection(new Uri(server, Cards.Engine.Shared.TableHubContract.Path.TrimStart('/')),
+                               sp.GetRequiredService<ISettingsStore>());
+});
+
 var host = builder.Build();
 
 // localStorage is async but the settings and save surfaces are synchronous, so both

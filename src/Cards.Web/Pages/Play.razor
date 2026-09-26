@@ -1,5 +1,8 @@
 @page "/play/{GameId}/{Seats:int}"
+@page "/table/{Room}"
 @inject GameTableViewModel Vm
+@inject GameLoader Loader
+@inject Cards.App.TableConnection Table
 @inject NavigationManager Nav
 @inject Cards.Services.SettingsService Settings
 @inject Cards.Services.HelpService Help
@@ -62,7 +65,10 @@
             <hr />
             <button class="menu-item" @onclick="ShowLog">Game log</button>
             <button class="menu-item" @onclick="ShowRules">Rules</button>
-            <button class="menu-item" @onclick="ConfirmNewGame">New game</button>
+            @if (!Vm.IsShared)
+            {
+                <button class="menu-item" @onclick="ConfirmNewGame">New game</button>
+            }
             <button class="menu-item" @onclick="ConfirmLeave">Leave game</button>
         </nav>
     }
@@ -126,7 +132,10 @@
                    is most of the point in a game decided by what everyone was holding. *@
                 <button class="action" @onclick="() => _gameOverDismissed = true">View table</button>
                 <button class="action" @onclick="GoHome">Games</button>
-                <button class="action primary" @onclick="NewGame">Play again</button>
+                @if (!Vm.IsShared)
+                {
+                    <button class="action primary" @onclick="NewGame">Play again</button>
+                }
             </div>
         </section>
     }
@@ -159,7 +168,11 @@
                          CardDropped="OnCardDropped"
                          CardReordered="OnCardReordered" />
 
-        <div class="status" style="font-size: @StatusFontSize">@Vm.StatusText</div>
+        @if (_offline)
+        {
+            <div class="notice">Connection lost — reconnecting…</div>
+        }
+        <div class="status" style="font-size: @StatusFontSize">@(_notice ?? Vm.StatusText)</div>
 
         <div class="action-bar">
             @if (Vm.ShowActionButtons)
@@ -180,6 +193,9 @@
 @code {
     [Parameter] public string GameId { get; set; } = string.Empty;
     [Parameter] public int Seats { get; set; }
+
+    /// <summary>A shared table's code, when this page is one seat at it.</summary>
+    [Parameter] public string? Room { get; set; }
 
     /// <summary>Comma-separated house rule ids, as chosen on the setup page.</summary>
     [Parameter, SupplyParameterFromQuery(Name = "rules")]
@@ -270,6 +286,12 @@
 
         PushToCanvas();
 
+        if (Room is not null)
+        {
+            await JoinSharedTableAsync();
+            return;
+        }
+
         // The sort travels WITH the start, so the deal flies cards straight to their
         // sorted slots. Sorting afterwards dealt in shuffle order and then snapped the
         // hand into place â the table visibly rearranging itself the moment it settled.
@@ -282,6 +304,78 @@
         _sortModes  = Vm.SortModes;
         _sort       = Vm.ActiveSortMode;   // reflects the definition's default if we passed none
         StateHasChanged();
+    }
+
+    // ── Shared table ───────────────────────────────────────────────────────────
+
+    /// <summary>Set briefly when the table refuses a move, in place of the status line.</summary>
+    private string? _notice;
+    private bool    _offline;
+    private bool    _sharedStarted;
+
+    /// <summary>
+    /// Sits back down at the shared table and draws whatever the server shows this seat.
+    /// Without a seat held here, the lobby is where one is taken.
+    /// </summary>
+    private async Task JoinSharedTableAsync()
+    {
+        Table.ViewChanged       += OnSharedView;
+        Table.Refused           += OnRefused;
+        Table.ConnectionChanged += OnConnectionChanged;
+
+        try
+        {
+            if (!await Table.ResumeAsync(Room!))
+            {
+                Nav.NavigateTo($"/room/{Room}");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _notice = Cards.App.TableErrors.Describe(ex);
+            StateHasChanged();
+            return;
+        }
+
+        if (Table.View is { } view) await ShowSharedAsync(view);
+    }
+
+    private void OnSharedView(Cards.Engine.Shared.TableView view)
+        => _ = InvokeAsync(() => ShowSharedAsync(view));
+
+    private async Task ShowSharedAsync(Cards.Engine.Shared.TableView view)
+    {
+        var definition = await Loader.LoadAsync(view.GameId);
+        if (definition is null) { _failed = true; StateHasChanged(); return; }
+
+        if (!_sharedStarted)
+        {
+            // What the rest of the page knows the game by — rules, sort, the report.
+            _sharedStarted = true;
+            GameId = view.GameId;
+            Seats  = view.PlayerCount;
+            _title = definition.Name;
+            _sort  = Settings.GetHandSort(GameId) ?? Settings.DefaultHandSort ?? definition.Ui?.DefaultSort;
+            Vm.ActiveSortMode = _sort;
+        }
+
+        _notice = null;
+        await Vm.ShowSharedViewAsync(view, definition, Table.ActAsync);
+        _sortModes = Vm.SortModes;
+        StateHasChanged();
+    }
+
+    private void OnRefused(string why)
+    {
+        _notice = why;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void OnConnectionChanged(bool connected)
+    {
+        _offline = !connected;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void PushToCanvas()
@@ -468,8 +562,14 @@
         if (Vm.IsGameOver) { LeaveGame(); return; }
 
         _confirmTitle   = "Leave game";
-        _confirmMessage = "Leave this game? Your progress is saved and you can resume it later.";
         _confirmVerb    = "Leave";
+        if (Vm.IsShared)
+        {
+            _confirmMessage = "Leave this table? The computer will play your seat for the others.";
+            _confirm        = LeaveSharedTableAsync;
+            return;
+        }
+        _confirmMessage = "Leave this game? Your progress is saved and you can resume it later.";
         _confirm        = () => { LeaveGame(); return Task.CompletedTask; };
     }
 
@@ -503,8 +603,23 @@
                             configuration: Variant);
     }
 
+    private async Task LeaveSharedTableAsync()
+    {
+        await Table.LeaveAsync();
+        Nav.NavigateTo("/");
+    }
+
     private async Task GoHome()
     {
+        // Walking away from a shared table mid-game leaves the others waiting on this
+        // seat, so it is asked about; a finished one is simply left.
+        if (Vm.IsShared)
+        {
+            if (Vm.IsGameOver) await LeaveSharedTableAsync();
+            else ConfirmLeave();
+            return;
+        }
+
         // A finished game has nothing worth resuming, and saving it would leave a dead
         // row in the resume list that the player has to clear themselves.
         if (!Vm.IsGameOver) await Vm.SaveAsync();
@@ -517,5 +632,8 @@
     {
         Vm.Changed       -= OnVmChanged;
         Vm.MessagePosted -= OnMessagePosted;
+        Table.ViewChanged       -= OnSharedView;
+        Table.Refused           -= OnRefused;
+        Table.ConnectionChanged -= OnConnectionChanged;
     }
 }

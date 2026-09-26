@@ -2,6 +2,8 @@
 @inject GameLoader Loader
 @inject NavigationManager Nav
 @inject Cards.Services.GameSaveService Saves
+@inject Cards.App.TableConnection Table
+@inject Cards.Services.SettingsService Settings
 
 @*
     Table setup: seat count and house rules, matching what the mobile app offers before
@@ -103,6 +105,16 @@ else
         }
 
         <button class="start" @onclick="Start">Start game</button>
+
+        @* A shared table: the same choices, played with other people. Seats nobody
+           takes are played by the computer when the host deals. *@
+        <button class="start secondary" disabled="@_opening" @onclick="PlayWithFriends">
+            @(_opening ? "Opening a table…" : "Play with friends")
+        </button>
+        @if (_onlineError is not null)
+        {
+            <p class="error">@_onlineError</p>
+        }
     </div>
 }
 
@@ -186,6 +198,28 @@ else
     {
         await Saves.DeleteAsync(slot.Id);
         _saved = Saves.SavesFor(GameId).ToList();
+    }
+
+    private bool    _opening;
+    private string? _onlineError;
+
+    private async Task PlayWithFriends()
+    {
+        _opening     = true;
+        _onlineError = null;
+        try
+        {
+            var enabled = _rules.Where(r => r.IsEnabled).Select(r => r.Id).ToList();
+            string? variant = _variant is { Length: > 0 } && _variants.Count > 1 ? _variant : null;
+
+            var ticket = await Table.CreateAsync(GameId, _players, enabled, variant, Settings.PlayerName);
+            Nav.NavigateTo($"/room/{ticket.Code}");
+        }
+        catch (Exception ex)
+        {
+            _onlineError = TableErrors.Describe(ex);
+        }
+        finally { _opening = false; }
     }
 
     private void Start()

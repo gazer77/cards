@@ -1,4 +1,6 @@
 using Cards.Engine;
+using Cards.Engine.Shared;
+using Cards.Models;
 using Cards.Services;
 
 namespace Cards.App;
@@ -365,6 +367,78 @@ public sealed class GameTableViewModel
         return true;
     }
 
+    // ── Shared tables ─────────────────────────────────────────────────────────
+
+    /// <summary>Whether this table is one seat at a shared game, drawn from the server's views.</summary>
+    public bool IsShared => _logic is RemoteGameLogic;
+
+    /// <summary>The seat this screen is sitting in.</summary>
+    public string? ViewerId => _state?.Viewer;
+
+    private readonly SemaphoreSlim _viewGate = new(1, 1);
+
+    /// <summary>
+    /// Shows a seat's view of a shared game, animating from the last one.
+    ///
+    /// Everything else stays as a local game has it — the same taps, buttons, sort and
+    /// bubbles — because the view is turned back into an ordinary table and the rules
+    /// are answered from it (<see cref="RemoteGameLogic"/>). Views are shown one at a
+    /// time and in order; one older than what is showing is dropped.
+    /// </summary>
+    public async Task ShowSharedViewAsync(TableView view, GameDefinition definition, Func<GameAction, Task> send)
+    {
+        await _viewGate.WaitAsync();
+        try
+        {
+            if (_logic is RemoteGameLogic current && view.Version <= current.View.Version) return;
+
+            var previous = IsShared ? _state : null;
+            string? acting = previous is { Players.Count: > 0 } ? previous.CurrentPlayer.Id : null;
+
+            var state = TableProjection.ToState(view, definition);
+            if (previous is not null)
+            {
+                KeepHandOrder(previous, state);
+                _animator.CaptureBeforeMove(previous);
+            }
+            else
+            {
+                ActiveSortMode ??= definition.Ui?.DefaultSort;
+                _lastLoggedStatus = string.Empty;
+            }
+
+            _state        = state;
+            _logic        = new RemoteGameLogic(view, send);
+            _playerCount  = view.PlayerCount;
+            _enabledRules = view.EnabledRules;
+            SlotId        = null;
+
+            MaintainSort();
+            CaptureStatusChange(acting);
+            Changed?.Invoke();
+
+            if (previous is not null) await _animator.PlayMoveAsync(state);
+        }
+        finally { _viewGate.Release(); }
+    }
+
+    /// <summary>
+    /// Keeps the viewer's own hand in the order they left it. A new view arrives in the
+    /// game's order after every move, which would undo any arranging by hand.
+    /// </summary>
+    private static void KeepHandOrder(GameState before, GameState after)
+    {
+        foreach (var (id, zone) in after.Zones)
+        {
+            if (zone.Type != "hand" || zone.OwnerId != after.Viewer) continue;
+            if (!before.Zones.TryGetValue(id, out var old)) continue;
+
+            var place = new Dictionary<int, int>();
+            for (int i = 0; i < old.Cards.Count; i++) place.TryAdd(old.Cards[i].Uid, i);
+            zone.Reorder(zone.Cards.OrderBy(c => place.TryGetValue(c.Uid, out var i) ? i : int.MaxValue).ToList());
+        }
+    }
+
     /// <summary>
     /// The save this game occupies, or null until it has been saved once.
     ///
@@ -375,7 +449,8 @@ public sealed class GameTableViewModel
 
     public async Task SaveAsync()
     {
-        if (_state is null) return;
+        // A shared game lives on the server; there is nothing here to save.
+        if (_state is null || IsShared) return;
         SlotId = await _saves.SaveAsync(_state, _playerCount, _enabledRules, SlotId);
     }
 
@@ -592,10 +667,20 @@ public sealed class GameTableViewModel
     }
 
     private bool CanAcceptInput()
-        => _state is not null && _logic is not null && !_isAutoAdvancing && !IsGameOver;
+        => _state is not null && _logic is not null && !_isAutoAdvancing && !IsGameOver
+        // At a shared table the server is playing its own turns; the seat waits.
+        && _logic is not RemoteGameLogic { View.IsBusy: true };
 
     private async Task ApplyAsync(GameAction action)
     {
+        // A shared table sends the move and waits to be shown what happened: the server
+        // applies it, and its next view is the only way the table changes.
+        if (_logic is RemoteGameLogic)
+        {
+            _logic.Apply(_state!, action);
+            return;
+        }
+
         await ApplyAnimatedAsync(action);
         await RunAutoAdvanceLoopAsync();
     }

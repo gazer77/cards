@@ -1081,7 +1081,7 @@ name a player) addresses the person at this screen.
 | `added_to_meld` | Added to meld. |
 | `ask_confirm` | Ask {opponent} for {rank}? |
 | `ask_hit` | Got {count} {rank} from {opponent}!{books} Go again. |
-| `blackjack_hand` | You: {value}  \|  Dealer shows: {dealer} |
+| `blackjack_hand` | {player}: {value}  \|  Dealer shows: {dealer} |
 | `book_complete` | 1 book complete! |
 | `books_complete` | {count} books complete! |
 | `books_tally` | (Books — You: {mine} | {opponent}: {theirs}) |

@@ -110,6 +110,25 @@ public sealed class SharedTableTests
     }
 
     [Fact]
+    public void A_card_drawn_off_the_deck_is_named_only_to_the_player_who_drew_it()
+    {
+        var (state, logic) = Table("golf", 2);
+        // Past the peeks, to an ordinary turn — the computer taking every seat to get there.
+        state.PlayerAgents["player0"] = new SmartDefaultAiAgent("player0", state.Rng);
+        for (int i = 0; i < 50 && logic.GetValidActions(state).All(a => a.Type != "draw_from_deck"); i++)
+            logic.Apply(state, logic.GetAutoAction(state));
+        string drawer = state.CurrentPlayer.Id;
+        string other  = state.Players.First(p => p.Id != drawer).Id;
+        state.PlayerAgents.Remove(drawer);
+
+        logic.Apply(state, new GameAction("draw_from_deck"));
+        Assert.True(state.Metadata.ContainsKey("dd_drawn_card"));
+
+        Assert.True(View(state, logic, drawer).State.Metadata.ContainsKey("dd_drawn_card"));
+        Assert.False(View(state, logic, other).State.Metadata.ContainsKey("dd_drawn_card"));
+    }
+
+    [Fact]
     public void Nobody_sees_into_the_deck()
     {
         var (state, logic) = Table("hearts", 4);

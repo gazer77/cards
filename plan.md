@@ -14,8 +14,9 @@ If a game is played with cards, this app should have it.
 - **Framework:** .NET MAUI (C#) — Android-first, iOS-ready when a Mac is available
 - **Game Table Rendering:** SkiaSharp canvas (`Views/GameTableView.cs`) — MonoGame was not needed
 - **App UI (menus, settings, rules):** MAUI widgets + XAML pages
-- **Multiplayer Backend:** raw TCP with length-prefixed message framing
-  (`Networking/TcpTransport.cs`) plus room codes — **not** SignalR; see Phase 5
+- **Multiplayer Backend:** a SignalR table server (`src/Cards.Server`) that runs the game
+  and sends each seat its own view; see Phase 5 and `docs/shared-tables.md`. The older
+  peer-hosted TCP path (`Networking/TcpTransport.cs`) remains in the phone app for now
 - **Local/Offline Multiplayer:** not started
 
 ---
@@ -88,7 +89,7 @@ when they require a phase type that doesn't exist yet.
 ## Features
 
 ### Multiplayer
-- Internet: friends-only via shareable room codes — *partially built* (see Phase 5)
+- Internet / LAN: friends-only via five-letter table codes — **working on the web** (see Phase 5)
 - Local Network (LAN): TCP transport exists, **no discovery** — host IP must be known
 - Local Offline: Bluetooth / Wi-Fi Direct — not started
 
@@ -126,13 +127,12 @@ heuristics, and conservative poker betting; everything else falls through to ran
       seat count and house rules it was written at, listed for resuming on the setup
       screen. Replaces one-slot-per-game, which let a four-player save load into a
       two-player game and strand cards in hands nobody could reach
-- [ ] **Save and resume multiplayer games** — deliberately not attempted yet. Saving is
-      only the visible part: a resumed multiplayer game has to re-establish who was in
-      which seat, agree with peers on which save is authoritative, and handle players
-      who do not come back. That needs stable seat identity and reconnect, which are
-      Phase 3 of the web plan and do not exist yet. `SaveSlot` and `GameSaveService`
-      are shaped so a multiplayer save is another slot with roster and room information
-      attached, not a second mechanism. **Blocked on Phase 3.**
+- [ ] **Save and resume multiplayer games** — now unblocked. Seats have stable identity
+      (a token per seat) and reconnect works, and the server holds the only copy of a
+      game, so "which save is authoritative" has one answer. What remains: the server
+      writing rooms to disk (the save shape plus the roster and tokens) so a restart
+      does not end every game, and a way for the host to reopen one later with the same
+      people.
 - [x] Hand sort remembered per game — the web client stores the player's choice under
       `sort:{gameId}` and reapplies it each deal; "Free" is remembered too, so a
       hand arranged by hand is not re-sorted underneath the player
@@ -279,13 +279,35 @@ heuristics, and conservative poker betting; everything else falls through to ran
 - [x] Hand and Foot
 - [x] Golf
 
-### Phase 5 — Multiplayer — **scaffolded, not finished**
-- [ ] SignalR game server (ASP.NET Core) — **direction changed**: `GameServer`/`GameClient`
-      run peer-hosted over `TcpTransport` with `RoomCode`, heartbeats, and disconnect
-      broadcast. No hosted server, so no NAT traversal for internet play.
-- [ ] Internet multiplayer — lobby create/join UI and state sync exist; late-join/reconnect
-      state-sync messages are defined but the reconnect path is not driven end to end
-- [ ] LAN multiplayer: mDNS device discovery — **not built**; only a `GetLocalIp()` helper
+### Phase 5 — Multiplayer — **web shared tables working; phone and polish to come**
+See `docs/shared-tables.md`.
+- [x] SignalR table server (`src/Cards.Server`, ASP.NET Core) — server-authoritative: the
+      game runs only on the server, which checks every move against the seat
+      (`SeatGate`) and sends each seat its own view (`TableProjection`) with the cards it
+      could not see replaced by aliased backs. Serves the web app too; runs on your own
+      hardware on port 5280. Rooms by five-letter code, seats held by a device token so a
+      reload or a sleeping phone rejoins the same chair. Computer players take open seats
+      and the seats of anyone who leaves.
+- [x] Seat-relative table — every seat sits at the bottom of its own screen, reads the
+      table's lines as addressed to it ("Your turn"), and sees its own row on the score
+      card (`GameState.ViewerId`, `GameText.Render`/`PerViewer`).
+- [x] Web client — Play with friends from setup, join by code from home, lobby with
+      seats and Deal, the table driven by server views through the same view model and
+      gestures as a local game (`RemoteGameLogic`, `TableConnection`).
+- [ ] **Phone app on shared tables** — `TableConnection` lives in `Cards.App` and the SignalR
+      client runs on MAUI; the MAUI pages need the lobby and the view-driven table. The old
+      peer-hosted `GameServer`/`GameClient` over `TcpTransport` should then be retired.
+- [ ] **Go Fish at a shared table** — its handler is one person against the computer
+      (`SharedTableReady` false); it needs symmetric turns.
+- [ ] **A dropped player's turn** — the table waits for them indefinitely; hand the seat to
+      the computer after a timeout, and back when they return.
+- [ ] **Simultaneous choices** — phases where everyone decides at once (Hearts' pass) run
+      seat by seat today; at a shared table they could run together.
+- [ ] **Private notes in state** — the projection strips the notes it knows name a card
+      only the actor has seen (`selected_card`, `dd_drawn_card`); new handler notes need
+      the same care, and an audit that fails on a card id in metadata would enforce it.
+- [ ] LAN multiplayer: mDNS device discovery — **not built**; with the server on the LAN,
+      discovery would find it rather than a peer host
 - [ ] Offline local multiplayer: Bluetooth / Wi-Fi Direct
 - [ ] Player profiles — only a player-name string in `SettingsService`; no avatar
 

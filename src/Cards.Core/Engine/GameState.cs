@@ -99,6 +99,15 @@ public class GameState
     public List<(string PlayerId, string Text)> Announcements { get; } = [];
 
     /// <summary>
+    /// The names of the people at a shared table, by seat, set before the deal. They
+    /// override the definition's seat names because the table writes names into its
+    /// lines from the first deal on, and renaming afterwards would leave "West's turn"
+    /// in the log for a seat Ana is sitting in. Null for a single-player table.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<string?>? SeatNames { get; set; }
+
+    /// <summary>
     /// Whose eyes the table is drawn for. Null means seat 0 — the person at a
     /// single-player screen. A view built for one seat of a shared game sets it, and
     /// everything that means "you" (the bottom of the table, which hand is face up,

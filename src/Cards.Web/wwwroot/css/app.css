@@ -506,3 +506,75 @@ html, body {
 /* Settings: one row of sizes per element, label left, choices right. */
 .size-row { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
 .size-label { min-width: 8rem; color: var(--ink-dim); }
+
+/* ── Shared tables ───────────────────────────────────────────────────────── */
+
+.join {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1.25rem 0 0.5rem;
+    flex-wrap: wrap;
+}
+
+.join input {
+    flex: 1 1 10rem;
+    min-width: 0;
+    padding: 0.55rem 0.8rem;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid #ffffff30;
+    border-radius: 0.45rem;
+    font: inherit;
+}
+
+.join-code {
+    max-width: 12rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+}
+
+.action:disabled { opacity: 0.5; cursor: default; }
+
+.start.secondary {
+    margin-top: 0.75rem;
+    background: var(--surface-mid);
+    border: 1px solid #ffffff24;
+}
+.start.secondary:hover { background: #2d3f35; }
+.start:disabled { opacity: 0.6; cursor: default; }
+
+.room-code {
+    margin: 0.25rem 0;
+    font-size: 2.5rem;
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    color: var(--gold);
+}
+
+.share { word-break: break-all; color: var(--ink); }
+
+.seat-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0;
+    border-bottom: 1px solid #ffffff14;
+}
+.seat-row.me { font-weight: 600; }
+
+.seat-dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    flex: 0 0 auto;
+}
+.seat-dot.on   { background: #6fd18f; }
+.seat-dot.away { background: #d1a36f; }
+.seat-dot.open { background: transparent; border: 1px solid var(--ink-dim); }
+
+.notice {
+    padding: 0.35rem 1rem;
+    text-align: center;
+    background: #5a3d12;
+    color: var(--ink);
+}

@@ -19,7 +19,7 @@ public static class SeatGate
     /// and only when the rules are offering it.
     /// </summary>
     public static bool IsTableGesture(GameAction action)
-        => action.Type is "tap" or "ready" && action.Label is null;
+        => action.Type is "tap" or "ready";
 
     public static bool Allows(GameState state, IGameLogic logic, string seatId, GameAction action, out string? reason)
     {
@@ -33,8 +33,7 @@ public static class SeatGate
 
         if (action.Type is "tap" or "ready")
         {
-            if (valid.Any(a => a.Type == action.Type && (IsTableGesture(a) || state.CurrentPlayer.Id == seatId)))
-                return true;
+            if (valid.Any(a => a.Type == action.Type)) return true;
             reason = "Nothing to continue.";
             return false;
         }

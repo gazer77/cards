@@ -50,7 +50,8 @@ public static class TableProjection
         bool gameOver = logic.IsGameOver(state);
         bool acting   = !gameOver && state.Players.Count > 0 && state.CurrentPlayer.Id == viewerId
                      && !state.PlayerAgents.ContainsKey(viewerId);
-        if (!acting) snap.Metadata.Remove("selected_card");
+        if (!acting)
+            foreach (var key in PrivateToActor) snap.Metadata.Remove(key);
 
         var view = new TableView
         {
@@ -102,6 +103,12 @@ public static class TableProjection
 
         return view;
     }
+
+    /// <summary>
+    /// Notes the rules keep about the seat to act that name a card only that seat has
+    /// seen: what it is picking, and the card it just drew off the deck.
+    /// </summary>
+    private static readonly string[] PrivateToActor = ["selected_card", "dd_drawn_card"];
 
     /// <summary>
     /// Whether <paramref name="viewerId"/> may see this card's face. Mirrors how the
