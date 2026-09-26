@@ -48,6 +48,9 @@ if (allowedOrigins.Length > 0) app.UseCors();
 
 if (serveWebClient)
 {
+    // Breakpoints in the web app's own code, when Visual Studio launches the server.
+    if (app.Environment.IsDevelopment()) app.UseWebAssemblyDebugging();
+
     app.UseBlazorFrameworkFiles();
     app.UseStaticFiles();
 }

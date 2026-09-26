@@ -46,12 +46,28 @@ The hub is SignalR because the same client library runs in the browser (Blazor
 WebAssembly) and in MAUI on Android, iOS and Windows, so phone and web players meet at
 one server. It reconnects by itself and falls back from WebSockets when it must.
 
+## Running from Visual Studio
+
+Open `src/Cards.slnx`.
+
+- **Server and web app together** — right-click **Cards.Server** → *Set as Startup
+  Project*, pick the **http** profile beside the Start button, and press F5. The server
+  starts and the browser opens on `http://localhost:5280` with the web app in it.
+  Breakpoints work in both the server and the web app's own code.
+- **The same, reachable from phones on your network** — the **lan** profile. It listens on
+  every interface, so no browser opens; browse to `http://<this machine's address>:5280`.
+- **API and web app as two projects** — pick **Server + web app, separately** from the
+  Start button's list (it comes from `src/Cards.slnLaunch`). The server starts as an API
+  on :5280 and the web app on :5277 opens in the browser, pointed at it. If that entry
+  is not listed, make it once under *Configure Startup Projects…* → *Multiple startup
+  projects*: Cards.Server with the **api** profile, Cards.Web with **separate**.
+
 ## Running the server
 
 The server also serves the web app, so it is the only thing to run.
 
 ```
-dotnet run --project src/Cards.Server --launch-profile http
+dotnet run --project src/Cards.Server --launch-profile lan
 ```
 
 It listens on port **5280** on every network interface. Open `http://localhost:5280` on

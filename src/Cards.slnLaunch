@@ -1,0 +1,17 @@
+[
+  {
+    "Name": "Server + web app, separately",
+    "Projects": [
+      {
+        "Path": "Cards.Server\Cards.Server.csproj",
+        "Action": "Start",
+        "DebugTarget": "api"
+      },
+      {
+        "Path": "Cards.Web\Cards.Web.csproj",
+        "Action": "Start",
+        "DebugTarget": "separate"
+      }
+    ]
+  }
+]
