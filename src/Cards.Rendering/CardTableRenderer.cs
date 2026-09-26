@@ -2725,11 +2725,11 @@ public sealed class CardTableRenderer
         if (card.By == "team")
             return [.. _state.Teams.Select(t => (t.Id, t.Name, _state.GetTeamScore(t.Id), false))];
 
-        // The person at this screen always sits at seat 0, and their own row is the one
-        // they look for first, so it is the one drawn brightest.
+        // The person at this screen looks for their own row first, so it is the one
+        // drawn brightest.
         // Role seats hold no score — the house is not a player — so they get no row.
         return [.. _state.Players.Where(p => p.Role is null)
-                                 .Select((p, i) => (p.Id, p.Name, _state.GetScore(p.Id), i == 0))];
+                                 .Select(p => (p.Id, p.Name, _state.GetScore(p.Id), p.Id == _state.Viewer))];
     }
 
     /// <summary>

@@ -100,10 +100,10 @@ public sealed class WinConditionEngine : IWinCondition
             .ToList();
 
         // Sub-message: "Your books: 3 | AI books: 2"
-        string sub = string.Join(" | ", ranked.Select(x =>
-            x.Player == state.Players[0]
+        string sub = GameText.PerViewer(state, viewer => string.Join(" | ", ranked.Select(x =>
+            x.Player.Id == viewer
                 ? $"Your books: {x.Score}"
-                : $"{x.Player.Name} books: {x.Score}"));
+                : $"{x.Player.Name} books: {x.Score}")));
 
         if (ranked.Count > 1 && ranked[0].Score == ranked[1].Score)
             return new WinResult(null, GameText.Message(state, "game_drawn", "It's a tie!"), sub);
@@ -254,8 +254,4 @@ public sealed class WinConditionEngine : IWinCondition
         string msg = GameText.TeamMessage(state, "game_won_team", "{team} wins!", winner);
         return new WinResult(winner.Id, msg);
     }
-
-    /// <summary>True when the human player (Players[0]) is on this team.</summary>
-    private static bool IsHumanTeam(GameState state, Team team)
-        => state.Players.Count > 0 && team.Contains(state.Players[0].Id);
 }

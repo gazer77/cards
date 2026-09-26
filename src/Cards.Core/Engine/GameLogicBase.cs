@@ -96,6 +96,8 @@ public abstract class GameLogicBase : IGameLogic
         return _handlers.TryGetValue(state.CurrentPhaseId, out var h) ? h.DefaultCardAction(state, cardId, uid) : null;
     }
 
+    public bool SharedTableReady => _handlers.Values.All(h => h.SharedTableReady);
+
     /// <summary>
     /// Returns the auto-advance delay from the current phase handler, or 800 ms
     /// when the current player has a registered AI agent (giving the agent time to

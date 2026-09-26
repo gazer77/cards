@@ -35,6 +35,13 @@ public class Card
     /// </summary>
     public int Uid { get; set; }
 
+    /// <summary>
+    /// A card this viewer may not see: its rank and suit are placeholders and its
+    /// <see cref="Uid"/> an alias, so neither says what the card is. Only ever set on a
+    /// view built for one seat of a shared table; the rules never see one.
+    /// </summary>
+    public bool IsHidden { get; init; }
+
     public Card(Suit suit, Rank rank, bool isFaceUp = false)
     {
         Suit = suit;
@@ -46,6 +53,9 @@ public class Card
     {
         get
         {
+            // Named by its alias, since naming it by rank and suit would be naming it.
+            if (IsHidden) return $"hidden{Uid}";
+
             if (Rank == Rank.Joker)
             {
                 // Two Jokers distinguished by suit: JKRc = "black" joker, JKRr = "red" joker.

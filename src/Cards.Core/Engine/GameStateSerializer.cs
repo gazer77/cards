@@ -105,7 +105,7 @@ public static class GameStateSerializer
             zone.Clear();
 
             foreach (var sc in sz.Cards)
-                zone.Add(new Card((Suit)sc.Suit, (Rank)sc.Rank, sc.IsFaceUp) { IsWild = sc.IsWild, Uid = sc.Uid });
+                zone.Add(new Card((Suit)sc.Suit, (Rank)sc.Rank, sc.IsFaceUp) { IsWild = sc.IsWild, Uid = sc.Uid, IsHidden = sc.IsHidden });
 
             foreach (var group in sz.Groups) zone.Groups.Add(group.ToList());
 

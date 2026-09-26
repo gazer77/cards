@@ -20,6 +20,12 @@ namespace Cards.Engine;
 /// </summary>
 public sealed class GoFishHandler : IPhaseHandler
 {
+    /// <summary>
+    /// Written as one person against the computer: seat 0 asks, seat 1 is an AI with its
+    /// own turn logic. A second person at the table would never be asked anything.
+    /// </summary>
+    public bool SharedTableReady => false;
+
     private readonly string _nextPhaseId;
     private readonly int    _bookSize;
     private readonly string _collectTo;

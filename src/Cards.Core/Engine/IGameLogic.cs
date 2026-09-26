@@ -51,6 +51,12 @@ public interface IGameLogic
     GameAction? GetDefaultCardAction(GameState state, string cardId, int? uid) => null;
 
     /// <summary>
+    /// Whether several people can play this game at one table — see
+    /// <see cref="IPhaseHandler.SharedTableReady"/>. Asked after Initialize.
+    /// </summary>
+    bool SharedTableReady => true;
+
+    /// <summary>
     /// Returns the action that should be applied during an auto-advance tick.
     /// When the current player has a registered <see cref="IPlayerAgent"/> the agent
     /// picks from legal card-play or action choices; otherwise the first valid action

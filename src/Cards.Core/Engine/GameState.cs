@@ -99,6 +99,29 @@ public class GameState
     public List<(string PlayerId, string Text)> Announcements { get; } = [];
 
     /// <summary>
+    /// Whose eyes the table is drawn for. Null means seat 0 — the person at a
+    /// single-player screen. A view built for one seat of a shared game sets it, and
+    /// everything that means "you" (the bottom of the table, which hand is face up,
+    /// whose row on the score card is highlighted) follows it.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? ViewerId { get; set; }
+
+    /// <summary>The seat the table is drawn for: <see cref="ViewerId"/>, else seat 0.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string Viewer => ViewerId ?? (Players.Count > 0 ? Players[0].Id : "");
+
+    /// <summary>
+    /// Other seats' wordings of lines the engine wrote. Text is stored the way seat 0
+    /// reads it — "Your turn" — so a single-player game reads as it always has; this
+    /// holds how everyone else reads the same line ("Ana's turn", or "Your turn" for
+    /// Ana), keyed by the stored text. <see cref="GameText.Render"/> reads it.
+    /// Never saved: it is rebuilt as lines are written.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Dictionary<string, TextVariant> TextVariants { get; } = [];
+
+    /// <summary>
     /// AI agents registered for this game session, keyed by player ID.
     /// Not persisted to save files.
     /// </summary>
@@ -152,3 +175,13 @@ public class GameState
 /// live in <see cref="GameState.Scores"/>; this is the row behind them.
 /// </summary>
 public sealed record ScoreRound(int Round, Dictionary<string, int> Scores);
+
+/// <summary>
+/// A line as every seat reads it: <see cref="Neutral"/> for anyone it does not
+/// address, and <see cref="ByViewer"/> for the seats it speaks to as "you".
+/// </summary>
+public sealed class TextVariant
+{
+    public required string Neutral { get; init; }
+    public Dictionary<string, string> ByViewer { get; } = [];
+}

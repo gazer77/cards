@@ -60,5 +60,13 @@ public interface IPhaseHandler
     /// person was shown Order Up and Pass while the bid belonged to the seat beside them.
     /// </summary>
     void OnPhaseEnter(GameState state) { }
+
+    /// <summary>
+    /// Whether this phase can be played by several people at one table, every seat
+    /// acting through the same actions. True for nearly all of them. A phase written as
+    /// one person against the computer — seat 0 the only one who ever asks — says no,
+    /// and a shared table will not open with it rather than play it wrongly.
+    /// </summary>
+    bool SharedTableReady => true;
     void OnGameStart(GameState state) { }
 }

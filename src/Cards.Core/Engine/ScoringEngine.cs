@@ -473,14 +473,9 @@ public static class ScoringEngine
         // Build score summary per team.
         if (state.Teams.Count > 0)
         {
-            var teamParts = state.Teams.Select(t =>
-            {
-                int total = state.GetTeamScore(t.Id);
-                bool humanTeam = state.Players.Count > 0 && t.Contains(state.Players[0].Id);
-                string label = humanTeam ? "Your team" : t.Name;
-                return $"{label}: {total}";
-            });
-            string summary = outcome + "  |  " + string.Join("  |  ", teamParts);
+            string summary = GameText.PerViewer(state, viewer =>
+                outcome + "  |  " + string.Join("  |  ", state.Teams.Select(t =>
+                    $"{(viewer is not null && t.Contains(viewer) ? "Your team" : t.Name)}: {state.GetTeamScore(t.Id)}")));
             state.Metadata["status"]        = summary;
             state.Metadata["score_summary"] = summary;
         }
@@ -542,26 +537,23 @@ public static class ScoringEngine
         }
 
         // Status summary
-        string kLabel = knocker  == state.Players[0] ? "You" : knocker.Name;
-        string oLabel = opponent == state.Players[0] ? "You" : opponent.Name;
-        string summary;
-        if (isGin)
-            summary = $"Gin! {kLabel}: 0 dw | {oLabel}: {opponentDW} dw  → +{ginBonus + opponentDW}";
-        else if (roundScores.ContainsKey(knocker.Id))
-            summary = $"Knock! {kLabel}: {knockerDW} dw | {oLabel}: {opponentDW} dw  → +{roundScores[knocker.Id]}";
-        else
-            summary = $"Undercut! {oLabel}: {opponentDW} dw | {kLabel}: {knockerDW} dw  → +{roundScores[opponent.Id]}";
+        string Summary(string? viewer)
+        {
+            string kLabel = knocker.Id  == viewer ? "You" : knocker.Name;
+            string oLabel = opponent.Id == viewer ? "You" : opponent.Name;
+            if (isGin)
+                return $"Gin! {kLabel}: 0 dw | {oLabel}: {opponentDW} dw  → +{ginBonus + opponentDW}";
+            if (roundScores.ContainsKey(knocker.Id))
+                return $"Knock! {kLabel}: {knockerDW} dw | {oLabel}: {opponentDW} dw  → +{roundScores[knocker.Id]}";
+            return $"Undercut! {oLabel}: {opponentDW} dw | {kLabel}: {knockerDW} dw  → +{roundScores[opponent.Id]}";
+        }
 
-        state.Metadata["status"]        = summary;
-        state.Metadata["score_summary"] = summary;
+        state.Metadata["status"] = GameText.PerViewer(state, Summary);
 
         // Overall totals
-        string totals = string.Join("  |  ", state.Players.Select(p =>
-        {
-            string label = p == state.Players[0] ? "You" : p.Name;
-            return $"{label}: {state.GetScore(p.Id)}";
-        }));
-        state.Metadata["score_summary"] = summary + "  ||  " + totals;
+        state.Metadata["score_summary"] = GameText.PerViewer(state, viewer =>
+            Summary(viewer) + "  ||  " + string.Join("  |  ", state.Players.Select(p =>
+                $"{(p.Id == viewer ? "You" : p.Name)}: {state.GetScore(p.Id)}")));
     }
 
     private static IReadOnlyList<Card> GetHandCards(GameState state, string playerId)
@@ -806,18 +798,18 @@ public static class ScoringEngine
             ? state.Players.FirstOrDefault(p => p.Id == goOutPlayer)?.Name ?? "Someone"
             : "";
         string outPart = goOutLabel.Length > 0 ? $"{goOutLabel} went out! " : "";
-        string summary = outPart + string.Join("  |  ", scores.Select(kv =>
+        string summary = GameText.PerViewer(state, viewer => outPart + string.Join("  |  ", scores.Select(kv =>
         {
             string label = countByTeam
                 ? (state.Teams.FirstOrDefault(t => t.Id == kv.Key) is { } t
-                    ? (t.Contains(state.Players[0].Id) ? "Your team" : t.Name)
+                    ? (viewer is not null && t.Contains(viewer) ? "Your team" : t.Name)
                     : kv.Key)
                 : (state.Players.FirstOrDefault(p => p.Id == kv.Key) is { } pl
-                    ? (pl == state.Players[0] ? "You" : pl.Name)
+                    ? (pl.Id == viewer ? "You" : pl.Name)
                     : kv.Key);
             int total = state.GetScore(kv.Key);
             return $"{label}: +{kv.Value} = {total}";
-        }));
+        })));
         state.Metadata["status"]        = summary;
         state.Metadata["score_summary"] = summary;
     }
@@ -1132,15 +1124,8 @@ public static class ScoringEngine
         string outcome = makerTeam is null ? ""
             : wasMade ? $"Bid of {bid} made!  " : $"Set! Bid of {bid} lost.  ";
 
-        string teamSummary = string.Join("  |  ", state.Teams.Select(t =>
-        {
-            bool humanTeam = state.Players.Count > 0 && t.Contains(state.Players[0].Id);
-            string label = humanTeam ? "Your team" : t.Name;
-            int total = state.GetTeamScore(t.Id);
-            return $"{label}: {total}";
-        }));
-
-        string summary = outcome + teamSummary;
+        string summary = GameText.PerViewer(state, viewer => outcome + string.Join("  |  ", state.Teams.Select(t =>
+            $"{(viewer is not null && t.Contains(viewer) ? "Your team" : t.Name)}: {state.GetTeamScore(t.Id)}")));
         state.Metadata["status"]        = summary;
         state.Metadata["score_summary"] = summary;
     }
@@ -1209,14 +1194,13 @@ public static class ScoringEngine
 
     private static void WriteSummary(GameState state, Dictionary<string, int> roundScores)
     {
-        var parts = state.Players.Select(p =>
+        string summary = GameText.PerViewer(state, viewer => string.Join("  |  ", state.Players.Select(p =>
         {
             int round = roundScores.GetValueOrDefault(p.Id);
             int total = state.GetScore(p.Id);
-            string label = p == state.Players[0] ? "You" : p.Name;
+            string label = p.Id == viewer ? "You" : p.Name;
             return round >= 0 ? $"{label}: +{round} = {total}" : $"{label}: {round} = {total}";
-        });
-        string summary = string.Join("  |  ", parts);
+        })));
         state.Metadata["status"]        = summary;
         state.Metadata["score_summary"] = summary;
 

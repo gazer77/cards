@@ -56,6 +56,10 @@ public sealed class SavedCard
     /// matter in multi-deck games.
     /// </summary>
     public int  Uid      { get; set; }
+
+    /// <summary>A card the view's seat may not see — see <see cref="Card.IsHidden"/>. Never in a save.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsHidden { get; set; }
 }
 
 /// <summary>One round of <see cref="SavedGameState.ScoreHistory"/>.</summary>

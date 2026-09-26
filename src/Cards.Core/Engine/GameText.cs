@@ -24,20 +24,61 @@ public static class GameText
         GameState state, string key, string fallback,
         string? forPlayerId = null, params (string Name, object? Value)[] values)
     {
+        // A _you variant, declared or default, addresses the player concerned directly.
+        // The line is stored as seat 0 reads it, and the other wording is kept beside
+        // it so any seat can be shown the line in its own words.
+        string neutral = Fill(state, Template(state, key, fallback, you: false), forPlayerId, values);
+        if (forPlayerId is null) return neutral;
+
+        string addressed = Fill(state, Template(state, key, fallback, you: true), forPlayerId, values);
+        if (addressed == neutral) return neutral;
+
+        return Remember(state, neutral, [(forPlayerId, addressed)]);
+    }
+
+    private static string Template(GameState state, string key, string fallback, bool you)
+    {
         var text = state.Definition?.Text;
-
-        // The person at this screen is seat 0. A _you variant, declared or default,
-        // addresses them directly.
-        bool you = forPlayerId is not null
-                && state.Players.Count > 0 && state.Players[0].Id == forPlayerId;
-
-        string template =
-            (you ? Lookup(text?.Messages, key + "_you") : null)
+        return (you ? Lookup(text?.Messages, key + "_you") : null)
             ?? Lookup(text?.Messages, key)
             ?? (you ? DefaultYou.GetValueOrDefault(key) : null)
             ?? fallback;
+    }
 
-        return Fill(state, template, forPlayerId, values);
+    /// <summary>
+    /// Stores a line that reads differently by seat: returns seat 0's reading and
+    /// records every other one.
+    /// </summary>
+    private static string Remember(GameState state, string neutral, IEnumerable<(string Viewer, string Text)> addressed)
+    {
+        var variant = new TextVariant { Neutral = neutral };
+        foreach (var (viewer, text) in addressed)
+            if (text != neutral) variant.ByViewer[viewer] = text;
+        if (variant.ByViewer.Count == 0) return neutral;
+
+        string seat0 = state.Players.Count > 0 && variant.ByViewer.TryGetValue(state.Players[0].Id, out var mine)
+            ? mine : neutral;
+        state.TextVariants[seat0] = variant;
+        return seat0;
+    }
+
+    /// <summary>
+    /// A line built from pieces that each depend on who is reading — a score summary
+    /// that calls one team "Your team". <paramref name="build"/> is given the reader's
+    /// seat, or null for someone it addresses as nobody; the result is seat 0's reading
+    /// and every seat's is remembered.
+    /// </summary>
+    public static string PerViewer(GameState state, Func<string?, string> build)
+        => Remember(state, build(null), state.Players.Select(p => (p.Id, build(p.Id))).ToList());
+
+    /// <summary>
+    /// A stored line as <paramref name="viewerId"/> reads it. Lines that read the same
+    /// for everyone come back unchanged.
+    /// </summary>
+    public static string Render(GameState state, string text, string? viewerId)
+    {
+        if (!state.TextVariants.TryGetValue(text, out var v)) return text;
+        return viewerId is not null && v.ByViewer.TryGetValue(viewerId, out var mine) ? mine : v.Neutral;
     }
 
     /// <summary>
@@ -47,16 +88,9 @@ public static class GameText
     public static string TeamMessage(GameState state, string key, string fallback, Team team,
         params (string Name, object? Value)[] values)
     {
-        var text = state.Definition?.Text;
-        bool mine = state.Players.Count > 0 && team.PlayerIds.Contains(state.Players[0].Id);
-
-        string template =
-            (mine ? Lookup(text?.Messages, key + "_you") : null)
-            ?? Lookup(text?.Messages, key)
-            ?? (mine ? DefaultYou.GetValueOrDefault(key) : null)
-            ?? fallback;
-
-        return Fill(state, template.Replace("{team}", team.Name), null, values);
+        string neutral = Fill(state, Template(state, key, fallback, you: false).Replace("{team}", team.Name), null, values);
+        string ours    = Fill(state, Template(state, key, fallback, you: true).Replace("{team}", team.Name), null, values);
+        return Remember(state, neutral, team.PlayerIds.Select(id => (id, ours)).ToList());
     }
 
 

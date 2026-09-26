@@ -102,8 +102,8 @@ public static class PhaseHandlerRegistry
             int r0 = (int)c0.Rank;
             int r1 = (int)c1.Rank;
 
-            if (r0 > r1) { SetRoundResult(state, p0.Id, "You win this round!");     return; }
-            if (r1 > r0) { SetRoundResult(state, p1.Id, "Opponent wins this round."); return; }
+            if (r0 > r1) { SetRoundResult(state, p0.Id);     return; }
+            if (r1 > r0) { SetRoundResult(state, p1.Id); return; }
 
             // Tie — split: each player takes back their own card
             Hand(state, p0).Add(Play(state, p0).Draw()!);
@@ -113,10 +113,11 @@ public static class PhaseHandlerRegistry
             state.Metadata["status"]      = "Tie! Cards returned.\nTap to continue.";
         }
 
-        private void SetRoundResult(GameState state, string winnerId, string msg)
+        private void SetRoundResult(GameState state, string winnerId)
         {
             state.Metadata["last_winner"] = winnerId;
-            state.Metadata["status"]      = msg + "\nTap to collect.";
+            state.Metadata["status"]      = GameText.PerViewer(state,
+                viewer => WarHandler.RoundWonBy(state, winnerId, viewer) + "\nTap to collect.");
             state.CurrentPhaseId          = resultPhaseId;
         }
     }

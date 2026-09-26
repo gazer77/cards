@@ -76,8 +76,8 @@ public sealed class WarHandler : IPhaseHandler
             int r0 = (int)card0.Rank;
             int r1 = (int)card1.Rank;
 
-            if (r0 > r1) { SetCollectResult(state, p0.Id, "You win this round!");       return; }
-            if (r1 > r0) { SetCollectResult(state, p1.Id, "Opponent wins this round."); return; }
+            if (r0 > r1) { SetCollectResult(state, p0.Id);       return; }
+            if (r1 > r0) { SetCollectResult(state, p1.Id); return; }
 
             // ── Tie ──
             if (_tieSplit)
@@ -140,15 +140,25 @@ public sealed class WarHandler : IPhaseHandler
         }
     }
 
-    private static void SetCollectResult(GameState state, string winnerId, string msg)
+    private static void SetCollectResult(GameState state, string winnerId)
     {
         var pot    = Pot(state);
         int potSize = pot.Count + state.Players.Count;
         string extra = potSize > 2 ? $" ({potSize} cards)" : "";
         state.Metadata["last_winner"] = winnerId;
         state.Metadata["war_state"]   = "collect";
-        state.Metadata["status"]      = msg + extra + "\nTap to collect.";
+        state.Metadata["status"]      = GameText.PerViewer(state,
+            viewer => RoundWonBy(state, winnerId, viewer) + extra + "\nTap to collect.");
     }
+
+    /// <summary>
+    /// Who took the round, as one reader says it: "You win this round!" to the winner,
+    /// "Opponent wins this round." to the other seat, the winner's name to anyone else.
+    /// </summary>
+    internal static string RoundWonBy(GameState state, string winnerId, string? viewer)
+        => viewer == winnerId ? "You win this round!"
+         : viewer is not null ? "Opponent wins this round."
+         : $"{state.Players.FirstOrDefault(p => p.Id == winnerId)?.Name ?? winnerId} wins this round.";
 
     private static void ApplyWinResult(GameState state, WinResult result)
     {

@@ -249,7 +249,7 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
         int dv       = HandValue(dealer);
         bool dealerBJ = IsNatural(dealer);
 
-        string? mine = null;
+        var linesBy = new Dictionary<string, List<string>>();
         foreach (var p in Players(state))
         {
             int net = 0;
@@ -274,10 +274,15 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
 
             state.AddScore(p.Id, net);
             foreach (var line in lines) state.GameLog.Add(line);
-            if (p == state.Players[0]) mine = string.Join("  ·  ", lines);
+            linesBy[p.Id] = lines;
         }
 
-        state.Metadata["status"]   = (mine ?? "") + "\n" + GameText.Message(state, "bj_continue", "Tap to continue.");
+        // Each seat reads its own results, in its own words; seat 0 reads what it always did.
+        string tapOn = GameText.Message(state, "bj_continue", "Tap to continue.");
+        state.Metadata["status"] = GameText.PerViewer(state, viewer =>
+            (viewer is not null && linesBy.TryGetValue(viewer, out var own)
+                ? string.Join("  ·  ", own.Select(l => GameText.Render(state, l, viewer)))
+                : "") + "\n" + tapOn);
         state.Metadata["sub"]      = GameText.Message(state, "bj_dealer_had", "Dealer: {value}", values: ("value", dv));
         state.Metadata["bj_state"] = "collecting";
     }

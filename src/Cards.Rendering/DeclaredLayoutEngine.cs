@@ -219,11 +219,20 @@ public static class DeclaredLayoutEngine
         int idx = state.Players.FindIndex(p => p.Id == ownerId);
         if (idx < 0)
         {
-            // A team-owned zone sits with the team's first player.
+            // A team-owned zone sits with the team's first player — the viewer, when
+            // it is the viewer's team.
             var team = state.Teams.FirstOrDefault(t => t.Id == ownerId);
             if (team is not null)
-                idx = state.Players.FindIndex(p => team.PlayerIds.Contains(p.Id));
+                idx = team.PlayerIds.Contains(state.Viewer)
+                    ? state.Players.FindIndex(p => p.Id == state.Viewer)
+                    : state.Players.FindIndex(p => team.PlayerIds.Contains(p.Id));
         }
+
+        // The table turns so the viewer sits at the bottom and everyone else keeps
+        // their place around it. Seat 0 is the viewer unless a view says otherwise.
+        int viewer = Math.Max(0, state.Players.FindIndex(p => p.Id == state.Viewer));
+        if (idx >= 0 && state.Players.Count > 0)
+            idx = (idx - viewer + state.Players.Count) % state.Players.Count;
         return idx >= 0 && idx < seats.Count ? seats[idx] : seats[0];
     }
 
@@ -406,7 +415,7 @@ public static class DeclaredLayoutEngine
                      // A pile only the dealer may look into. The mask already knew this
                      // word and the table did not, so such a zone drew face-down for
                      // everybody — including the dealer it was turned for.
-                     || (zone.Visibility == "top_to_dealer" && state.DealerId == state.Players.FirstOrDefault()?.Id)
+                     || (zone.Visibility == "top_to_dealer" && state.DealerId == state.Viewer)
                      || revealed;
 
         // What the table says about a zone is the definition's to say. With no label
