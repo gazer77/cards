@@ -304,10 +304,23 @@ See `docs/shared-tables.md`.
       is written (`GameText.SubjectOf`); instructions and summaries are never bubbled, and
       a bubble carries only what was said, not the "Tap to …" after it. Also fixes the
       same misplacement at a single-player table.
-- [ ] **Backlog: phone app on shared tables** — `TableConnection` lives in `Cards.App` and
-      the SignalR client runs on MAUI; the MAUI pages need the lobby and the view-driven
-      table. The old peer-hosted `GameServer`/`GameClient` over `TcpTransport` should then
-      be retired.
+- [x] **Hosting split from the server** — rooms, seats, votes and the game loop live in
+      `Cards.Hosting` (plain .NET: `ITableClients` to reach people, `TableRefusal` to say
+      no, `RunHousekeepingAsync` for its clock); `Cards.Server` is only the SignalR shell.
+      Tested running with no web server at all, as a phone host will.
+- [x] **Server as an API** — `Tables:ServeWebClient` false serves no web app, and
+      `Tables:AllowedOrigins` opens the hub to a front end hosted elsewhere; the web app
+      finds the server by `TableServer`. `api` / `separate` launch profiles for running
+      the two apart in development.
+- [ ] **Backlog: phone app on shared tables** — as a player: `TableConnection` lives in
+      `Cards.App` and the SignalR client runs on MAUI; the MAUI pages need the lobby and
+      the view-driven table. As a host: the app runs `Cards.Hosting`'s `RoomService` with
+      its own `ITableClients`. The likeliest transport is ASP.NET Core's Kestrel and the
+      same SignalR hub embedded in the app, so web and phone players join a phone host
+      exactly as they join the server (works on Android and Windows; iOS only hosts while
+      the app is in the foreground and asks for local-network permission). The host's own
+      player talks to `RoomService` in process. The old peer-hosted
+      `GameServer`/`GameClient` over `TcpTransport` should then be retired.
 - [ ] **Backlog: shared games survive a restart** — see "Save and resume multiplayer
       games" under Customization.
 - [ ] **Backlog: kicking and banning** — the host removes someone from the table: in the

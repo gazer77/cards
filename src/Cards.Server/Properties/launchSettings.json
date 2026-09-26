@@ -9,6 +9,18 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
+    },
+    "api": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://*:5280",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Tables__ServeWebClient": "false",
+        "Tables__AllowedOrigins__0": "http://localhost:5277",
+        "Tables__AllowedOrigins__1": "https://localhost:7146"
+      }
     }
   }
 }

@@ -1,5 +1,6 @@
 using Cards.Engine;
 using Cards.Engine.Shared;
+using Cards.Hosting;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR;

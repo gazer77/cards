@@ -2,21 +2,22 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Cards.Engine;
 using Cards.Engine.Shared;
-using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 
-namespace Cards.Server;
+namespace Cards.Hosting;
 
 /// <summary>
-/// Every room on this server, and everything that happens in one: seating, starting,
-/// moves, the computer players' turns, and telling each seat what it now sees.
+/// Every room a host holds, and everything that happens in one: seating, starting,
+/// moves, the computer players' turns, and telling each seat what it now sees. The
+/// same whether the host is the table server or a phone: how the telling travels is
+/// <see cref="ITableClients"/>, and refusals come back as <see cref="TableRefusal"/>.
 ///
 /// The rules run here and only here. A client sends what its player wants to do; this
 /// checks the seat may do it (<see cref="SeatGate"/>), applies it, and sends every seat
 /// its own <see cref="TableView"/>. No client ever holds another's cards, and no two
 /// copies of a game exist to disagree.
 /// </summary>
-public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, ILogger<RoomService> log)
-    : BackgroundService
+public sealed class RoomService(ITableClients clients, GameLoader loader, ILogger<RoomService> log)
 {
     private readonly ConcurrentDictionary<string, Room> _rooms = new(StringComparer.OrdinalIgnoreCase);
 
@@ -35,20 +36,20 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
         string? configuration, string name, int dropTimeoutSeconds = 60)
     {
         var definition = await loader.LoadAsync(gameId)
-            ?? throw new HubException($"There is no game called \"{gameId}\".");
+            ?? throw new TableRefusal($"There is no game called \"{gameId}\".");
 
         int min = definition.Players?.Min ?? 1, max = definition.Players?.Max ?? 8;
         if (playerCount < min || playerCount > max)
-            throw new HubException($"{definition.Name} is for {min} to {max} players.");
+            throw new TableRefusal($"{definition.Name} is for {min} to {max} players.");
 
         // Deal a table now and throw it away, so a game that cannot be shared, or a
         // shape that does not fit the count, is refused before anyone sits down.
         var trial = new GameState { GameId = definition.Id, Definition = definition, ConfigurationName = configuration };
         var trialLogic = LogicRegistry.Create(definition);
         try { trialLogic.Initialize(trial, playerCount, rules); }
-        catch (Exception ex) { throw new HubException($"{definition.Name} cannot be dealt that way: {ex.Message}"); }
+        catch (Exception ex) { throw new TableRefusal($"{definition.Name} cannot be dealt that way: {ex.Message}"); }
         if (!trialLogic.SharedTableReady)
-            throw new HubException($"{definition.Name} can only be played against the computer for now.");
+            throw new TableRefusal($"{definition.Name} can only be played against the computer for now.");
 
         var room = new Room
         {
@@ -68,7 +69,7 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
         // The host's choices on the setup screen are their ballot; everyone else starts
         // from the game's own defaults.
         room.Ballots[room.HostSeatId] = rules.Where(r => room.Offered.Any(o => o.Id == r)).ToHashSet();
-        await hub.Groups.AddToGroupAsync(connectionId, room.Code);
+        await clients.JoinRoomAsync(connectionId, room.Code);
         await SendRoomAsync(room);
         log.LogInformation("Room {Code} opened for {Game} at {Count} seats", room.Code, definition.Id, playerCount);
         return ticket;
@@ -76,19 +77,19 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
 
     public async Task<SeatTicket> JoinAsync(string connectionId, string code, string name)
     {
-        var room = Find(code) ?? throw new HubException("No table has that code.");
+        var room = Find(code) ?? throw new TableRefusal("No table has that code.");
 
         SeatTicket ticket;
         await room.Lock.WaitAsync();
         try
         {
-            if (room.State is not null) throw new HubException("That game has already started.");
-            var seat = room.Seats.FirstOrDefault(s => !s.IsTaken) ?? throw new HubException("That table is full.");
+            if (room.State is not null) throw new TableRefusal("That game has already started.");
+            var seat = room.Seats.FirstOrDefault(s => !s.IsTaken) ?? throw new TableRefusal("That table is full.");
             ticket = Sit(room, seat, connectionId, name);
         }
         finally { room.Lock.Release(); }
 
-        await hub.Groups.AddToGroupAsync(connectionId, room.Code);
+        await clients.JoinRoomAsync(connectionId, room.Code);
         await SendRoomAsync(room);
         return ticket;
     }
@@ -99,13 +100,13 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
     /// </summary>
     public async Task<SeatTicket> RejoinAsync(string connectionId, string code, string token)
     {
-        var room = Find(code) ?? throw new HubException("That table has closed.");
+        var room = Find(code) ?? throw new TableRefusal("That table has closed.");
 
         RoomSeat seat;
         await room.Lock.WaitAsync();
         try
         {
-            seat = room.SeatByToken(token) ?? throw new HubException("That seat is no longer yours.");
+            seat = room.SeatByToken(token) ?? throw new TableRefusal("That seat is no longer yours.");
             seat.ConnectionId   = connectionId;
             seat.DisconnectedAt = null;
             room.LastActivity   = DateTime.UtcNow;
@@ -121,7 +122,7 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
         }
         finally { room.Lock.Release(); }
 
-        await hub.Groups.AddToGroupAsync(connectionId, room.Code);
+        await clients.JoinRoomAsync(connectionId, room.Code);
         await SendRoomAsync(room);
         await SendViewsAsync(room);
         return new SeatTicket { Code = room.Code, SeatId = seat.Id, Token = token };
@@ -143,7 +144,7 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
             if (seat is null) return;
 
             if (seat.ConnectionId is not null)
-                await hub.Groups.RemoveFromGroupAsync(seat.ConnectionId, room.Code);
+                await clients.LeaveRoomAsync(seat.ConnectionId, room.Code);
 
             if (room.State is null)
             {
@@ -201,13 +202,13 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
     /// <summary>Deals. Only the host may, and every open seat becomes a computer player.</summary>
     public async Task StartAsync(string code, string token)
     {
-        var room = Find(code) ?? throw new HubException("That table has closed.");
+        var room = Find(code) ?? throw new TableRefusal("That table has closed.");
 
         await room.Lock.WaitAsync();
         try
         {
-            if (room.State is not null) throw new HubException("The game has already started.");
-            if (room.SeatByToken(token)?.Id != room.HostSeatId) throw new HubException("Only the host can start the game.");
+            if (room.State is not null) throw new TableRefusal("The game has already started.");
+            if (room.SeatByToken(token)?.Id != room.HostSeatId) throw new TableRefusal("Only the host can start the game.");
 
             foreach (var seat in room.Seats.Where(s => !s.IsTaken)) seat.IsComputer = true;
 
@@ -251,15 +252,15 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
     /// <summary>A move from a seat: checked, applied, and shown to everyone.</summary>
     public async Task ActAsync(string code, string token, GameAction action)
     {
-        var room = Find(code) ?? throw new HubException("That table has closed.");
+        var room = Find(code) ?? throw new TableRefusal("That table has closed.");
 
         await room.Lock.WaitAsync();
         try
         {
             if (room.State is not { } state || room.Logic is not { } logic)
-                throw new HubException("The game has not started.");
-            var seat = room.SeatByToken(token) ?? throw new HubException("That seat is no longer yours.");
-            if (room.Busy) throw new HubException("Wait for the table.");
+                throw new TableRefusal("The game has not started.");
+            var seat = room.SeatByToken(token) ?? throw new TableRefusal("That seat is no longer yours.");
+            if (room.Busy) throw new TableRefusal("Wait for the table.");
 
             // A hidden card is named by its alias; the rules know it by what it is.
             if (action.CardUid is < 0 and var aliased && room.Unalias(aliased) is { } real)
@@ -267,7 +268,7 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
             action = action with { PlayerId = seat.Id };
 
             if (!SeatGate.Allows(state, logic, seat.Id, action, out var reason))
-                throw new HubException(reason ?? "That move is not available.");
+                throw new TableRefusal(reason ?? "That move is not available.");
 
             logic.Apply(state, action);
             RecordStatus(room, state, logic);
@@ -326,14 +327,14 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
     /// </summary>
     public async Task VoteAsync(string code, string token, bool letComputerPlay)
     {
-        var room = Find(code) ?? throw new HubException("That table has closed.");
+        var room = Find(code) ?? throw new TableRefusal("That table has closed.");
 
         await room.Lock.WaitAsync();
         try
         {
-            var seat = room.SeatByToken(token) ?? throw new HubException("That seat is no longer yours.");
+            var seat = room.SeatByToken(token) ?? throw new TableRefusal("That seat is no longer yours.");
             if (room.Vote is not { } vote || !vote.Voters.Contains(seat.Id))
-                throw new HubException("There is nothing to vote on.");
+                throw new TableRefusal("There is nothing to vote on.");
 
             vote.Answers[seat.Id] = letComputerPlay;
             var away = room.Seats.First(s => s.Id == vote.SeatId);
@@ -448,7 +449,7 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
     }
 
     private Task SendRoomAsync(Room room)
-        => hub.Clients.Group(room.Code).SendAsync(TableHubContract.RoomChanged, room.Info());
+        => clients.SendRoomAsync(room.Code, room.Info());
 
     /// <summary>Each connected person gets their own view — never anyone else's.</summary>
     private async Task SendViewsAsync(Room room)
@@ -490,7 +491,7 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
         finally { room.Lock.Release(); }
 
         foreach (var (connection, view) in sends)
-            await hub.Clients.Client(connection).SendAsync(TableHubContract.ViewChanged, view);
+            await clients.SendViewAsync(connection, view);
     }
 
     // ── Housekeeping ──────────────────────────────────────────────────────────
@@ -525,14 +526,14 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
     /// <summary>One person's yes or no on one house rule, before the deal.</summary>
     public async Task SetBallotAsync(string code, string token, string ruleId, bool yes)
     {
-        var room = Find(code) ?? throw new HubException("That table has closed.");
+        var room = Find(code) ?? throw new TableRefusal("That table has closed.");
 
         await room.Lock.WaitAsync();
         try
         {
-            if (room.State is not null) throw new HubException("The rules were settled at the deal.");
-            var seat = room.SeatByToken(token) ?? throw new HubException("That seat is no longer yours.");
-            if (room.Offered.All(r => r.Id != ruleId)) throw new HubException("That is not a rule of this game.");
+            if (room.State is not null) throw new TableRefusal("The rules were settled at the deal.");
+            var seat = room.SeatByToken(token) ?? throw new TableRefusal("That seat is no longer yours.");
+            if (room.Offered.All(r => r.Id != ruleId)) throw new TableRefusal("That is not a rule of this game.");
 
             var ballot = room.Ballots.TryGetValue(seat.Id, out var b) ? b : room.Ballots[seat.Id] = [];
             if (yes) ballot.Add(ruleId); else ballot.Remove(ruleId);
@@ -549,15 +550,15 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
     /// </summary>
     public async Task ForceRuleAsync(string code, string token, string ruleId, bool? forced)
     {
-        var room = Find(code) ?? throw new HubException("That table has closed.");
+        var room = Find(code) ?? throw new TableRefusal("That table has closed.");
 
         await room.Lock.WaitAsync();
         try
         {
-            if (room.State is not null) throw new HubException("The rules were settled at the deal.");
-            if (room.SeatByToken(token)?.Id != room.HostSeatId) throw new HubException("Only the host can overrule the vote.");
-            if (!room.Definition.HouseRuleVote.HostOverride) throw new HubException($"In {room.Definition.Name} the vote decides; the host cannot overrule it.");
-            if (room.Offered.All(r => r.Id != ruleId)) throw new HubException("That is not a rule of this game.");
+            if (room.State is not null) throw new TableRefusal("The rules were settled at the deal.");
+            if (room.SeatByToken(token)?.Id != room.HostSeatId) throw new TableRefusal("Only the host can overrule the vote.");
+            if (!room.Definition.HouseRuleVote.HostOverride) throw new TableRefusal($"In {room.Definition.Name} the vote decides; the host cannot overrule it.");
+            if (room.Offered.All(r => r.Id != ruleId)) throw new TableRefusal("That is not a rule of this game.");
 
             if (forced is { } f) room.Forced[ruleId] = f;
             else                 room.Forced.Remove(ruleId);
@@ -567,8 +568,12 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
         await SendRoomAsync(room);
     }
 
-    /// <summary>Closes rooms nobody has touched in <see cref="IdleLimit"/>.</summary>
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    /// <summary>
+    /// The host's clock: once a second, asks about anyone who has dropped out past the
+    /// timeout; every ten minutes, closes rooms nobody has touched in <see cref="IdleLimit"/>.
+    /// Run it for as long as the host is up — the server does so as a background service.
+    /// </summary>
+    public async Task RunHousekeepingAsync(CancellationToken stoppingToken)
     {
         var lastSweep = DateTime.UtcNow;
         while (!stoppingToken.IsCancellationRequested)

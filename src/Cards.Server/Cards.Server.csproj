@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Cards.Core\Cards.Core.csproj" />
+    <ProjectReference Include="..\Cards.Hosting\Cards.Hosting.csproj" />
     <ProjectReference Include="..\Cards.Web\Cards.Web.csproj" />
   </ItemGroup>
 

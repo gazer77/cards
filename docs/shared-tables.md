@@ -5,14 +5,26 @@ through the same server when it is wired up.
 
 ## How it works
 
-The game runs in one place — the table server (`src/Cards.Server`). Clients never run the
-rules and never hold another player's cards.
+The game runs in one place — the host. Today that is the table server
+(`src/Cards.Server`); later it can be a phone. Clients never run the rules and never hold
+another player's cards.
 
 ```
  browser / phone ──SignalR──►  TableHub ──►  RoomService ──► the game (Cards.Core)
-        ▲                                         │
-        └──────────── TableView, one per seat ◄───┘
+        ▲                     (Cards.Server)  (Cards.Hosting)       │
+        └──────────── TableView, one per seat ◄─────────────────────┘
 ```
+
+The hosting is split in two so a phone can host with the same code:
+
+| Project | What it is | Depends on |
+|---|---|---|
+| `Cards.Hosting` | Rooms, seats, the rules vote, dropped-player votes, the game loop, who sees what. Refuses with `TableRefusal`; reaches people through `ITableClients`; its clock is `RunHousekeepingAsync`. | `Cards.Core` only — no web framework |
+| `Cards.Server` | The table server: the SignalR hub, `SignalRTableClients`, a filter turning refusals into hub errors, a background service running the clock, and (optionally) the web app. | ASP.NET Core, `Cards.Hosting` |
+
+A phone hosting a game references `Cards.Hosting`, supplies its own `ITableClients` for
+however the other players are connected, and runs `RunHousekeepingAsync` while it hosts.
+Its own player can call `RoomService` directly, with no network in between.
 
 - A client sends what its player wants to do (`Act`). The server checks the seat may do it
   (`SeatGate`: its turn, a card on offer, a zone that card may go to), applies it, and
@@ -57,11 +69,32 @@ Players outside your network need a way in: forward a port on the router to this
 or run a tunnel (Cloudflare Tunnel, Tailscale Funnel) in front of port 5280. Put HTTPS in
 front of it for anything beyond friends and family — a tunnel does that for you.
 
-Running the web app on its own (`dotnet run --project src/Cards.Web`) still works for
-single-player. To use shared tables from it, point it at a running server with
-`"TableServer": "http://localhost:5280"` in `src/Cards.Web/wwwroot/appsettings.json`
-(the server then needs to allow that origin — simplest is to use the server's own
-address instead).
+### As an API behind a separately hosted front end
+
+The server can also run as a backend only, with the web app hosted somewhere else — a
+static host, a CDN, or the Blazor dev server while developing. Two settings under
+`Tables` in `src/Cards.Server/appsettings.json` (or `--Tables:…` on the command line):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `ServeWebClient` | `true` | Serve the web app from the server. `false` for API only. |
+| `AllowedOrigins` | `[]` | Every address the web app is served from. The browser calls the hub across origins then, and only these are let in. |
+
+The web app finds the server through `TableServer` in its `wwwroot/appsettings.json`; left
+empty, it uses the address the page came from.
+
+For development, two terminals:
+
+```
+dotnet run --project src/Cards.Server --launch-profile api        # hub on :5280, allows :5277
+dotnet run --project src/Cards.Web    --launch-profile separate   # web app on :5277
+```
+
+The `separate` profile runs the web app in a `Separate` environment, whose
+`appsettings.Separate.json` points it at `http://localhost:5280`. For a real deployment,
+set `TableServer` to the server's public address in the published `appsettings.json`, and
+list the front end's address in the server's `AllowedOrigins`. Use HTTPS on both once it
+leaves your own network.
 
 ## Playing
 

@@ -3,7 +3,7 @@ using Cards.Engine;
 using Cards.Engine.Shared;
 using Cards.Models;
 
-namespace Cards.Server;
+namespace Cards.Hosting;
 
 /// <summary>
 /// One table: its seats, and once play starts the single copy of the game. Everything
