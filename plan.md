@@ -314,6 +314,13 @@ See `docs/shared-tables.md`.
       be retired.
 - [ ] **Backlog: shared games survive a restart** — see "Save and resume multiplayer
       games" under Customization.
+- [ ] **Backlog: kicking and banning** — the host removes someone from the table: in the
+      lobby the seat opens again; during play it goes to the computer, as when someone
+      leaves, and the seat's token is revoked so they cannot rejoin it. Banning keeps them
+      out of that room for good. Worth deciding when picked up: whether kicking during
+      play needs the table's agreement (the dropped-player vote is the pattern), and what
+      a ban holds on to — a device id remembered by the client stops a casual return but
+      not a determined one, since there are no accounts.
 - [ ] **Simultaneous choices** — phases where everyone decides at once (Hearts' pass) run
       seat by seat today; at a shared table they could run together.
 - [ ] **Private notes in state** — the projection strips the notes it knows name a card
