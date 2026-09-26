@@ -57,12 +57,17 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
             Configuration = configuration,
             PlayerCount   = playerCount,
             Rules         = [.. rules],
+            Offered       = GameConfiguration.Resolve(definition, playerCount, configuration).HouseRules,
             Seats         = Enumerable.Range(0, playerCount).Select(i => new RoomSeat { Id = $"player{i}" }).ToList(),
             DropTimeout   = TimeSpan.FromSeconds(Math.Clamp(dropTimeoutSeconds, 0, 3600)),
         };
         _rooms[room.Code] = room;
 
         var ticket = Sit(room, room.Seats[0], connectionId, name);
+
+        // The host's choices on the setup screen are their ballot; everyone else starts
+        // from the game's own defaults.
+        room.Ballots[room.HostSeatId] = rules.Where(r => room.Offered.Any(o => o.Id == r)).ToHashSet();
         await hub.Groups.AddToGroupAsync(connectionId, room.Code);
         await SendRoomAsync(room);
         log.LogInformation("Room {Code} opened for {Game} at {Count} seats", room.Code, definition.Id, playerCount);
@@ -143,6 +148,7 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
             if (room.State is null)
             {
                 seat.Name = null; seat.Token = null; seat.ConnectionId = null;
+                room.Ballots.Remove(seat.Id);
             }
             else
             {
@@ -204,6 +210,9 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
             if (room.SeatByToken(token)?.Id != room.HostSeatId) throw new HubException("Only the host can start the game.");
 
             foreach (var seat in room.Seats.Where(s => !s.IsTaken)) seat.IsComputer = true;
+
+            // What the table agreed is what is dealt.
+            room.Rules = room.AgreedRules();
 
             var state = new GameState
             {
@@ -505,7 +514,57 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
         seat.ConnectionId = connectionId;
         seat.IsComputer   = false;
         room.LastActivity = DateTime.UtcNow;
+
+        // A new ballot starts from the game's own defaults.
+        room.Ballots[seat.Id] = room.Offered.Where(r => r.Default).Select(r => r.Id).ToHashSet();
         return new SeatTicket { Code = room.Code, SeatId = seat.Id, Token = seat.Token };
+    }
+
+    // ── House rules ───────────────────────────────────────────────────────────
+
+    /// <summary>One person's yes or no on one house rule, before the deal.</summary>
+    public async Task SetBallotAsync(string code, string token, string ruleId, bool yes)
+    {
+        var room = Find(code) ?? throw new HubException("That table has closed.");
+
+        await room.Lock.WaitAsync();
+        try
+        {
+            if (room.State is not null) throw new HubException("The rules were settled at the deal.");
+            var seat = room.SeatByToken(token) ?? throw new HubException("That seat is no longer yours.");
+            if (room.Offered.All(r => r.Id != ruleId)) throw new HubException("That is not a rule of this game.");
+
+            var ballot = room.Ballots.TryGetValue(seat.Id, out var b) ? b : room.Ballots[seat.Id] = [];
+            if (yes) ballot.Add(ruleId); else ballot.Remove(ruleId);
+            room.LastActivity = DateTime.UtcNow;
+        }
+        finally { room.Lock.Release(); }
+
+        await SendRoomAsync(room);
+    }
+
+    /// <summary>
+    /// The host settling a rule over the vote — in, out, or back to the vote (null).
+    /// Only where the game's definition says the host may (<c>house_rule_vote.host_override</c>).
+    /// </summary>
+    public async Task ForceRuleAsync(string code, string token, string ruleId, bool? forced)
+    {
+        var room = Find(code) ?? throw new HubException("That table has closed.");
+
+        await room.Lock.WaitAsync();
+        try
+        {
+            if (room.State is not null) throw new HubException("The rules were settled at the deal.");
+            if (room.SeatByToken(token)?.Id != room.HostSeatId) throw new HubException("Only the host can overrule the vote.");
+            if (!room.Definition.HouseRuleVote.HostOverride) throw new HubException($"In {room.Definition.Name} the vote decides; the host cannot overrule it.");
+            if (room.Offered.All(r => r.Id != ruleId)) throw new HubException("That is not a rule of this game.");
+
+            if (forced is { } f) room.Forced[ruleId] = f;
+            else                 room.Forced.Remove(ruleId);
+        }
+        finally { room.Lock.Release(); }
+
+        await SendRoomAsync(room);
     }
 
     /// <summary>Closes rooms nobody has touched in <see cref="IdleLimit"/>.</summary>

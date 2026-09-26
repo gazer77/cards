@@ -104,6 +104,22 @@ public sealed class TableConnection(Uri hubUrl, ISettingsStore store) : IAsyncDi
         Reset();
     }
 
+    /// <summary>This person's yes or no on a house rule, before the deal.</summary>
+    public async Task SetBallotAsync(string ruleId, bool yes)
+    {
+        if (Ticket is not { } t) return;
+        var hub = await HubAsync();
+        await hub.InvokeAsync(TableHubContract.SetBallot, t.Code, t.Token, ruleId, yes);
+    }
+
+    /// <summary>The host settling a rule over the vote: in, out, or null to let the vote decide.</summary>
+    public async Task ForceRuleAsync(string ruleId, bool? forced)
+    {
+        if (Ticket is not { } t) return;
+        var hub = await HubAsync();
+        await hub.InvokeAsync(TableHubContract.ForceRule, t.Code, t.Token, ruleId, forced);
+    }
+
     /// <summary>Answers the open question about someone away: let the computer play for them?</summary>
     public async Task VoteAsync(bool letComputerPlay)
     {

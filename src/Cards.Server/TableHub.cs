@@ -32,6 +32,12 @@ public sealed class TableHub(RoomService rooms) : Hub
     public Task Vote(string code, string token, bool letComputerPlay)
         => rooms.VoteAsync(code, token, letComputerPlay);
 
+    public Task SetBallot(string code, string token, string ruleId, bool yes)
+        => rooms.SetBallotAsync(code, token, ruleId, yes);
+
+    public Task ForceRule(string code, string token, string ruleId, bool? forced)
+        => rooms.ForceRuleAsync(code, token, ruleId, forced);
+
     public override Task OnDisconnectedAsync(Exception? exception)
         => rooms.DisconnectedAsync(Context.ConnectionId);
 }

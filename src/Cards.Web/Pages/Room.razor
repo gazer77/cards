@@ -68,6 +68,42 @@
             }
         </section>
 
+        @if (room.HouseRules.Count > 0)
+        {
+            bool host = Table.Ticket?.SeatId == room.HostSeatId;
+            <section class="setup-block">
+                <h2>House rules</h2>
+                <p class="muted">@room.HouseRuleTerms Vote now; the deal uses what carries.</p>
+                @foreach (var rule in room.HouseRules)
+                {
+                    var captured = rule;
+                    bool mine = rule.YesSeats.Contains(Table.Ticket?.SeatId ?? "");
+                    <div class="rule vote-rule">
+                        <label>
+                            <input type="checkbox" checked="@mine"
+                                   @onchange="e => BallotAsync(captured.Id, (bool)e.Value!)" />
+                            <span class="rule-text">
+                                <span class="rule-name">@rule.Name</span>
+                                <span class="rule-desc">@rule.Description</span>
+                            </span>
+                        </label>
+                        <span class="tally @(rule.Carries ? "in" : "out")">
+                            @rule.YesSeats.Count of @rule.Voters yes · @(rule.Forced is { } f ? (f ? "in (host)" : "out (host)") : rule.Carries ? "in" : "out")
+                        </span>
+                        @if (host && room.HostOverride)
+                        {
+                            <select class="overrule" value="@(rule.Forced is { } v ? (v ? "in" : "out") : "vote")"
+                                    @onchange="e => OverruleAsync(captured.Id, (string)e.Value!)">
+                                <option value="vote">Vote decides</option>
+                                <option value="in">Always in</option>
+                                <option value="out">Always out</option>
+                            </select>
+                        }
+                    </div>
+                }
+            </section>
+        }
+
         @if (Table.Ticket?.SeatId == room.HostSeatId)
         {
             <button class="start" disabled="@_busy" @onclick="StartAsync">Deal</button>
@@ -124,6 +160,18 @@
             _error = Cards.App.TableErrors.Describe(ex);
         }
         finally { _busy = false; }
+    }
+
+    private async Task BallotAsync(string ruleId, bool yes)
+    {
+        try { await Table.SetBallotAsync(ruleId, yes); }
+        catch (Exception ex) { _error = Cards.App.TableErrors.Describe(ex); }
+    }
+
+    private async Task OverruleAsync(string ruleId, string choice)
+    {
+        try { await Table.ForceRuleAsync(ruleId, choice switch { "in" => true, "out" => false, _ => null }); }
+        catch (Exception ex) { _error = Cards.App.TableErrors.Describe(ex); }
     }
 
     private async Task StartAsync()

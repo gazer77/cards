@@ -368,4 +368,98 @@ public sealed class SharedTableServerTests : IClassFixture<SharedTableServerTest
         Assert.Null(other.View!.Vote);
         await other.DisposeAsync();
     }
+
+    // ── House rules, by vote ──────────────────────────────────────────────────
+
+    private async Task<Person> Open(string gameId, int seats, params string[] rules)
+    {
+        var host = await Connect();
+        host.Ticket = await host.Hub.InvokeAsync<SeatTicket>(TableHubContract.CreateRoom,
+            gameId, seats, rules.ToList(), (string?)null, "Ana", 60);
+        return host;
+    }
+
+    private async Task<Person> Join(string code, string name)
+    {
+        var p = await Connect();
+        p.Ticket = await p.Hub.InvokeAsync<SeatTicket>(TableHubContract.JoinRoom, code, name);
+        return p;
+    }
+
+    private static async Task<RoomInfo> WaitForRoom(Person p, Func<RoomInfo, bool> ready, string what)
+    {
+        for (int i = 0; i < 500; i++)
+        {
+            if (p.Room is { } r && ready(r)) return r;
+            await Task.Delay(20);
+        }
+        throw new TimeoutException($"Never saw {what}.");
+    }
+
+    private static Task Ballot(Person p, string rule, bool yes)
+        => p.Hub.InvokeAsync(TableHubContract.SetBallot, p.Ticket!.Code, p.Ticket.Token, rule, yes);
+
+    [Fact]
+    public async Task The_hosts_choices_are_their_ballot_and_everyone_else_starts_from_the_defaults()
+    {
+        // High Card's tie_goes_to_pot is on by default; the host turned it off.
+        var ana = await Open("high-card", 2);
+        var bo  = await Join(ana.Ticket!.Code, "Bo");
+
+        var room = await WaitForRoom(ana, r => r.Seats.Count(s => s.Name is not null) == 2, "Bo seated");
+        var rule = room.HouseRules.Single(r => r.Id == "tie_goes_to_pot");
+        Assert.Equal(["player1"], rule.YesSeats);
+        Assert.False(rule.Carries);   // one of two is a tie, and a tie is no
+        Assert.Contains("tie is a no", room.HouseRuleTerms);
+
+        await ana.DisposeAsync(); await bo.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task A_majority_carries_a_rule_into_the_deal()
+    {
+        var ana = await Open("blackjack", 3, "surrender");
+        var bo  = await Join(ana.Ticket!.Code, "Bo");
+        var cy  = await Join(ana.Ticket.Code, "Cy");
+
+        await WaitForRoom(ana, r => r.Seats.Count(s => s.Name is not null) == 3, "all three seated");
+        Assert.False((await WaitForRoom(ana, r => r.HouseRules.Single(x => x.Id == "surrender").Voters == 3, "three ballots"))
+            .HouseRules.Single(x => x.Id == "surrender").Carries);   // one of three
+
+        await Ballot(bo, "surrender", true);
+        await WaitForRoom(ana, r => r.HouseRules.Single(x => x.Id == "surrender").Carries, "two of three carrying it");
+
+        await ana.Hub.InvokeAsync(TableHubContract.StartGame, ana.Ticket.Code, ana.Ticket.Token);
+        var view = await cy.WaitForView(_ => true, "the deal");
+        Assert.Contains("surrender", view.EnabledRules);
+
+        // Settled at the deal.
+        await Assert.ThrowsAsync<HubException>(() => Ballot(cy, "surrender", false));
+
+        await ana.DisposeAsync(); await bo.DisposeAsync(); await cy.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task A_tied_rule_is_left_out()
+    {
+        var ana = await Open("blackjack", 2, "surrender");
+        var bo  = await Join(ana.Ticket!.Code, "Bo");
+        await WaitForRoom(ana, r => r.HouseRules.Single(x => x.Id == "surrender").Voters == 2, "two ballots");
+
+        await ana.Hub.InvokeAsync(TableHubContract.StartGame, ana.Ticket.Code, ana.Ticket.Token);
+        var view = await bo.WaitForView(_ => true, "the deal");
+        Assert.DoesNotContain("surrender", view.EnabledRules);
+
+        await ana.DisposeAsync(); await bo.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task The_host_cannot_overrule_a_game_that_does_not_allow_it()
+    {
+        var ana = await Open("blackjack", 2);
+        var ex = await Assert.ThrowsAsync<HubException>(() =>
+            ana.Hub.InvokeAsync(TableHubContract.ForceRule, ana.Ticket!.Code, ana.Ticket.Token, "surrender", (bool?)true));
+        Assert.Contains("vote decides", ex.Message);
+        await ana.DisposeAsync();
+    }
 }

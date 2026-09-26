@@ -28,6 +28,9 @@ public static class DefinitionValidator
 
         ValidateDeck(definition, problems);
 
+        if (definition.HouseRuleVote.DecideBy is not ("majority" or "unanimous"))
+            problems.Add($"house_rule_vote: decide_by '{definition.HouseRuleVote.DecideBy}' is not majority or unanimous.");
+
         foreach (var zone in definition.Zones)
         {
             if (zone.Arrangement is { } arr && arr is not ("full" or "compact" or "stack"))

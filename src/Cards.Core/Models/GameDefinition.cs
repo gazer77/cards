@@ -78,6 +78,14 @@ public class GameDefinition
     [JsonPropertyName("house_rules")]
     public List<HouseRule> HouseRules { get; set; } = [];
 
+    /// <summary>
+    /// How a shared table settles its house rules before the deal. Absent means the
+    /// defaults: a simple majority of the people seated, a tie counting as no, and no
+    /// overruling by the host.
+    /// </summary>
+    [JsonPropertyName("house_rule_vote")]
+    public HouseRuleVoteDefinition HouseRuleVote { get; set; } = new();
+
     [JsonPropertyName("help")]
     public string? Help { get; set; }
 
@@ -671,6 +679,24 @@ public class RoundsDefinition
     /// </summary>
     [JsonPropertyName("first_dealer")]
     public string FirstDealer { get; set; } = "random";
+}
+
+/// <summary>
+/// How the people at a shared table agree on house rules. Each person seated has a
+/// ballot on every rule; computer seats have none.
+/// </summary>
+public class HouseRuleVoteDefinition
+{
+    /// <summary>
+    /// "majority" (default) — a rule is in when more than half say yes; a tie is no.
+    /// "unanimous" — a rule is in only when everyone says yes.
+    /// </summary>
+    [JsonPropertyName("decide_by")]
+    public string DecideBy { get; set; } = "majority";
+
+    /// <summary>Whether the host may overrule the vote, forcing a rule on or off. Default no.</summary>
+    [JsonPropertyName("host_override")]
+    public bool HostOverride { get; set; }
 }
 
 public class HouseRule

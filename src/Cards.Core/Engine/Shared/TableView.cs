@@ -103,7 +103,34 @@ public sealed class RoomInfo
 
     /// <summary>How long a dropped player may hold the table before the others are asked; 0 for never.</summary>
     public int DropTimeoutSeconds { get; set; }
+
+    /// <summary>The house rules on the ballot, each with its tally.</summary>
+    public List<LobbyRule> HouseRules { get; set; } = [];
+
+    /// <summary>How the table decides — the definition's terms, in a sentence.</summary>
+    public string HouseRuleTerms { get; set; } = "";
+
+    /// <summary>Whether this game lets the host overrule the vote.</summary>
+    public bool HostOverride { get; set; }
     public string HostSeatId { get; set; } = "";
+}
+
+/// <summary>A house rule on the lobby's ballot. Ballots are a show of hands: everyone sees who said yes.</summary>
+public sealed class LobbyRule
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Description { get; set; } = "";
+
+    /// <summary>The seats saying yes.</summary>
+    public List<string> YesSeats { get; set; } = [];
+    public int Voters { get; set; }
+
+    /// <summary>The host's ruling, where the game allows one: in, out, or null to let the vote decide.</summary>
+    public bool? Forced { get; set; }
+
+    /// <summary>Whether the rule is in, as things stand.</summary>
+    public bool Carries { get; set; }
 }
 
 public sealed class LobbySeat
@@ -142,6 +169,8 @@ public static class TableHubContract
     public const string Act        = nameof(Act);
     public const string LeaveRoom  = nameof(LeaveRoom);
     public const string Vote       = nameof(Vote);
+    public const string SetBallot  = nameof(SetBallot);
+    public const string ForceRule  = nameof(ForceRule);
 
     // Server → client
     public const string RoomChanged = nameof(RoomChanged);

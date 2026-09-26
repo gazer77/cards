@@ -1433,6 +1433,25 @@ Each house rule declares an id, display info, default value, and what it overrid
 ]
 ```
 
+### Voting on house rules
+
+At a shared table the people seated vote on the house rules in the lobby, and the deal
+uses what carries. The host's choices on the setup screen are their ballot; everyone
+else's starts from each rule's `default`. Computer seats do not vote. How the vote is
+decided is the game's to say:
+
+```json
+"house_rule_vote": { "decide_by": "majority", "host_override": false }
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `decide_by` | `"majority"` | `"majority"`: a rule is in when more than half say yes — a tie is no. `"unanimous"`: only when everyone says yes |
+| `host_override` | `false` | Whether the host may overrule the vote, setting a rule always in or always out |
+
+Leave the block out for the defaults. A single-player game uses the setup screen's
+choices directly.
+
 `affects` is a map of path keys to JSON values. Supported path forms (same as `overrides`):
 
 | Path form | Example | Effect |

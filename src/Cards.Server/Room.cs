@@ -16,7 +16,32 @@ public sealed class Room
     public required GameDefinition Definition { get; init; }
     public string? Configuration { get; init; }
     public required int PlayerCount { get; init; }
-    public required IReadOnlyList<string> Rules { get; init; }
+    /// <summary>
+    /// The house rules in play. Before the deal, the host's proposal; at the deal, what
+    /// the table agreed (<see cref="AgreedRules"/>).
+    /// </summary>
+    public required IReadOnlyList<string> Rules { get; set; }
+
+    /// <summary>The house rules this game, shape and seat count offer — the ballot.</summary>
+    public IReadOnlyList<HouseRule> Offered { get; init; } = [];
+
+    /// <summary>Each seated person's ballot: the rules they say yes to.</summary>
+    public Dictionary<string, HashSet<string>> Ballots { get; } = [];
+
+    /// <summary>The host's rulings, where the game allows them: rule id → in or out.</summary>
+    public Dictionary<string, bool> Forced { get; } = [];
+
+    /// <summary>What the table has agreed: every offered rule that carries.</summary>
+    public List<string> AgreedRules()
+    {
+        var terms  = Definition.HouseRuleVote;
+        int voters = Ballots.Count;
+        return Offered
+            .Where(r => HouseRuleTally.Carries(terms, Ballots.Values.Count(b => b.Contains(r.Id)), voters,
+                                               Forced.TryGetValue(r.Id, out var f) ? f : null))
+            .Select(r => r.Id)
+            .ToList();
+    }
     public required List<RoomSeat> Seats { get; init; }
 
     /// <summary>How long a dropped player may hold the table before the others are asked; zero for never.</summary>
@@ -67,7 +92,21 @@ public sealed class Room
         GameName      = Definition.Name,
         Configuration = Configuration,
         PlayerCount   = PlayerCount,
-        EnabledRules  = [.. Rules],
+        EnabledRules  = State is null ? AgreedRules() : [.. Rules],
+        HouseRuleTerms = HouseRuleTally.Describe(Definition.HouseRuleVote),
+        HostOverride   = Definition.HouseRuleVote.HostOverride,
+        HouseRules = Offered.Select(r => new LobbyRule
+        {
+            Id          = r.Id,
+            Name        = r.Name,
+            Description = r.Description,
+            YesSeats    = Ballots.Where(b => b.Value.Contains(r.Id)).Select(b => b.Key).ToList(),
+            Voters      = Ballots.Count,
+            Forced      = Forced.TryGetValue(r.Id, out var f) ? f : null,
+            Carries     = State is null
+                ? HouseRuleTally.Carries(Definition.HouseRuleVote, Ballots.Values.Count(b => b.Contains(r.Id)), Ballots.Count, Forced.TryGetValue(r.Id, out var g) ? g : null)
+                : Rules.Contains(r.Id),
+        }).ToList(),
         Started       = State is not null,
         HostSeatId    = HostSeatId,
         DropTimeoutSeconds = (int)DropTimeout.TotalSeconds,
