@@ -141,23 +141,30 @@ internal sealed class SpeechBubbles
 
     private static List<string> Wrap(string text, SKFont font, float maxWidth)
     {
-        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var lines = new List<string>();
-        var current = "";
 
-        foreach (var word in words)
+        // A line break in the text is a line break in the bubble. Split only on spaces,
+        // it was drawn as a box glyph mid-sentence.
+        foreach (var paragraph in text.Split('\n'))
         {
-            string candidate = current.Length == 0 ? word : current + " " + word;
-            if (font.MeasureText(candidate) <= maxWidth || current.Length == 0)
-                current = candidate;
-            else
+            var words = paragraph.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var current = "";
+
+            foreach (var word in words)
             {
-                lines.Add(current);
-                current = word;
+                string candidate = current.Length == 0 ? word : current + " " + word;
+                if (font.MeasureText(candidate) <= maxWidth || current.Length == 0)
+                    current = candidate;
+                else
+                {
+                    lines.Add(current);
+                    current = word;
+                }
             }
+
+            if (current.Length > 0) lines.Add(current);
         }
 
-        if (current.Length > 0) lines.Add(current);
         // A message that is entirely whitespace still needs a line, or the bubble
         // collapses to a sliver.
         return lines.Count > 0 ? lines : [text];

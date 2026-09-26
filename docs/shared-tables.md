@@ -74,15 +74,28 @@ address instead).
 Rooms close after six hours with nobody touching them, and all rooms end when the server
 restarts — games live in memory.
 
+## Someone drops out
+
+A phone that sleeps or a page that reloads rejoins its seat by itself. While someone is
+away, the table shows "Waiting for Bo to reconnect…" when it is their turn.
+
+The host chooses, when opening the table, how long a dropped player may hold the table on
+their own turn: 30 seconds, 1, 2 or 5 minutes, or never. Past that, everyone still
+connected is asked: *let the computer play for them until they're back?*
+
+- A majority saying yes hands the seat to the computer, marked for everyone as standing in.
+  The moment the player reconnects, the seat is theirs again, mid-hand.
+- Enough saying *wait* closes the question; it is asked again only after another full
+  timeout.
+- If the player comes back while the question is open, the question simply goes away.
+
+Leaving on purpose (the menu's Leave game) hands the seat to the computer for good.
+
 ## Not yet
 
-- **Go Fish** is written as one person against the computer and is refused at the door
-  (`IPhaseHandler.SharedTableReady`). It needs its turn logic made symmetric.
-- **A player who drops mid-turn** holds the table until they come back or leave; there is
-  no timeout that hands the seat to the computer.
 - **The phone app** is not wired to the server yet. `TableConnection` (in `Cards.App`) is
   the client both should use.
-- **Saving a shared game** — rooms live in memory. See plan.md.
+- **Saving a shared game** — rooms live in memory, so a server restart ends every game.
 - **Computer difficulty** — computer seats all play the default strategy.
 - Two tabs in one browser share the remembered seat, so testing two players on one
   machine wants two browsers (or a private window).

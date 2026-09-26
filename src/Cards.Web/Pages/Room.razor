@@ -43,6 +43,12 @@
             @room.PlayerCount seats@(room.Configuration is { Length: > 0 } c ? $" · {c}" : "")@(room.EnabledRules.Count > 0 ? $" · {room.EnabledRules.Count} house rule{(room.EnabledRules.Count == 1 ? "" : "s")}" : "")
         </p>
 
+        <p class="muted">
+            @(room.DropTimeoutSeconds > 0
+                ? $"If someone drops out on their turn, after {TimeoutText(room.DropTimeoutSeconds)} the others are asked whether the computer should play for them."
+                : "If someone drops out, the table waits for them.")
+        </p>
+
         <section class="setup-block">
             <h2>Table code</h2>
             <p class="room-code">@room.Code</p>
@@ -81,7 +87,10 @@
     private string  _name = "";
     private string? _error;
 
-    private string ShareLink => $"{Nav.BaseUri}room/{Code.ToUpperInvariant()}";
+    private static string TimeoutText(int seconds)
+        => seconds < 60 ? $"{seconds} seconds" : seconds == 60 ? "a minute" : $"{seconds / 60} minutes";
+
+    private string ShareLink =>$"{Nav.BaseUri}room/{Code.ToUpperInvariant()}";
 
     protected override async Task OnInitializedAsync()
     {

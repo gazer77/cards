@@ -578,3 +578,29 @@ html, body {
     background: #5a3d12;
     color: var(--ink);
 }
+
+.notice.vote {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    padding: 0.5rem 1rem;
+}
+.notice.quiet { background: var(--surface-mid); color: var(--ink-dim); }
+
+.drop-choice {
+    display: block;
+    margin-top: 0.6rem;
+    color: var(--ink-dim);
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+.drop-choice select {
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid #ffffff30;
+    border-radius: 0.35rem;
+    font: inherit;
+    padding: 0.1rem 0.3rem;
+}

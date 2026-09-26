@@ -28,12 +28,14 @@ public static class GameText
         // The line is stored as seat 0 reads it, and the other wording is kept beside
         // it so any seat can be shown the line in its own words.
         string neutral = Fill(state, Template(state, key, fallback, you: false), forPlayerId, values);
-        if (forPlayerId is null) return neutral;
+        string stored  = neutral;
+        if (forPlayerId is not null)
+        {
+            string addressed = Fill(state, Template(state, key, fallback, you: true), forPlayerId, values);
+            if (addressed != neutral) stored = Remember(state, neutral, [(forPlayerId, addressed)]);
+        }
 
-        string addressed = Fill(state, Template(state, key, fallback, you: true), forPlayerId, values);
-        if (addressed == neutral) return neutral;
-
-        return Remember(state, neutral, [(forPlayerId, addressed)]);
+        return About(state, stored, IsPrompt(key) ? Nobody : forPlayerId);
     }
 
     private static string Template(GameState state, string key, string fallback, bool you)
@@ -68,8 +70,78 @@ public static class GameText
     /// seat, or null for someone it addresses as nobody; the result is seat 0's reading
     /// and every seat's is remembered.
     /// </summary>
-    public static string PerViewer(GameState state, Func<string?, string> build)
-        => Remember(state, build(null), state.Players.Select(p => (p.Id, build(p.Id))).ToList());
+    public static string PerViewer(GameState state, Func<string?, string> build, string? about = Nobody)
+        => About(state, Remember(state, build(null), state.Players.Select(p => (p.Id, build(p.Id))).ToList()), about);
+
+    /// <summary>
+    /// A line about one player doing something to another — asking them for a rank.
+    /// It reads three ways: to the one acting (<c>key_you</c>), to the one acted on
+    /// (<c>key_to_you</c>), and to everyone else (<c>key</c>). <c>{player}</c> names the
+    /// one acting and <c>{target}</c> the other.
+    /// </summary>
+    public static string Between(
+        GameState state, string key, string fallback, string actorId, string targetId,
+        params (string Name, object? Value)[] values)
+    {
+        string target = state.Players.FirstOrDefault(p => p.Id == targetId)?.Name ?? targetId;
+
+        string Reading(string? viewer)
+        {
+            string template = viewer == actorId
+                ? Template(state, key, fallback, you: true)
+                : viewer == targetId
+                    ? Lookup(state.Definition?.Text?.Messages, key + "_to_you")
+                      ?? DefaultToYou.GetValueOrDefault(key)
+                      ?? Template(state, key, fallback, you: false)
+                    : Template(state, key, fallback, you: false);
+            return Fill(state, template.Replace("{target}", target), actorId, values);
+        }
+
+        return PerViewer(state, Reading, about: actorId);
+    }
+
+    // ── Who a line is about ─────────────────────────────────────────────────────
+    //
+    // A table shows what someone did as a bubble beside their seat. The status line
+    // used to be pinned to whoever had just acted — but a handler usually writes its
+    // line and then passes the turn, and a line like "West to draw" or "Dealer: 13" is
+    // about someone else entirely, so bubbles kept appearing beside the wrong chair.
+    // The line itself knows who it is about; it is recorded here as it is written.
+
+    /// <summary>A line that belongs to no seat — an instruction or a summary. Shown in the status, never as a bubble.</summary>
+    public const string Nobody = "";
+
+    /// <summary>A line about whoever is reading it — their own result.</summary>
+    public const string Reader = "@reader";
+
+    private static string About(GameState state, string text, string? subject)
+    {
+        if (subject is not null) state.TextSubjects[text] = subject;
+        return text;
+    }
+
+    /// <summary>
+    /// Who <paramref name="text"/> is about, as <paramref name="viewerId"/> would place
+    /// it: a seat id, <see cref="Nobody"/> for no one, or null when the line never said.
+    /// </summary>
+    public static string? SubjectOf(GameState state, string text, string? viewerId)
+        => state.TextSubjects.TryGetValue(text, out var s) ? (s == Reader ? viewerId : s) : null;
+
+    /// <summary>
+    /// Keys that tell a player what to do, or why they cannot, rather than say what
+    /// someone did. They belong in the status line; a bubble of "West to draw" beside
+    /// West says nothing West said.
+    /// </summary>
+    public static bool IsPrompt(string key)
+        => key == "turn" || key.StartsWith("turn_") || key.StartsWith("pass_") || key.StartsWith("reveal_")
+        || PromptKeys.Contains(key);
+
+    private static readonly HashSet<string> PromptKeys =
+    [
+        "gf_turn", "gf_choosing", "war_flip", "war_tie", "blackjack_hand", "blackjack_split_hand", "bj_continue",
+        "add_one_rank", "keep_a_discard", "must_meld_first", "no_meld_of_rank", "no_meld_takes_wilds",
+        "not_a_meld", "opening_too_low", "rank_unmeldable", "too_many_wilds", "game_started", "round_started",
+    ];
 
     /// <summary>
     /// A stored line as <paramref name="viewerId"/> reads it. Lines that read the same
@@ -163,8 +235,6 @@ public static class GameText
     {
         ["add_one_rank"] = "Pick cards of one rank to add to a meld.",
         ["added_to_meld"] = "Added to meld.",
-        ["ask_confirm"] = "Ask {opponent} for {rank}?",
-        ["ask_hit"] = "Got {count} {rank} from {opponent}!{books} Go again.",
         ["blackjack_hand"] = "{player}: {value}  |  Dealer shows: {dealer}",
         ["blackjack_split_hand"] = "{player}: second hand {value}  |  Dealer shows: {dealer}",
         ["bj_continue"] = "Tap to continue.",
@@ -179,14 +249,18 @@ public static class GameText
         ["bj_split"] = "{player} split their {rank}s",
         ["bj_surrendered"] = "{player} surrendered",
         ["book_complete"] = "1 book complete!",
+        ["gf_choosing"] = "{player} is choosing what to ask for.",
+        ["gf_fish"] = "{player} asked {target} for {rank} — Go Fish.{books}",
+        ["gf_fish_empty"] = "{player} asked {target} for {rank} — Go Fish. The deck is empty.",
+        ["gf_hit"] = "{player} asked {target} for {rank} and got {count}.{books} {player} goes again.",
+        ["gf_lucky"] = "{player} asked {target} for {rank} — Go Fish, and drew one!{books} {player} goes again.",
+        ["gf_out"] = "{player} has no cards left.",
+        ["gf_refill"] = "{player} had no cards and drew one.",
+        ["gf_turn"] = "{player} to ask.",
         ["books_complete"] = "{count} books complete!",
-        ["books_tally"] = "(Books — You: {mine} | {opponent}: {theirs})",
         ["card_filed"] = "{player}: {card} to {zone}",
         ["dealer_done"] = "Dealer: {soft}{value} — Tap to see result.",
         ["dealer_drawing"] = "Dealer: {soft}{value} — Tap for next card.",
-        ["fish_deck_empty"] = "Go Fish! The deck is empty. {opponent}'s turn.",
-        ["fish_drew"] = "Go Fish! You drew {rank}.{books} {opponent}'s turn.",
-        ["fish_lucky"] = "Go Fish! Lucky — you drew {rank}.{books} Go again!",
         ["foot_picked_up"] = "{player} picked up their foot!",
         ["game_drawn"] = "It's a tie!",
         ["game_ended"] = "Game ended.",
@@ -196,19 +270,11 @@ public static class GameText
         ["meld_laid"] = "Meld laid!",
         ["melds_laid"] = "{count} melds laid!",
         ["must_meld_first"] = "The {card} taken must be melded before discarding.",
-        ["no_cards_drew"] = "You had no cards — drew one from the deck.",
-        ["no_cards_no_deck"] = "You have no cards and the deck is empty. {opponent}'s turn.",
         ["no_meld_of_rank"] = "No meld of {rank}s on the table — lay it as a new meld.",
         ["no_meld_takes_wilds"] = "No meld can take that many wilds.",
         ["not_a_meld"] = "That is not a meld — pick three or more of a rank.",
         ["keep_a_discard"] = "Keep a card to discard — {player} cannot go out yet.",
         ["opening_too_low"] = "{player}'s first meld this round must be worth {required}; that is {offered}.",
-        ["opponent_ask_hit"] = "{opponent} asked for {rank} — got {count}!{books} {opponent} goes again…",
-        ["opponent_fish"] = "{opponent} asked for {rank} — Go Fish.{books} Your turn!",
-        ["opponent_fish_deck_empty"] = "{opponent} asked for {rank} — Go Fish! Deck is empty. Your turn!",
-        ["opponent_fish_lucky"] = "{opponent} asked for {rank} — Go Fish, but drew one!{books} {opponent} goes again…",
-        ["opponent_no_cards_drew"] = "{opponent} has no cards — drew from deck. Your turn!",
-        ["opponent_no_cards_no_deck"] = "{opponent} has no cards and the deck is empty. Your turn!",
         ["pass_more"] = "Passing {direction}: Select {count} more cards",
         ["pass_none"] = "No passing this round. Tap to continue.",
         ["pass_one_more"] = "Passing {direction}: Select 1 more card",
@@ -237,7 +303,6 @@ public static class GameText
         ["too_many_wilds"] = "That would leave the meld more wild than real.",
         ["trick_won"] = "{player} wins the trick.",
         ["turn"] = "{player}'s turn",
-        ["turn_ask"] = "Tap a card to ask for its rank.{books}",
         ["turn_bet"] = "{player}'s turn  |  Pot: {pot}  |  To call: {to_call}",
         ["turn_bid"] = "{player}'s bid",
         ["turn_bid_high"] = "{player}'s bid — current high: {high}",
@@ -250,6 +315,7 @@ public static class GameText
         ["turn_flip_ready"] = "{player}'s turn — Press Flip to turn it over",
         ["turn_trump"] = "{player}'s turn  |  Trump: {trump}",
         ["war_flip"] = "Tap to flip!",
+        ["war_tie"] = "Tie! Cards returned.\nTap to continue.",
     };
 
     public static readonly IReadOnlyDictionary<string, string> ActionKeys = new Dictionary<string, string>
@@ -257,7 +323,7 @@ public static class GameText
         ["draw_from_{zone}"] = "Draw from {Zone}",
         ["add_to_meld"] = "Add to Meld",
         ["all_in"] = "All-In",
-        ["ask"] = "Ask for {rank}",
+        ["ask"] = "Ask {target} for {rank}",
         ["bid_accept"] = "Order Up",
         ["bid_alone"] = "Go Alone",
         ["bid_pass"] = "Pass",
@@ -291,7 +357,9 @@ public static class GameText
 
     /// <summary>Whether a definition may override this message key (a _you variant counts).</summary>
     public static bool IsMessageKey(string key)
-        => MessageKeys.ContainsKey(key) || (key.EndsWith("_you") && MessageKeys.ContainsKey(key[..^4]));
+        => MessageKeys.ContainsKey(key)
+        || (key.EndsWith("_to_you") && MessageKeys.ContainsKey(key[..^7]))
+        || (key.EndsWith("_you") && MessageKeys.ContainsKey(key[..^4]));
 
     /// <summary>Whether a definition may override this action key; draw_from_* is open-ended.</summary>
     public static bool IsActionKey(string key)
@@ -350,5 +418,25 @@ public static class GameText
         ["log_discarded_card"] = "You discarded the {card}",
         ["reveal_ready"]     = "Press Flip to turn {count} over",
         ["turn_flip_ready"]  = "Press Flip to turn it over",
+        ["gf_turn"]          = "Your turn — tap a card to ask for its rank.",
+        ["gf_choosing"]      = "Ask for {rank}? Choose who to ask.",
+        ["gf_hit"]           = "You asked {target} for {rank} and got {count}!{books} Go again.",
+        ["gf_lucky"]         = "Go Fish! Lucky — you drew {rank}.{books} Go again!",
+        ["gf_fish"]          = "Go Fish! You drew {drawn}.{books}",
+        ["gf_fish_empty"]    = "Go Fish! The deck is empty.",
+        ["gf_refill"]        = "You had no cards — drew one from the deck.",
+        ["gf_out"]           = "You have no cards left.",
+    };
+
+    /// <summary>
+    /// How a line reads to the player it was done to — "Bo asked you for Kings" — for
+    /// the keys <see cref="Between"/> says. A definition overrides with <c>key_to_you</c>.
+    /// </summary>
+    private static readonly Dictionary<string, string> DefaultToYou = new()
+    {
+        ["gf_hit"]        = "{player} asked you for {rank} and took {count}.{books}",
+        ["gf_lucky"]      = "{player} asked you for {rank} — Go Fish, but they drew one.{books}",
+        ["gf_fish"]       = "{player} asked you for {rank} — Go Fish.{books}",
+        ["gf_fish_empty"] = "{player} asked you for {rank} — Go Fish. The deck is empty.",
     };
 }

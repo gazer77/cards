@@ -111,6 +111,17 @@ else
         <button class="start secondary" disabled="@_opening" @onclick="PlayWithFriends">
             @(_opening ? "Opening a table…" : "Play with friends")
         </button>
+        <label class="drop-choice">
+            If someone drops out on their turn, after
+            <select @bind="_dropTimeout">
+                <option value="30">30 seconds</option>
+                <option value="60">1 minute</option>
+                <option value="120">2 minutes</option>
+                <option value="300">5 minutes</option>
+                <option value="0">never</option>
+            </select>
+            @(_dropTimeout == 0 ? "— the table waits for them." : "ask the others whether the computer should play for them.")
+        </label>
         @if (_onlineError is not null)
         {
             <p class="error">@_onlineError</p>
@@ -202,6 +213,7 @@ else
 
     private bool    _opening;
     private string? _onlineError;
+    private int     _dropTimeout = 60;
 
     private async Task PlayWithFriends()
     {
@@ -212,7 +224,7 @@ else
             var enabled = _rules.Where(r => r.IsEnabled).Select(r => r.Id).ToList();
             string? variant = _variant is { Length: > 0 } && _variants.Count > 1 ? _variant : null;
 
-            var ticket = await Table.CreateAsync(GameId, _players, enabled, variant, Settings.PlayerName);
+            var ticket = await Table.CreateAsync(GameId, _players, enabled, variant, Settings.PlayerName, _dropTimeout);
             Nav.NavigateTo($"/room/{ticket.Code}");
         }
         catch (Exception ex)

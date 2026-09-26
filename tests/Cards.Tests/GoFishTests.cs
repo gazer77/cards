@@ -148,7 +148,8 @@ public sealed class GoFishTests
             if (status == last) continue;
             last = status;
 
-            const string prefix = "AI asked for ";
+            // Seat 0 reads the computer's asks as addressed to it.
+            string prefix = $"{state.Players[1].Name} asked you for ";
             if (status.StartsWith(prefix))
                 asks.Add(status[prefix.Length..].Split(' ')[0]);
         }
@@ -183,7 +184,7 @@ public sealed class GoFishTests
         {
             if (!Step(state, logic)) break;
 
-            var denied = state.Metadata.GetValueOrDefault("gf_denied_p0", "");
+            var denied = state.Metadata.GetValueOrDefault("gf_denied:player0", "");
             int count = denied.Length == 0 ? 0 : denied.Split(',').Length;
             maxDenied = Math.Max(maxDenied, count);
         }
@@ -196,23 +197,55 @@ public sealed class GoFishTests
 
 
     /// <summary>
-    /// Go Fish is capped at two players because <c>GoFishHandler</c> is written for two
-    /// seats: it addresses <c>Players[0]</c> and <c>Players[1]</c> directly, so at three
-    /// or more, every other seat is dealt cards and then never asked, never given a
-    /// turn, and never able to give a card back. Their cards leave circulation, the deck
-    /// drains, and the game cannot finish — measured at 3, 4 and 6 players before the
-    /// cap went in.
-    ///
-    /// Delete this and raise the cap together with a handler that rotates turns over all
-    /// seats, lets the asker choose a target, and keeps its memory per opponent.
+    /// Go Fish was capped at two because the handler addressed Players[0] and Players[1]
+    /// directly: at three or more, every other seat was dealt cards and never asked.
+    /// Every seat takes turns now, the asker chooses whom to ask, and the table's memory
+    /// is kept per seat — so a full table plays to the end with every seat asking.
     /// </summary>
-    [Fact]
-    public void Is_capped_at_two_players_until_the_handler_supports_more()
+    [Theory]
+    [InlineData(3, 5UL)]
+    [InlineData(4, 11UL)]
+    [InlineData(6, 3UL)]
+    public void Every_seat_at_a_full_table_asks_and_the_game_ends(int players, ulong seed)
     {
-        var loader = new GameLoader(
-            new FileSystemGameAssetSource(FileSystemGameAssetSource.FindRepoRoot()));
-        var definition = loader.LoadAsync("go-fish").GetAwaiter().GetResult()!;
+        var (state, logic) = Start(seed, players);
+        foreach (var p in state.Players) state.PlayerAgents[p.Id] = new Cards.Logic.GoFishAiAgent(p.Id);
 
-        Assert.Equal(2, definition.MaxPlayers);
+        var asked = new HashSet<string>();
+        for (int step = 0; step < 5000 && !logic.IsGameOver(state); step++)
+        {
+            asked.Add(state.CurrentPlayer.Id);
+            logic.Apply(state, logic.GetAutoAction(state));
+            Assert.Equal(Deck, TotalCards(state));
+        }
+
+        Assert.True(logic.IsGameOver(state), "The game did not finish.");
+        Assert.Equal(players, asked.Count);
+        Assert.Equal(13, state.Players.Sum(p => state.GetScore(p.Id)));   // every rank booked
+    }
+
+    [Fact]
+    public void An_ask_reads_three_ways()
+    {
+        var (state, logic) = Start(1UL, 3);
+        state.Players[0].Name = "Ana"; state.Players[1].Name = "Bo"; state.Players[2].Name = "Cy";
+        foreach (var z in state.Zones.Values) z.Clear();
+        state.PlayerAgents.Clear();
+        state.CurrentPlayerIndex = 0;
+
+        state.Zones["hand:player0"].Add(new Card(Suit.Clubs, Rank.King, isFaceUp: true));
+        state.Zones["hand:player1"].Add(new Card(Suit.Hearts, Rank.King));
+        state.Zones["hand:player2"].Add(new Card(Suit.Spades, Rank.Two));
+        state.Zones["deck"].Add(new Card(Suit.Clubs, Rank.Five));
+
+        logic.Apply(state, new GameAction("select_card", CardId: "Kc"));
+        var ask = logic.GetValidActions(state).Single(a => a.Type == "ask" && a.ZoneId == "hand:player1");
+        Assert.Equal("Ask Bo for Kings", ask.Label);
+        logic.Apply(state, ask);
+
+        string line = state.Metadata["status"];
+        Assert.StartsWith("You asked Bo for Kings and got 1", GameText.Render(state, line, "player0"));
+        Assert.StartsWith("Ana asked you for Kings and took 1", GameText.Render(state, line, "player1"));
+        Assert.StartsWith("Ana asked Bo for Kings and got 1", GameText.Render(state, line, "player2"));
     }
 }

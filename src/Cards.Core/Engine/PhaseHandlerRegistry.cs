@@ -63,7 +63,7 @@ public static class PhaseHandlerRegistry
                 StringComparison.OrdinalIgnoreCase);
 
         public void OnGameStart(GameState state)
-            => state.Metadata["status"] = "Tap to flip!";
+            => state.Metadata["status"] = GameText.Message(state, "war_flip", "Tap to flip!");
 
         public IReadOnlyList<GameAction> GetValidActions(GameState _) => [new GameAction("tap")];
 
@@ -110,14 +110,14 @@ public static class PhaseHandlerRegistry
             Hand(state, p1).Add(Play(state, p1).Draw()!);
             state.CurrentPhaseId          = resultPhaseId;
             state.Metadata["last_winner"] = "";
-            state.Metadata["status"]      = "Tie! Cards returned.\nTap to continue.";
+            state.Metadata["status"]      = GameText.Message(state, "war_tie", "Tie! Cards returned.\nTap to continue.");
         }
 
         private void SetRoundResult(GameState state, string winnerId)
         {
             state.Metadata["last_winner"] = winnerId;
             state.Metadata["status"]      = GameText.PerViewer(state,
-                viewer => WarHandler.RoundWonBy(state, winnerId, viewer) + "\nTap to collect.");
+                viewer => WarHandler.RoundWonBy(state, winnerId, viewer) + "\nTap to collect.", about: winnerId);
             state.CurrentPhaseId          = resultPhaseId;
         }
     }
@@ -148,7 +148,7 @@ public static class PhaseHandlerRegistry
 
             state.CurrentPhaseId = readyPhaseId;
             state.RoundNumber++;
-            state.Metadata["status"] = "Tap to flip!";
+            state.Metadata["status"] = GameText.Message(state, "war_flip", "Tap to flip!");
         }
     }
 

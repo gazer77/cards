@@ -282,8 +282,9 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
         state.Metadata["status"] = GameText.PerViewer(state, viewer =>
             (viewer is not null && linesBy.TryGetValue(viewer, out var own)
                 ? string.Join("  ·  ", own.Select(l => GameText.Render(state, l, viewer)))
-                : "") + "\n" + tapOn);
-        state.Metadata["sub"]      = GameText.Message(state, "bj_dealer_had", "Dealer: {value}", values: ("value", dv));
+                : "") + "\n" + tapOn,
+            about: GameText.Reader);   // each seat's result, beside that seat
+        state.Metadata["sub"]     = GameText.Message(state, "bj_dealer_had", "Dealer: {value}", values: ("value", dv));
         state.Metadata["bj_state"] = "collecting";
     }
 
@@ -483,9 +484,9 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
         string softText = soft ? "soft " : "";
         state.Metadata["status"] = DealerIsDone(hand)
             ? GameText.Message(state, "dealer_done", "Dealer: {soft}{value} — Tap to see result.",
-                               values: [("soft", softText), ("value", val)])
+                               DealerId(state), ("soft", softText), ("value", val))
             : GameText.Message(state, "dealer_drawing", "Dealer: {soft}{value} — Tap for next card.",
-                               values: [("soft", softText), ("value", val)]);
+                               DealerId(state), ("soft", softText), ("value", val));
         state.Metadata.Remove("sub");
     }
 
@@ -507,6 +508,7 @@ public sealed class BlackjackRoundHandler : IPhaseHandler
     private Zone? SplitHand(GameState state, string seat) => state.FindZone($"{_splitZone}:{seat}");
 
     private static Zone DealerHand(GameState state) => Hand(state, state.Players[DealerIndex(state)].Id);
+    private static string DealerId(GameState state) => state.Players[DealerIndex(state)].Id;
 
     private static string Active(GameState state, string seat)
         => state.Metadata.GetValueOrDefault($"bj_active:{seat}", "hand");

@@ -38,12 +38,13 @@ public sealed class TableConnection(Uri hubUrl, ISettingsStore store) : IAsyncDi
     // ── Seating ───────────────────────────────────────────────────────────────
 
     public async Task<SeatTicket> CreateAsync(
-        string gameId, int players, IReadOnlyList<string> rules, string? configuration, string name)
+        string gameId, int players, IReadOnlyList<string> rules, string? configuration, string name,
+        int dropTimeoutSeconds = 60)
     {
         var hub = await HubAsync();
         Reset();
         Ticket = await hub.InvokeAsync<SeatTicket>(TableHubContract.CreateRoom,
-            gameId, players, rules.ToList(), configuration, name);
+            gameId, players, rules.ToList(), configuration, name, dropTimeoutSeconds);
         Remember(Ticket);
         return Ticket;
     }
@@ -101,6 +102,19 @@ public sealed class TableConnection(Uri hubUrl, ISettingsStore store) : IAsyncDi
         }
         catch (Exception) { /* leaving a table that has already gone is still leaving */ }
         Reset();
+    }
+
+    /// <summary>Answers the open question about someone away: let the computer play for them?</summary>
+    public async Task VoteAsync(bool letComputerPlay)
+    {
+        if (Ticket is not { } t) return;
+        try
+        {
+            var hub = await HubAsync();
+            await hub.InvokeAsync(TableHubContract.Vote, t.Code, t.Token, letComputerPlay);
+        }
+        catch (HubException ex) { Refused?.Invoke(Clean(ex.Message)); }
+        catch (Exception)       { Refused?.Invoke("Lost the connection to the table."); }
     }
 
     /// <summary>Sends a move. A refusal is reported through <see cref="Refused"/>, not thrown.</summary>

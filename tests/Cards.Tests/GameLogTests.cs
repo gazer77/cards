@@ -94,7 +94,7 @@ public sealed class GameLogTests
         (string Player, string Text)? aiLine = null;
         vm.MessagePosted += (playerId, text) =>
         {
-            if (text.StartsWith("AI asked for") && aiLine is null) aiLine = (playerId, text);
+            if (text.StartsWith($"{vm.State!.Players[1].Name} asked you for") && aiLine is null) aiLine = (playerId, text);
         };
 
         await vm.StartAsync("go-fish", 2, resume: false, seed: 7);

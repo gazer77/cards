@@ -131,6 +131,13 @@ public class GameState
     public Dictionary<string, TextVariant> TextVariants { get; } = [];
 
     /// <summary>
+    /// Who each line the engine wrote is about, keyed by the stored text — so a bubble
+    /// goes beside the right seat. See <see cref="GameText.SubjectOf"/>. Never saved.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Dictionary<string, string> TextSubjects { get; } = [];
+
+    /// <summary>
     /// AI agents registered for this game session, keyed by player ID.
     /// Not persisted to save files.
     /// </summary>

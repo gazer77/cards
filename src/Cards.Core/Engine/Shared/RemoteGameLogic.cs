@@ -23,6 +23,8 @@ public sealed class RemoteGameLogic(TableView view, Func<GameAction, Task> send)
 
     public string GetStatusText(GameState state) => View.Status;
 
+    public string? GetStatusSubject(GameState state, string? viewerId) => View.StatusSubject;
+
     /// <summary>The server plays the automatic turns; a client never waits to play one.</summary>
     public TimeSpan? GetAutoAdvanceDelay(GameState state) => null;
 

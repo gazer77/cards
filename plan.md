@@ -127,7 +127,7 @@ heuristics, and conservative poker betting; everything else falls through to ran
       seat count and house rules it was written at, listed for resuming on the setup
       screen. Replaces one-slot-per-game, which let a four-player save load into a
       two-player game and strand cards in hands nobody could reach
-- [ ] **Save and resume multiplayer games** — now unblocked. Seats have stable identity
+- [ ] **Backlog: save and resume multiplayer games** — now unblocked. Seats have stable identity
       (a token per seat) and reconnect works, and the server holds the only copy of a
       game, so "which save is authoritative" has one answer. What remains: the server
       writing rooms to disk (the save shape plus the roster and tokens) so a restart
@@ -294,13 +294,26 @@ See `docs/shared-tables.md`.
 - [x] Web client — Play with friends from setup, join by code from home, lobby with
       seats and Deal, the table driven by server views through the same view model and
       gestures as a local game (`RemoteGameLogic`, `TableConnection`).
-- [ ] **Phone app on shared tables** — `TableConnection` lives in `Cards.App` and the SignalR
-      client runs on MAUI; the MAUI pages need the lobby and the view-driven table. The old
-      peer-hosted `GameServer`/`GameClient` over `TcpTransport` should then be retired.
-- [ ] **Go Fish at a shared table** — its handler is one person against the computer
-      (`SharedTableReady` false); it needs symmetric turns.
-- [ ] **A dropped player's turn** — the table waits for them indefinitely; hand the seat to
-      the computer after a timeout, and back when they return.
+- [x] **Go Fish at a shared table** — the handler is symmetric now: every seat asks the
+      same way, the asker chooses whom to ask ("Ask Ana for Kings"), the table's memory
+      of what each seat asked for and refused is per seat and public, and Go Fish seats
+      two to six. Its lines read three ways (`GameText.Between`): "You asked Bo…",
+      "Ana asked you…", "Ana asked Bo…".
+- [x] **A dropped player's turn** — the host picks a timeout (30 s to 5 min, or never).
+      Past it, on the dropped player's turn, everyone still connected votes whether the
+      computer should stand in; a majority hands the seat over, and it is handed back the
+      moment the player reconnects. A "wait" majority closes the vote until another
+      timeout passes.
+- [x] **Speech bubbles beside the right seat** — each line records who it is about as it
+      is written (`GameText.SubjectOf`); instructions and summaries are never bubbled, and
+      a bubble carries only what was said, not the "Tap to …" after it. Also fixes the
+      same misplacement at a single-player table.
+- [ ] **Backlog: phone app on shared tables** — `TableConnection` lives in `Cards.App` and
+      the SignalR client runs on MAUI; the MAUI pages need the lobby and the view-driven
+      table. The old peer-hosted `GameServer`/`GameClient` over `TcpTransport` should then
+      be retired.
+- [ ] **Backlog: shared games survive a restart** — see "Save and resume multiplayer
+      games" under Customization.
 - [ ] **Simultaneous choices** — phases where everyone decides at once (Hearts' pass) run
       seat by seat today; at a shared table they could run together.
 - [ ] **Private notes in state** — the projection strips the notes it knows name a card

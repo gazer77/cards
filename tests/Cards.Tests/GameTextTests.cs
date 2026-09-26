@@ -96,7 +96,7 @@ public sealed class GameTextTests
         // key, then the default string — which may hold \" escapes.
         var call = new System.Text.RegularExpressions.Regex(
             // Announce names the speaker before the key, so one argument may sit between.
-            "GameText\\.(Message|TeamMessage|Action|Log|Announce)\\(state,\\s*(?:[^\",]+,\\s*)?\"([a-z_{}]+)\",\\s*\"((?:[^\"\\\\]|\\\\.)*)\"",
+            "GameText\\.(Message|TeamMessage|Action|Log|Announce|Between)\\(state,\\s*(?:[^\",]+,\\s*)?\"([a-z_{}]+)\",\\s*\"((?:[^\"\\\\]|\\\\.)*)\"",
             System.Text.RegularExpressions.RegexOptions.Singleline);
 
         foreach (var file in files)
@@ -106,7 +106,7 @@ public sealed class GameTextTests
                 string key  = m.Groups[2].Value;
                 if (key.StartsWith("draw_from_")) continue;   // open-ended by design
                 said.TryAdd(kind + ":" + key, []);
-                said[kind + ":" + key].Add(m.Groups[3].Value.Replace("\\\"", "\""));
+                said[kind + ":" + key].Add(m.Groups[3].Value.Replace("\\\"", "\"").Replace("\\n", "\n"));
             }
 
         Assert.NotEmpty(said);

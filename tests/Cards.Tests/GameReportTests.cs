@@ -85,9 +85,9 @@ public sealed class GameReportTests
         Assert.Contains(vm.State!.CurrentPlayer.Id, report);
         Assert.Contains("pairs", report);
 
-        // gf_state is how the Go Fish handler tracks whose turn it is; an odd decision
-        // usually makes sense only once you can see values like it.
-        Assert.Contains("gf_state", report);
+        // The handler's notes — here what the table remembers each seat asking for —
+        // are what make an odd decision make sense.
+        Assert.Contains("gf_known:", report);
     }
 
     [Fact]

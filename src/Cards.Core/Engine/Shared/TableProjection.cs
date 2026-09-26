@@ -66,6 +66,7 @@ public static class TableProjection
                 .Select(a => new AnnouncementView { PlayerId = a.PlayerId, Text = GameText.Render(state, a.Text, viewerId) })
                 .ToList(),
             Status     = GameText.Render(state, logic.GetStatusText(state), viewerId),
+            StatusSubject = logic.GetStatusSubject(state, viewerId),
             IsGameOver = gameOver,
             IsBusy     = busy,
         };
@@ -108,7 +109,7 @@ public static class TableProjection
     /// Notes the rules keep about the seat to act that name a card only that seat has
     /// seen: what it is picking, and the card it just drew off the deck.
     /// </summary>
-    private static readonly string[] PrivateToActor = ["selected_card", "dd_drawn_card"];
+    private static readonly string[] PrivateToActor = ["selected_card", "selected_rank", "dd_drawn_card"];
 
     /// <summary>
     /// Whether <paramref name="viewerId"/> may see this card's face. Mirrors how the

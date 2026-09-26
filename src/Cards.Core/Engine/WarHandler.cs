@@ -86,7 +86,7 @@ public sealed class WarHandler : IPhaseHandler
                 Hand(state, p1).Add(Play(state, p1).Draw()!);
                 state.Metadata["war_state"]   = "collect";
                 state.Metadata["last_winner"] = "";
-                state.Metadata["status"]      = "Tie! Cards returned.\nTap to continue.";
+                state.Metadata["status"]      = GameText.Message(state, "war_tie", "Tie! Cards returned.\nTap to continue.");
                 return;
             }
 
@@ -136,7 +136,7 @@ public sealed class WarHandler : IPhaseHandler
         if (!state.Metadata.ContainsKey("war_state"))
         {
             state.Metadata["war_state"] = "ready";
-            state.Metadata["status"]    = "Tap to flip!";
+            state.Metadata["status"]    = GameText.Message(state, "war_flip", "Tap to flip!");
         }
     }
 
@@ -148,7 +148,7 @@ public sealed class WarHandler : IPhaseHandler
         state.Metadata["last_winner"] = winnerId;
         state.Metadata["war_state"]   = "collect";
         state.Metadata["status"]      = GameText.PerViewer(state,
-            viewer => RoundWonBy(state, winnerId, viewer) + extra + "\nTap to collect.");
+            viewer => RoundWonBy(state, winnerId, viewer) + extra + "\nTap to collect.", about: winnerId);
     }
 
     /// <summary>

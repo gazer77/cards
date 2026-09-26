@@ -5,374 +5,270 @@ using Cards.Models;
 namespace Cards.Engine;
 
 /// <summary>
-/// Phase handler for Go Fish (2+ players, one of which is an AI).
+/// Phase handler for Go Fish, two to six players, any of them people.
+///
+/// Every seat takes the same turn: pick a rank you hold, ask someone for it, take every
+/// card of that rank they have — or go fish from the deck. Getting what you asked for,
+/// or drawing it, earns another ask. A person picks by tapping a card and pressing
+/// "Ask Ana for Kings"; a computer seat picks through <see cref="GoFishAiAgent"/>.
+///
+/// It was written as one person against the computer: seat 0 asked through the table
+/// and seat 1 ran separate turn logic of its own, so a second person at the table would
+/// never have been asked anything. Now the seat is only who is asking.
 ///
 /// Phase definition parameters:
 ///   book_size    — number of matching cards to form a book (default 4).
 ///   collect_to   — zone-id prefix for book piles (default "books").
 ///
 /// State metadata:
-///   gf_state         — "player_turn" | "ai_turn"
-///   selected_rank    — rank code the human player tapped ("A","2"…"K")
-///   selected_card    — card ID the human player tapped
-///   known_p0_ranks   — comma-separated rank codes the AI has observed player0 hold
-///   status           — one-line status text
+///   selected_rank     — rank code the asking person tapped ("A","2"…"K")
+///   selected_card     — the card they tapped
+///   gf_known:{seat}   — ranks the table has seen that seat hold (they asked for them)
+///   gf_denied:{seat}  — ranks that seat has said it does not hold
+/// Both are what anyone at a real table could remember, so every seat may read them.
 /// </summary>
 public sealed class GoFishHandler : IPhaseHandler
 {
-    /// <summary>
-    /// Written as one person against the computer: seat 0 asks, seat 1 is an AI with its
-    /// own turn logic. A second person at the table would never be asked anything.
-    /// </summary>
-    public bool SharedTableReady => false;
-
-    private readonly string _nextPhaseId;
     private readonly int    _bookSize;
     private readonly string _collectTo;
 
     public GoFishHandler(PhaseDefinition def, string nextPhaseId)
     {
-        _nextPhaseId = nextPhaseId;
-        _bookSize    = GetInt(def, "book_size")    ?? 4;
-        _collectTo   = GetString(def, "collect_to") ?? "books";
+        _bookSize  = GetInt(def, "book_size")    ?? 4;
+        _collectTo = GetString(def, "collect_to") ?? "books";
     }
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
 
     public void OnGameStart(GameState state)
     {
-        // Register AI agent for player1
-        if (state.Players.Count > 1)
-            state.PlayerAgents[state.Players[1].Id] = new GoFishAiAgent(state.Players[1].Id);
+        // Computer seats ask the way a Go Fish player does, not the way a trick-taker
+        // plays. A seat the engine gave a general agent gets this one instead.
+        foreach (var id in state.PlayerAgents.Keys.ToList())
+            state.PlayerAgents[id] = new GoFishAiAgent(id);
 
-        // Collect any immediate books from the initial deal
         foreach (var p in state.Players)
             CheckBooks(state, p.Id);
 
-        state.Metadata["gf_state"] = "player_turn";
-        SetIdleStatus(state);
+        SetTurnStatus(state);
     }
 
     public IReadOnlyList<GameAction> GetValidActions(GameState state)
     {
-        string gfState = state.Metadata.GetValueOrDefault("gf_state", "player_turn");
+        var seat = state.CurrentPlayer.Id;
+        var hand = Hand(state, seat);
 
-        if (gfState == "ai_turn")
-            return [new GameAction("ai_step")];
+        // Nothing in hand: draw one, or pass when the deck is gone too. No choice in
+        // either, so the table does it.
+        if (hand.Count == 0) return [new GameAction("refill")];
 
-        // Player turn
-        var p0Hand = PlayerHand(state, 0);
-        if (p0Hand.Count == 0)
-            return [new GameAction("player_refill")];
+        if (state.PlayerAgents.ContainsKey(seat)) return [new GameAction("ai_step")];
 
         string? sel = state.Metadata.GetValueOrDefault("selected_rank");
         if (sel is null) return [];
 
         string rankName = RankPlural(RankFromCode(sel));
-        return
-        [
-            new GameAction("ask",      Label: GameText.Action(state, "ask", "Ask for {rank}", ("rank", rankName))),
-            new GameAction("deselect", Label: GameText.Action(state, "deselect", "Cancel")),
-        ];
+        var actions = Targets(state, seat)
+            .Select(t => new GameAction("ask", ZoneId: $"hand:{t.Id}",
+                Label: GameText.Action(state, "ask", "Ask {target} for {rank}", ("target", t.Name), ("rank", rankName))))
+            .ToList();
+        actions.Add(new GameAction("deselect", Label: GameText.Action(state, "deselect", "Cancel")));
+        return actions;
     }
 
     public void Apply(GameState state, GameAction action)
     {
-        string gfState = state.Metadata.GetValueOrDefault("gf_state", "player_turn");
+        var seat = state.CurrentPlayer.Id;
 
-        if (gfState == "ai_turn")
-        {
-            if (action.Type == "ai_step") AiStep(state);
-            return;
-        }
-
-        // Player turn
         switch (action.Type)
         {
-            case "select_card":   SelectCard(state, action.CardId!); break;
-            case "ask":           PlayerAsk(state);                  break;
-            case "deselect":      Deselect(state);                   break;
-            case "player_refill": PlayerRefill(state);               break;
+            case "select_card" when action.CardId is { } id && !state.PlayerAgents.ContainsKey(seat):
+                Select(state, seat, id);
+                break;
+
+            case "deselect":
+                Deselect(state);
+                SetTurnStatus(state);
+                break;
+
+            case "ask" when state.Metadata.GetValueOrDefault("selected_rank") is { } rank:
+            {
+                var target = TargetFromZone(state, seat, action.ZoneId);
+                Deselect(state);
+                if (target is not null) Ask(state, seat, target.Id, rank);
+                break;
+            }
+
+            case "ai_step" when state.PlayerAgents.ContainsKey(seat):
+                ComputerAsk(state, seat);
+                break;
+
+            case "refill":
+                Refill(state, seat);
+                break;
         }
     }
 
     public TimeSpan? GetAutoAdvanceDelay(GameState state)
     {
-        string gfState = state.Metadata.GetValueOrDefault("gf_state", "player_turn");
-        if (gfState == "ai_turn") return TimeSpan.FromMilliseconds(1200);
-        if (PlayerHand(state, 0).Count == 0) return TimeSpan.FromMilliseconds(800);
+        if (Hand(state, state.CurrentPlayer.Id).Count == 0) return TimeSpan.FromMilliseconds(800);
+        if (state.PlayerAgents.ContainsKey(state.CurrentPlayer.Id)) return TimeSpan.FromMilliseconds(1200);
         return null;
     }
 
     public IReadOnlyList<string> GetSelectableCardIds(GameState state)
     {
-        if (state.Metadata.GetValueOrDefault("gf_state") == "ai_turn") return [];
-        return PlayerHand(state, 0).Cards.Select(c => c.Id).ToList();
+        var seat = state.CurrentPlayer.Id;
+        if (state.PlayerAgents.ContainsKey(seat)) return [];
+        return Hand(state, seat).Cards.Select(c => c.Id).ToList();
     }
 
-    // ── Player actions ────────────────────────────────────────────────────────
+    // ── A person's turn ───────────────────────────────────────────────────────
 
-    private static void SelectCard(GameState state, string cardId)
+    private static void Select(GameState state, string seat, string cardId)
     {
+        if (!Hand(state, seat).Cards.Any(c => c.Id == cardId)) return;
+
         string rankCode = RankCode(cardId);
         state.Metadata["selected_rank"] = rankCode;
         state.Metadata["selected_card"] = cardId;
-        state.Metadata["status"]        = GameText.Message(state, "ask_confirm", "Ask {opponent} for {rank}?",
-            values: [("opponent", Opponent(state)), ("rank", RankPlural(RankFromCode(rankCode)))]);
+
+        // The rank is the asker's until they ask; everyone else only sees them thinking.
+        state.Metadata["status"] = GameText.Message(state, "gf_choosing", "{player} is choosing what to ask for.",
+            seat, ("rank", RankPlural(RankFromCode(rankCode))));
     }
 
     private static void Deselect(GameState state)
     {
         state.Metadata.Remove("selected_rank");
         state.Metadata.Remove("selected_card");
-        SetIdleStatus(state);
     }
 
-    private void PlayerAsk(GameState state)
+    /// <summary>Who may be asked: everyone else still holding cards — or, if nobody is, everyone else.</summary>
+    private static List<Player> Targets(GameState state, string seat)
     {
-        string rankCode = state.Metadata["selected_rank"];
-        state.Metadata.Remove("selected_rank");
-        state.Metadata.Remove("selected_card");
+        var others = state.Players.Where(p => p.Id != seat && p.Role is null).ToList();
+        var holding = others.Where(p => Hand(state, p.Id).Count > 0).ToList();
+        return holding.Count > 0 ? holding : others;
+    }
 
-        var p0Hand  = PlayerHand(state, 0);
-        var p1Hand  = PlayerHand(state, 1);
+    private static Player? TargetFromZone(GameState state, string seat, string? zoneId)
+    {
+        var targets = Targets(state, seat);
+        return targets.FirstOrDefault(t => $"hand:{t.Id}" == zoneId) ?? (zoneId is null ? targets.FirstOrDefault() : null);
+    }
+
+    // ── A computer's turn ─────────────────────────────────────────────────────
+
+    private void ComputerAsk(GameState state, string seat)
+    {
+        var masked = GameStateMask.CreateViewFor(state, seat);
+        var choice = GoFishAiAgent.Choose(masked, seat);
+
+        var target = TargetFromZone(state, seat, choice.ZoneId) ?? Targets(state, seat).First();
+        Ask(state, seat, target.Id, RankCode(choice.CardId!));
+    }
+
+    // ── The ask ───────────────────────────────────────────────────────────────
+
+    private void Ask(GameState state, string asker, string target, string rankCode)
+    {
+        var askerHand  = Hand(state, asker);
+        var targetHand = Hand(state, target);
+        var deck       = state.Zones["deck"];
         string rankName = RankPlural(RankFromCode(rankCode));
 
-        RecordKnownPlayerRank(state, rankCode);
+        // Asking says you hold the rank, to everyone.
+        Remember(state, $"gf_known:{asker}", rankCode);
 
-        var matching = p1Hand.Cards.Where(c => RankCode(c.Id) == rankCode).ToList();
-
+        var matching = targetHand.Cards.Where(c => RankCode(c.Id) == rankCode).ToList();
         if (matching.Count > 0)
         {
             foreach (var c in matching)
             {
-                p1Hand.Remove(c);
+                targetHand.Remove(c);
                 c.IsFaceUp = true;
-                p0Hand.Add(c);
+                askerHand.Add(c);
             }
+            // They had them and now they do not.
+            Forget(state, $"gf_known:{target}", rankCode);
+            Remember(state, $"gf_denied:{target}", rankCode);
 
-            int books    = CheckBooks(state, state.Players[0].Id);
-            PruneKnownRanks(state);
-            string bookMsg = BooksNote(state, books);
-            state.Metadata["status"] = GameText.Message(state, "ask_hit", "Got {count} {rank} from {opponent}!{books} Go again.",
-                values: [("count", matching.Count), ("rank", rankName), ("opponent", Opponent(state)), ("books", bookMsg)]);
-            CheckWinCondition(state);
+            string books = BooksNote(state, CheckBooks(state, asker));
+            state.Metadata["status"] = GameText.Between(state, "gf_hit",
+                "{player} asked {target} for {rank} and got {count}.{books} {player} goes again.",
+                asker, target, ("rank", rankName), ("count", matching.Count), ("books", books));
+            FinishAsk(state, goAgain: true);
+            return;
         }
-        else
+
+        Forget(state, $"gf_known:{target}", rankCode);
+        Remember(state, $"gf_denied:{target}", rankCode);
+
+        if (deck.Count == 0)
         {
-            var deck = state.Zones["deck"];
-            if (deck.Count > 0)
-            {
-                var drawn    = deck.Draw()!;
-                drawn.IsFaceUp = true;
-                p0Hand.Add(drawn);
-
-                // The player has taken one unseen card, so one thing the AI had
-                // ruled out may no longer hold.
-                ExpireOldestDenial(state);
-
-                int books    = CheckBooks(state, state.Players[0].Id);
-                PruneKnownRanks(state);
-                bool goAgain = RankCode(drawn.Id) == rankCode;
-                string drawnRank = RankPlural(RankFromCode(RankCode(drawn.Id)));
-                string bookMsg   = BooksNote(state, books);
-
-                if (goAgain)
-                {
-                    RecordKnownPlayerRank(state, rankCode);
-                    state.Metadata["status"] = GameText.Message(state, "fish_lucky", "Go Fish! Lucky — you drew {rank}.{books} Go again!",
-                        values: [("rank", drawnRank), ("books", bookMsg)]);
-                }
-                else
-                {
-                    state.Metadata["status"] = GameText.Message(state, "fish_drew", "Go Fish! You drew {rank}.{books} {opponent}'s turn.",
-                        values: [("rank", drawnRank), ("books", bookMsg), ("opponent", Opponent(state))]);
-                    EndPlayerTurn(state);
-                }
-            }
-            else
-            {
-                state.Metadata["status"] = GameText.Message(state, "fish_deck_empty", "Go Fish! The deck is empty. {opponent}'s turn.", values: ("opponent", Opponent(state)));
-                EndPlayerTurn(state);
-            }
-
-            CheckWinCondition(state);
+            state.Metadata["status"] = GameText.Between(state, "gf_fish_empty",
+                "{player} asked {target} for {rank} — Go Fish. The deck is empty.",
+                asker, target, ("rank", rankName));
+            FinishAsk(state, goAgain: false);
+            return;
         }
+
+        var drawn = deck.Draw()!;
+        drawn.IsFaceUp = true;
+        askerHand.Add(drawn);
+
+        // The asker took an unseen card, so one thing they said they lacked may be wrong now.
+        ExpireOldest(state, $"gf_denied:{asker}");
+
+        bool lucky = RankCode(drawn.Id) == rankCode;
+        string note = BooksNote(state, CheckBooks(state, asker));
+
+        state.Metadata["status"] = lucky
+            ? GameText.Between(state, "gf_lucky",
+                "{player} asked {target} for {rank} — Go Fish, and drew one!{books} {player} goes again.",
+                asker, target, ("rank", rankName), ("books", note))
+            : GameText.Between(state, "gf_fish",
+                "{player} asked {target} for {rank} — Go Fish.{books}",
+                asker, target, ("rank", rankName), ("books", note),
+                ("drawn", RankPlural(RankFromCode(RankCode(drawn.Id)))));
+        FinishAsk(state, goAgain: lucky);
     }
 
-    private void PlayerRefill(GameState state)
+    private void Refill(GameState state, string seat)
     {
-        var p0Hand = PlayerHand(state, 0);
-        var deck   = state.Zones["deck"];
-
+        var deck = state.Zones["deck"];
         if (deck.Count > 0)
         {
             var drawn = deck.Draw()!;
             drawn.IsFaceUp = true;
-            p0Hand.Add(drawn);
-            ExpireOldestDenial(state);
-            CheckBooks(state, state.Players[0].Id);
-            PruneKnownRanks(state);
-            if (p0Hand.Count > 0)
-                state.Metadata["status"] = GameText.Message(state, "no_cards_drew", "You had no cards — drew one from the deck.");
-        }
-        else
-        {
-            state.Metadata["status"] = GameText.Message(state, "no_cards_no_deck", "You have no cards and the deck is empty. {opponent}'s turn.", values: ("opponent", Opponent(state)));
-            EndPlayerTurn(state);
-        }
-
-        CheckWinCondition(state);
-    }
-
-    private static void EndPlayerTurn(GameState state)
-    {
-        if (state.CurrentPhaseId == "game_over") return;
-        state.Metadata["gf_state"]   = "ai_turn";
-        state.CurrentPlayerIndex = 1;
-    }
-
-    // ── AI turn ───────────────────────────────────────────────────────────────
-
-    private void AiStep(GameState state)
-    {
-        var aiId   = state.Players[1].Id;
-        var aiHand = PlayerHand(state, 1);
-        var deck   = state.Zones["deck"];
-
-        if (aiHand.Count == 0)
-        {
-            if (deck.Count > 0)
-            {
-                var c = deck.Draw()!;
-                c.IsFaceUp = false;
-                aiHand.Add(c);
-                CheckBooks(state, aiId);
-                state.Metadata["status"] = GameText.Message(state, "opponent_no_cards_drew", "{opponent} has no cards — drew from deck. Your turn!", values: ("opponent", Opponent(state)));
-            }
-            else
-            {
-                state.Metadata["status"] = GameText.Message(state, "opponent_no_cards_no_deck", "{opponent} has no cards and the deck is empty. Your turn!", values: ("opponent", Opponent(state)));
-            }
-            EndAiTurn(state);
-            CheckWinCondition(state);
+            Hand(state, seat).Add(drawn);
+            ExpireOldest(state, $"gf_denied:{seat}");
+            CheckBooks(state, seat);
+            state.Metadata["status"] = GameText.Message(state, "gf_refill", "{player} had no cards and drew one.", seat);
+            FinishAsk(state, goAgain: Hand(state, seat).Count > 0);
             return;
         }
 
-        string rankCode = PickAiRankCode(state);
-        ExecuteAiAsk(state, rankCode);
+        state.Metadata["status"] = GameText.Message(state, "gf_out", "{player} has no cards left.", seat);
+        FinishAsk(state, goAgain: false);
     }
 
-    private static string PickAiRankCode(GameState state)
+    /// <summary>Ends the game if it is over; otherwise the same seat asks again, or the next one.</summary>
+    private static void FinishAsk(GameState state, bool goAgain)
     {
-        var aiId = state.Players[1].Id;
-        if (state.PlayerAgents.TryGetValue(aiId, out var agent))
-        {
-            var masked = GameStateMask.CreateViewFor(state, aiId);
-            var action = agent.ChooseAction(masked, [new GameAction("ask_rank")]);
-            if (action.Type == "ask_rank" && action.CardId is not null)
-                return RankCode(action.CardId);
-        }
-
-        // Fallback heuristic: pick rank held most, preferring known player ranks and
-        // avoiding ones already refused.
-        var aiHand     = state.Zones[$"hand:{aiId}"];
-        var rankGroups = aiHand.Cards
-            .GroupBy(c => RankCode(c.Id))
-            .OrderByDescending(g => g.Count())
-            .ToList();
-
-        var knownRanks = GetKnownPlayerRanks(state);
-        var denied     = GetDeniedRanks(state);
-
-        return rankGroups.FirstOrDefault(g => knownRanks.Contains(g.Key))?.Key
-            ?? rankGroups.FirstOrDefault(g => !denied.Contains(g.Key))?.Key
-            // Everything the AI holds has been refused. Asking anyway is a wasted turn
-            // either way, so fall back rather than fail.
-            ?? rankGroups[0].Key;
+        if (CheckWinCondition(state)) return;
+        if (!goAgain) state.AdvancePlayer();
     }
 
-    private void ExecuteAiAsk(GameState state, string rankCode)
-    {
-        var aiId   = state.Players[1].Id;
-        var aiHand = PlayerHand(state, 1);
-        var p0Hand = PlayerHand(state, 0);
-        var deck   = state.Zones["deck"];
-        string rankName = RankPlural(RankFromCode(rankCode));
+    private static void SetTurnStatus(GameState state)
+        => state.Metadata["status"] = GameText.Message(state, "gf_turn", "{player} to ask.", state.CurrentPlayer.Id);
 
-        var matching = p0Hand.Cards.Where(c => RankCode(c.Id) == rankCode).ToList();
-
-        if (matching.Count > 0)
-        {
-            foreach (var c in matching)
-            {
-                p0Hand.Remove(c);
-                c.IsFaceUp = false;
-                aiHand.Add(c);
-            }
-
-            if (!p0Hand.Cards.Any(c => RankCode(c.Id) == rankCode))
-            {
-                RemoveKnownPlayerRank(state, rankCode);
-
-                // A successful ask takes every card of that rank, so the player is now
-                // known to hold none — asking again would be the same wasted turn.
-                RecordDeniedRank(state, rankCode);
-            }
-
-            int books    = CheckBooks(state, aiId);
-            string bookMsg = BooksNote(state, books);
-            state.Metadata["status"] = GameText.Message(state, "opponent_ask_hit", "{opponent} asked for {rank} — got {count}!{books} {opponent} goes again…",
-                values: [("opponent", Opponent(state)), ("rank", rankName), ("count", matching.Count), ("books", bookMsg)]);
-        }
-        else
-        {
-            RemoveKnownPlayerRank(state, rankCode);
-            RecordDeniedRank(state, rankCode);
-
-            if (deck.Count > 0)
-            {
-                var drawn = deck.Draw()!;
-                drawn.IsFaceUp = false;
-                aiHand.Add(drawn);
-
-                int books    = CheckBooks(state, aiId);
-                bool goAgain = RankCode(drawn.Id) == rankCode;
-                string bookMsg = BooksNote(state, books);
-
-                if (goAgain)
-                    state.Metadata["status"] = GameText.Message(state, "opponent_fish_lucky", "{opponent} asked for {rank} — Go Fish, but drew one!{books} {opponent} goes again…",
-                        values: [("opponent", Opponent(state)), ("rank", rankName), ("books", bookMsg)]);
-                else
-                {
-                    state.Metadata["status"] = GameText.Message(state, "opponent_fish", "{opponent} asked for {rank} — Go Fish.{books} Your turn!",
-                        values: [("opponent", Opponent(state)), ("rank", rankName), ("books", bookMsg)]);
-                    EndAiTurn(state);
-                }
-            }
-            else
-            {
-                state.Metadata["status"] = GameText.Message(state, "opponent_fish_deck_empty", "{opponent} asked for {rank} — Go Fish! Deck is empty. Your turn!",
-                    values: [("opponent", Opponent(state)), ("rank", rankName)]);
-                EndAiTurn(state);
-            }
-        }
-
-        CheckWinCondition(state);
-    }
-
-    private static void EndAiTurn(GameState state)
-    {
-        if (state.CurrentPhaseId == "game_over") return;
-        state.Metadata["gf_state"]   = "player_turn";
-        state.CurrentPlayerIndex = 0;
-    }
-
-    // ── Book detection ────────────────────────────────────────────────────────
+    // ── Books ─────────────────────────────────────────────────────────────────
 
     private int CheckBooks(GameState state, string playerId)
     {
-        var hand  = state.Zones[$"hand:{playerId}"];
+        var hand  = Hand(state, playerId);
         var books = state.FindZone($"{_collectTo}:{playerId}");
 
         var groups = hand.Cards
@@ -382,125 +278,18 @@ public sealed class GoFishHandler : IPhaseHandler
 
         foreach (var group in groups)
         {
-            var toMove = group.Take(_bookSize).ToList();
-            foreach (var c in toMove)
+            foreach (var c in group.Take(_bookSize).ToList())
             {
                 hand.Remove(c);
                 c.IsFaceUp = true;
                 books?.Add(c);
             }
             state.AddScore(playerId, 1);
+            Forget(state, $"gf_known:{playerId}", group.Key);
         }
 
         return groups.Count;
     }
-
-    // ── Win condition ─────────────────────────────────────────────────────────
-
-    private static void CheckWinCondition(GameState state)
-    {
-        if (state.CurrentPhaseId == "game_over") return;
-
-        var result = WinConditionEngine.Instance.Check(state);
-        if (result is null) return;
-
-        state.Metadata["status"]      = result.StatusMessage;
-        state.Metadata["sub"]         = result.SubMessage ?? "";
-        state.Metadata["last_winner"] = result.WinnerId ?? "";
-        state.CurrentPhaseId          = "game_over";
-    }
-
-    // ── AI memory ─────────────────────────────────────────────────────────────
-
-    private static HashSet<string> GetKnownPlayerRanks(GameState state)
-    {
-        var val = state.Metadata.GetValueOrDefault("known_p0_ranks", "");
-        return string.IsNullOrEmpty(val) ? [] : [.. val.Split(',')];
-    }
-
-    private static void RecordKnownPlayerRank(GameState state, string rankCode)
-    {
-        var known = GetKnownPlayerRanks(state);
-        known.Add(rankCode);
-        state.Metadata["known_p0_ranks"] = string.Join(',', known);
-
-        // Seeing the player hold a rank is direct evidence, and outranks having been
-        // told at some earlier point that they had none.
-        var denied = GetDeniedRanks(state);
-        if (denied.Remove(rankCode))
-        {
-            if (denied.Count == 0) state.Metadata.Remove(DeniedKey);
-            else                   state.Metadata[DeniedKey] = string.Join(',', denied);
-        }
-    }
-
-    private static void RemoveKnownPlayerRank(GameState state, string rankCode)
-    {
-        var known = GetKnownPlayerRanks(state);
-        if (known.Remove(rankCode))
-            state.Metadata["known_p0_ranks"] = string.Join(',', known);
-    }
-
-    // ── Denied ranks ──────────────────────────────────────────────────────────
-    //
-    // Asking for a rank the opponent has already refused is legal but is not how the
-    // game is played: it cannot succeed, and every failure draws a card, so an AI with
-    // no memory of refusals empties the deck asking the same question over and over.
-    // Its fallback pick — "the rank I hold most of" — is deterministic, so without this
-    // it does exactly that.
-
-    private const string DeniedKey = "gf_denied_p0";
-
-    internal static HashSet<string> GetDeniedRanks(GameState state)
-    {
-        var val = state.Metadata.GetValueOrDefault(DeniedKey, "");
-        return string.IsNullOrEmpty(val) ? [] : [.. val.Split(',')];
-    }
-
-    private static void RecordDeniedRank(GameState state, string rankCode)
-    {
-        var denied = GetDeniedRanks(state);
-        denied.Add(rankCode);
-        state.Metadata[DeniedKey] = string.Join(',', denied);
-    }
-
-    /// <summary>
-    /// Retires the oldest refusal, because the player has taken one unseen card.
-    ///
-    /// One card can restore at most one ruled-out rank, so forgetting everything on
-    /// each draw is far too much — it sends the AI straight back to the question it
-    /// just had refused, which is the behaviour this whole mechanism exists to stop.
-    /// Forgetting nothing is the opposite mistake: a rank the player draws would be
-    /// ruled out permanently. Expiring them oldest-first tracks the real uncertainty
-    /// without either failure.
-    /// </summary>
-    private static void ExpireOldestDenial(GameState state)
-    {
-        var val = state.Metadata.GetValueOrDefault(DeniedKey, "");
-        if (string.IsNullOrEmpty(val)) return;
-
-        var denied = val.Split(',').ToList();
-        denied.RemoveAt(0);
-
-        if (denied.Count == 0) state.Metadata.Remove(DeniedKey);
-        else                   state.Metadata[DeniedKey] = string.Join(',', denied);
-    }
-
-    private static void PruneKnownRanks(GameState state)
-    {
-        var known = GetKnownPlayerRanks(state);
-        if (known.Count == 0) return;
-        var actual = PlayerHand(state, 0).Cards.Select(c => RankCode(c.Id)).ToHashSet();
-        known.IntersectWith(actual);
-        state.Metadata["known_p0_ranks"] = string.Join(',', known);
-    }
-
-    // ── Zone helpers ──────────────────────────────────────────────────────────
-
-    private static Zone PlayerHand(GameState state, int playerIndex)
-        => state.Zones[$"hand:{state.Players[playerIndex].Id}"];
-
-    // ── Status ────────────────────────────────────────────────────────────────
 
     /// <summary>" 2 books complete!" or "" — the plural is the definition's, one key per form.</summary>
     private static string BooksNote(GameState state, int books) => books switch
@@ -510,26 +299,77 @@ public sealed class GoFishHandler : IPhaseHandler
         _ => " " + GameText.Message(state, "books_complete", "{count} books complete!", values: ("count", books)),
     };
 
-    /// <summary>The other seat's name. Go Fish here is two-handed; "AI" was baked into every line.</summary>
-    private static string Opponent(GameState state)
-        => state.Players.Count > 1 ? state.Players[1].Name : "the opponent";
+    // ── The end ───────────────────────────────────────────────────────────────
 
-    private static void SetIdleStatus(GameState state)
+    private static bool CheckWinCondition(GameState state)
     {
-        int p0 = state.GetScore(state.Players[0].Id);
-        int p1 = state.Players.Count > 1 ? state.GetScore(state.Players[1].Id) : 0;
-        string books = (p0 > 0 || p1 > 0)
-            ? "  " + GameText.Message(state, "books_tally", "(Books — You: {mine} | {opponent}: {theirs})",
-                                     values: [("mine", p0), ("opponent", Opponent(state)), ("theirs", p1)])
-            : "";
-        state.Metadata["status"] = GameText.Message(state, "turn_ask", "Tap a card to ask for its rank.{books}", values: ("books", books));
+        if (state.CurrentPhaseId == "game_over") return true;
+
+        var result = WinConditionEngine.Instance.Check(state);
+        if (result is null) return false;
+
+        state.Metadata["status"]      = result.StatusMessage;
+        state.Metadata["sub"]         = result.SubMessage ?? "";
+        state.Metadata["last_winner"] = result.WinnerId ?? "";
+        state.CurrentPhaseId          = "game_over";
+        return true;
     }
 
-    // ── Rank helpers ──────────────────────────────────────────────────────────
+    // ── What the table remembers ──────────────────────────────────────────────
 
-    private static string RankCode(string cardId) => cardId[..^1];
+    internal static HashSet<string> Recall(GameState state, string key)
+    {
+        var val = state.Metadata.GetValueOrDefault(key, "");
+        return string.IsNullOrEmpty(val) ? [] : [.. val.Split(',')];
+    }
 
-    private static Rank RankFromCode(string code) => code switch
+    private static void Remember(GameState state, string key, string rankCode)
+    {
+        var list = state.Metadata.GetValueOrDefault(key, "");
+        var ranks = string.IsNullOrEmpty(list) ? new List<string>() : list.Split(',').ToList();
+        ranks.Remove(rankCode);
+        ranks.Add(rankCode);   // newest last, so the oldest is the first to expire
+        state.Metadata[key] = string.Join(',', ranks);
+
+        // Seeing a seat hold a rank outranks having heard it had none, and vice versa.
+        string opposite = key.StartsWith("gf_known:") ? "gf_denied:" + key[9..] : "gf_known:" + key[10..];
+        Forget(state, opposite, rankCode);
+    }
+
+    private static void Forget(GameState state, string key, string rankCode)
+    {
+        var ranks = Recall(state, key);
+        if (!ranks.Remove(rankCode)) return;
+        var ordered = state.Metadata[key].Split(',').Where(r => r != rankCode).ToList();
+        if (ordered.Count == 0) state.Metadata.Remove(key);
+        else                    state.Metadata[key] = string.Join(',', ordered);
+    }
+
+    /// <summary>
+    /// Retires the oldest "does not hold" for a seat that has just taken an unseen card.
+    ///
+    /// One card can restore at most one ruled-out rank, so forgetting everything on each
+    /// draw is far too much — it sends the computer straight back to the question it
+    /// just had refused. Forgetting nothing is the opposite mistake: a rank the seat
+    /// draws would be ruled out for good. Oldest-first tracks the real uncertainty.
+    /// </summary>
+    private static void ExpireOldest(GameState state, string key)
+    {
+        var val = state.Metadata.GetValueOrDefault(key, "");
+        if (string.IsNullOrEmpty(val)) return;
+
+        var ranks = val.Split(',').Skip(1).ToList();
+        if (ranks.Count == 0) state.Metadata.Remove(key);
+        else                  state.Metadata[key] = string.Join(',', ranks);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static Zone Hand(GameState state, string playerId) => state.Zones[$"hand:{playerId}"];
+
+    internal static string RankCode(string cardId) => cardId[..^1];
+
+    internal static Rank RankFromCode(string code) => code switch
     {
         "A" => Rank.Ace,
         "J" => Rank.Jack,
@@ -555,8 +395,6 @@ public sealed class GoFishHandler : IPhaseHandler
         Rank.King  => "Kings",
         _          => rank.ToString() + "s",
     };
-
-    // ── JSON helpers ──────────────────────────────────────────────────────────
 
     private static string? GetString(PhaseDefinition def, string key)
     {

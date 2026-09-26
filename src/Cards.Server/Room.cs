@@ -19,6 +19,12 @@ public sealed class Room
     public required IReadOnlyList<string> Rules { get; init; }
     public required List<RoomSeat> Seats { get; init; }
 
+    /// <summary>How long a dropped player may hold the table before the others are asked; zero for never.</summary>
+    public TimeSpan DropTimeout { get; init; }
+
+    /// <summary>The question open at this table, if any.</summary>
+    public RoomVote? Vote { get; set; }
+
     public string HostSeatId => Seats[0].Id;
 
     public GameState? State { get; set; }
@@ -27,6 +33,9 @@ public sealed class Room
 
     /// <summary>Numbers every view sent, so a client can drop one that arrives after a newer one.</summary>
     public long ViewSequence { get; set; }
+
+    /// <summary>The last status line written to the log, so a steady one is not repeated.</summary>
+    public string LastStatus { get; set; } = "";
 
     /// <summary>The table is playing its own turns; people wait.</summary>
     public bool Busy { get; set; }
@@ -61,6 +70,7 @@ public sealed class Room
         EnabledRules  = [.. Rules],
         Started       = State is not null,
         HostSeatId    = HostSeatId,
+        DropTimeoutSeconds = (int)DropTimeout.TotalSeconds,
         Seats = Seats.Select(s => new LobbySeat
         {
             Id          = s.Id,
@@ -78,6 +88,7 @@ public sealed class Room
             Name        = State?.Players.FirstOrDefault(p => p.Id == s.Id)?.Name ?? s.Name ?? s.Id,
             IsComputer  = s.IsComputer,
             IsConnected = s.ConnectionId is not null,
+            StandIn     = s.StandIn,
         }).ToList();
 
         // Role seats — the dealer — belong to the game, not to anyone in the room.
@@ -108,5 +119,35 @@ public sealed class RoomSeat
     /// <summary>Played by the computer — an open seat once play starts, or a seat someone left.</summary>
     public bool IsComputer { get; set; }
 
+    /// <summary>
+    /// The computer is only standing in: the table voted to play on while this person
+    /// was away, and the seat is theirs again the moment they are back.
+    /// </summary>
+    public bool StandIn { get; set; }
+
+    /// <summary>When the person here lost their connection, while they are away.</summary>
+    public DateTime? DisconnectedAt { get; set; }
+
     public bool IsTaken => Token is not null;
+}
+
+/// <summary>An open question: let the computer play for someone away?</summary>
+public sealed class RoomVote
+{
+    public required string SeatId { get; init; }
+    public DateTime StartedAt { get; init; } = DateTime.UtcNow;
+
+    /// <summary>Who may answer: everyone at the table, and connected, when it was asked.</summary>
+    public required HashSet<string> Voters { get; init; }
+    public Dictionary<string, bool> Answers { get; } = [];
+
+    /// <summary>More than half of those asked.</summary>
+    public int Needed => Voters.Count / 2 + 1;
+    public int Yes => Answers.Values.Count(a => a);
+    public int No  => Answers.Values.Count(a => !a);
+
+    public bool Carried  => Yes >= Needed;
+
+    /// <summary>Carrying is out of reach: too many have said no.</summary>
+    public bool Defeated => Voters.Count - No < Needed;
 }

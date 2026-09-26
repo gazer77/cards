@@ -127,7 +127,7 @@ public sealed class ShowdownHandler : IPhaseHandler
             string winMsg = winner is null ? "No winner."
                 : GameText.PerViewer(state, viewer => winner.Id == viewer
                     ? $"You win! ({bestRank.Name})"
-                    : $"{winner.Name} wins! ({bestRank.Name})");
+                    : $"{winner.Name} wins! ({bestRank.Name})", about: winner.Id);
 
             state.Metadata["status"]      = winMsg;
             state.Metadata["last_winner"] = winner?.Id ?? "";

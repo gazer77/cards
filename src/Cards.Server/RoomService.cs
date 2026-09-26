@@ -32,7 +32,7 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
 
     public async Task<SeatTicket> CreateAsync(
         string connectionId, string gameId, int playerCount, IReadOnlyList<string> rules,
-        string? configuration, string name)
+        string? configuration, string name, int dropTimeoutSeconds = 60)
     {
         var definition = await loader.LoadAsync(gameId)
             ?? throw new HubException($"There is no game called \"{gameId}\".");
@@ -58,6 +58,7 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
             PlayerCount   = playerCount,
             Rules         = [.. rules],
             Seats         = Enumerable.Range(0, playerCount).Select(i => new RoomSeat { Id = $"player{i}" }).ToList(),
+            DropTimeout   = TimeSpan.FromSeconds(Math.Clamp(dropTimeoutSeconds, 0, 3600)),
         };
         _rooms[room.Code] = room;
 
@@ -100,8 +101,18 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
         try
         {
             seat = room.SeatByToken(token) ?? throw new HubException("That seat is no longer yours.");
-            seat.ConnectionId = connectionId;
-            room.LastActivity = DateTime.UtcNow;
+            seat.ConnectionId   = connectionId;
+            seat.DisconnectedAt = null;
+            room.LastActivity   = DateTime.UtcNow;
+
+            // Back: a question about them is moot, and a stand-in hands the seat over.
+            if (room.Vote?.SeatId == seat.Id) room.Vote = null;
+            if (seat.StandIn && room.State is { } state)
+            {
+                seat.StandIn    = false;
+                seat.IsComputer = false;
+                state.PlayerAgents.Remove(seat.Id);
+            }
         }
         finally { room.Lock.Release(); }
 
@@ -135,7 +146,8 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
             }
             else
             {
-                seat.Token = null; seat.ConnectionId = null; seat.IsComputer = true;
+                if (room.Vote?.SeatId == seat.Id) room.Vote = null;
+                seat.Token = null; seat.ConnectionId = null; seat.IsComputer = true; seat.StandIn = false;
                 room.State.PlayerAgents[seat.Id] = new SmartDefaultAiAgent(seat.Id, room.State.Rng);
             }
 
@@ -163,7 +175,8 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
             {
                 foreach (var seat in room.Seats.Where(s => s.ConnectionId == connectionId))
                 {
-                    seat.ConnectionId = null;
+                    seat.ConnectionId   = null;
+                    seat.DisconnectedAt = DateTime.UtcNow;
                     changed = true;
                 }
             }
@@ -248,11 +261,91 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
                 throw new HubException(reason ?? "That move is not available.");
 
             logic.Apply(state, action);
+            RecordStatus(room, state, logic);
             room.Version++;
             room.LastActivity = DateTime.UtcNow;
         }
         finally { room.Lock.Release(); }
 
+        await SendViewsAsync(room);
+        _ = RunTableAsync(room);
+    }
+
+    // ── Someone away ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Opens a vote on anyone who has held the table up past the room's timeout: the
+    /// game is waiting on their move, and they have been disconnected that long.
+    /// Everyone still at the table is asked whether the computer should play for them.
+    /// </summary>
+    public async Task CheckDropsAsync(DateTime now)
+    {
+        foreach (var room in _rooms.Values)
+        {
+            if (room.DropTimeout <= TimeSpan.Zero) continue;
+
+            bool opened = false;
+            await room.Lock.WaitAsync();
+            try
+            {
+                if (room.Vote is not null || room.Busy) continue;
+                if (room.State is not { } state || room.Logic is not { } logic || logic.IsGameOver(state)) continue;
+
+                var waitingOn = room.Seats.FirstOrDefault(s => s.Id == state.CurrentPlayer.Id);
+                if (waitingOn is not { IsComputer: false, DisconnectedAt: { } since }) continue;
+                if (now - since < room.DropTimeout) continue;
+
+                var voters = room.Seats
+                    .Where(s => !s.IsComputer && s.ConnectionId is not null && s.Id != waitingOn.Id)
+                    .Select(s => s.Id)
+                    .ToHashSet();
+                if (voters.Count == 0) continue;   // nobody left to ask, nobody waiting
+
+                room.Vote = new RoomVote { SeatId = waitingOn.Id, Voters = voters, StartedAt = now };
+                opened = true;
+            }
+            finally { room.Lock.Release(); }
+
+            if (opened) await SendViewsAsync(room);
+        }
+    }
+
+    /// <summary>
+    /// An answer to the open question. A majority for hands the seat to the computer
+    /// until its owner is back; enough against closes the question, and it is asked
+    /// again only after another full timeout.
+    /// </summary>
+    public async Task VoteAsync(string code, string token, bool letComputerPlay)
+    {
+        var room = Find(code) ?? throw new HubException("That table has closed.");
+
+        await room.Lock.WaitAsync();
+        try
+        {
+            var seat = room.SeatByToken(token) ?? throw new HubException("That seat is no longer yours.");
+            if (room.Vote is not { } vote || !vote.Voters.Contains(seat.Id))
+                throw new HubException("There is nothing to vote on.");
+
+            vote.Answers[seat.Id] = letComputerPlay;
+            var away = room.Seats.First(s => s.Id == vote.SeatId);
+
+            if (vote.Carried && room.State is { } state)
+            {
+                away.IsComputer = true;
+                away.StandIn    = true;
+                state.PlayerAgents[away.Id] = new SmartDefaultAiAgent(away.Id, state.Rng);
+                room.Vote = null;
+                room.Version++;
+            }
+            else if (vote.Defeated)
+            {
+                room.Vote = null;
+                away.DisconnectedAt = DateTime.UtcNow;   // a fresh wait before asking again
+            }
+        }
+        finally { room.Lock.Release(); }
+
+        await SendRoomAsync(room);
         await SendViewsAsync(room);
         _ = RunTableAsync(room);
     }
@@ -307,6 +400,7 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
                     else
                     {
                         logic.Apply(state, logic.GetAutoAction(state));
+                        RecordStatus(room, state, logic);
                         room.Version++;
                     }
                 }
@@ -330,6 +424,20 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
 
     // ── Telling people ────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Adds the status line to the log when it changes, as a single-player table does:
+    /// the log is the history of what the table said, and the engine writes only the
+    /// moves themselves. Lines are stored in seat 0's words like everything else and
+    /// read back in each seat's own.
+    /// </summary>
+    private static void RecordStatus(Room room, GameState state, IGameLogic logic)
+    {
+        string status = logic.GetStatusText(state);
+        if (string.IsNullOrEmpty(status) || status == room.LastStatus) return;
+        room.LastStatus = status;
+        state.GameLog.Add(status);
+    }
+
     private Task SendRoomAsync(Room room)
         => hub.Clients.Group(room.Code).SendAsync(TableHubContract.RoomChanged, room.Info());
 
@@ -346,9 +454,26 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
             var said  = state.Announcements.ToList();
             var seats = room.SeatViews();
             foreach (var seat in room.Seats.Where(s => s.ConnectionId is not null && !s.IsComputer))
-                sends.Add((seat.ConnectionId!, TableProjection.For(
+            {
+                var view = TableProjection.For(
                     state, logic, seat.Id, room.PlayerCount, room.Rules, seats,
-                    room.Alias, ++room.ViewSequence, room.Busy, said)));
+                    room.Alias, ++room.ViewSequence, room.Busy, said);
+
+                if (room.Vote is { } vote && vote.Voters.Contains(seat.Id))
+                    view.Vote = new SeatVoteView
+                    {
+                        SeatId      = vote.SeatId,
+                        Name        = seats.FirstOrDefault(s => s.Id == vote.SeatId)?.Name ?? vote.SeatId,
+                        AwaySeconds = (int)(DateTime.UtcNow - (room.Seats.First(s => s.Id == vote.SeatId).DisconnectedAt ?? DateTime.UtcNow)).TotalSeconds,
+                        Yes         = vote.Yes,
+                        No          = vote.No,
+                        Needed      = vote.Needed,
+                        Voters      = vote.Voters.Count,
+                        Mine        = vote.Answers.TryGetValue(seat.Id, out var mine) ? mine : null,
+                    };
+
+                sends.Add((seat.ConnectionId!, view));
+            }
 
             // Said once: a bubble is shown with the view that brought it.
             state.Announcements.Clear();
@@ -386,10 +511,17 @@ public sealed class RoomService(IHubContext<TableHub> hub, GameLoader loader, IL
     /// <summary>Closes rooms nobody has touched in <see cref="IdleLimit"/>.</summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var lastSweep = DateTime.UtcNow;
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await Task.Delay(TimeSpan.FromMinutes(10), stoppingToken); }
+            try { await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken); }
             catch (OperationCanceledException) { return; }
+
+            try { await CheckDropsAsync(DateTime.UtcNow); }
+            catch (Exception ex) { log.LogError(ex, "Checking for dropped players failed"); }
+
+            if (DateTime.UtcNow - lastSweep < TimeSpan.FromMinutes(10)) continue;
+            lastSweep = DateTime.UtcNow;
 
             foreach (var (code, room) in _rooms)
                 if (DateTime.UtcNow - room.LastActivity > IdleLimit)

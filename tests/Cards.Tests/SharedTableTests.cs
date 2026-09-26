@@ -213,13 +213,11 @@ public sealed class SharedTableTests
     }
 
     [Fact]
-    public void Go_fish_says_it_cannot_seat_several_people_yet()
+    public void Every_shipped_game_can_seat_several_people()
     {
-        var (_, fish)  = Table("go-fish", 2);
-        var (_, hearts) = Table("hearts", 4);
-
-        Assert.False(fish.SharedTableReady);
-        Assert.True(hearts.SharedTableReady);
+        // Go Fish was the last one written as one person against the computer.
+        foreach (var id in new[] { "go-fish", "hearts", "blackjack", "golf", "hand-and-foot", "poker", "euchre" })
+            Assert.True(Table(id, id == "euchre" ? 4 : 2).Logic.SharedTableReady, id);
     }
 
     // ── The chair ─────────────────────────────────────────────────────────────

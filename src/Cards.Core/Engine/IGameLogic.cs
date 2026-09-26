@@ -57,6 +57,14 @@ public interface IGameLogic
     bool SharedTableReady => true;
 
     /// <summary>
+    /// Who the status line is about, for the reader <paramref name="viewerId"/>: a seat
+    /// id, <see cref="GameText.Nobody"/> when it is an instruction or summary, or null
+    /// when the line never said.
+    /// </summary>
+    string? GetStatusSubject(GameState state, string? viewerId)
+        => GameText.SubjectOf(state, GetStatusText(state), viewerId);
+
+    /// <summary>
     /// Returns the action that should be applied during an auto-advance tick.
     /// When the current player has a registered <see cref="IPlayerAgent"/> the agent
     /// picks from legal card-play or action choices; otherwise the first valid action

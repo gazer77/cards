@@ -265,11 +265,25 @@ public sealed class GameTableViewModel
         if (string.IsNullOrEmpty(text) || text == _lastLoggedStatus) return;
 
         _lastLoggedStatus = text;
-        _state.GameLog.Add(text);
+
+        // A shared table's log comes from the server, which records the same history.
+        if (!IsShared) _state.GameLog.Add(text);
 
         if (_state.Players.Count == 0) return;
 
-        MessagePosted?.Invoke(actingPlayerId ?? _state.CurrentPlayer.Id, text);
+        // Beside the seat the line is about, which the engine recorded as it wrote it —
+        // "Dealer: 13" by the dealer, a result by the one it happened to. Instructions and
+        // summaries belong to nobody and stay in the status line. Only lines that never
+        // said fall back to whoever just acted.
+        string? about = _logic.GetStatusSubject(_state, _state.Viewer);
+        if (about == GameText.Nobody) return;
+
+        // The part that was said, not the instruction after it: "You win this round!",
+        // not "…Tap to collect."
+        string spoken = text.Split('\n')[0].Trim();
+        if (spoken.Length == 0) return;
+
+        MessagePosted?.Invoke(about ?? actingPlayerId ?? _state.CurrentPlayer.Id, spoken);
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────

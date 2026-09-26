@@ -172,6 +172,32 @@
         {
             <div class="notice">Connection lost — reconnecting…</div>
         }
+        @if (Vm.IsShared && Table.View is { } shared)
+        {
+            @if (shared.Vote is { } vote)
+            {
+                <div class="notice vote">
+                    @if (vote.Mine is null)
+                    {
+                        <span>@vote.Name has been away @Away(vote.AwaySeconds). Let the computer play for them until they're back?</span>
+                        <button class="action primary" @onclick="() => Table.VoteAsync(true)">Yes, play on</button>
+                        <button class="action" @onclick="() => Table.VoteAsync(false)">Wait</button>
+                    }
+                    else
+                    {
+                        <span>Waiting for the others — @vote.Yes of @vote.Needed needed to play on.</span>
+                    }
+                </div>
+            }
+            else if (shared.Seats.FirstOrDefault(s => s.Id == Vm.State?.CurrentPlayer.Id) is { IsComputer: false, IsConnected: false } away)
+            {
+                <div class="notice">Waiting for @away.Name to reconnect…</div>
+            }
+            @foreach (var standIn in shared.Seats.Where(s => s.StandIn))
+            {
+                <div class="notice quiet">The computer is playing for @standIn.Name until they're back.</div>
+            }
+        }
         <div class="status" style="font-size: @StatusFontSize">@(_notice ?? Vm.StatusText)</div>
 
         <div class="action-bar">
@@ -365,6 +391,9 @@
         _sortModes = Vm.SortModes;
         StateHasChanged();
     }
+
+    private static string Away(int seconds)
+        => seconds < 60 ? $"{seconds}s" : $"{seconds / 60}:{seconds % 60:00}";
 
     private void OnRefused(string why)
     {

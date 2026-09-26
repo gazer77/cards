@@ -37,10 +37,16 @@ public sealed class TableView
     public Dictionary<string, GameAction> DefaultCardActions { get; set; } = [];
 
     public string Status { get; set; } = "";
+
+    /// <summary>Who the status line is about, as this seat places it — see <see cref="IGameLogic.GetStatusSubject"/>.</summary>
+    public string? StatusSubject { get; set; }
     public bool IsGameOver { get; set; }
 
     /// <summary>The table is playing itself — computer players, a dealer drawing — and takes no input.</summary>
     public bool IsBusy { get; set; }
+
+    /// <summary>A question the table is putting to this seat — whether to let the computer play for someone away.</summary>
+    public SeatVoteView? Vote { get; set; }
 }
 
 public sealed class SeatView
@@ -48,8 +54,33 @@ public sealed class SeatView
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public bool IsComputer { get; set; }
+
+    /// <summary>The computer is playing for someone away, until they are back.</summary>
+    public bool StandIn { get; set; }
     public bool IsConnected { get; set; }
     public string? Role { get; set; }
+}
+
+/// <summary>
+/// "Bo has been away a minute — let the computer play for them until they are back?"
+/// Put to everyone still at the table once a dropped player has held it up past the
+/// room's timeout. A majority saying yes hands the seat to the computer; its owner gets
+/// it back the moment they return.
+/// </summary>
+public sealed class SeatVoteView
+{
+    public string SeatId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public int AwaySeconds { get; set; }
+    public int Yes { get; set; }
+    public int No { get; set; }
+
+    /// <summary>How many yeses it takes.</summary>
+    public int Needed { get; set; }
+    public int Voters { get; set; }
+
+    /// <summary>This seat's answer so far: true, false, or null for not yet.</summary>
+    public bool? Mine { get; set; }
 }
 
 public sealed class AnnouncementView
@@ -69,6 +100,9 @@ public sealed class RoomInfo
     public List<string> EnabledRules { get; set; } = [];
     public List<LobbySeat> Seats { get; set; } = [];
     public bool Started { get; set; }
+
+    /// <summary>How long a dropped player may hold the table before the others are asked; 0 for never.</summary>
+    public int DropTimeoutSeconds { get; set; }
     public string HostSeatId { get; set; } = "";
 }
 
@@ -107,6 +141,7 @@ public static class TableHubContract
     public const string StartGame  = nameof(StartGame);
     public const string Act        = nameof(Act);
     public const string LeaveRoom  = nameof(LeaveRoom);
+    public const string Vote       = nameof(Vote);
 
     // Server → client
     public const string RoomChanged = nameof(RoomChanged);
