@@ -463,4 +463,79 @@ public sealed class SharedTableServerTests : IClassFixture<SharedTableServerTest
         Assert.Contains("vote decides", ex.Message);
         await ana.DisposeAsync();
     }
+
+    // ── Face-down cards ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A face-down card reaches a client under an alias ("hidden…"), and the client taps it
+    /// by that name alone — the view model drops negative uids, which the aliases are.
+    /// The table has to know which real card is meant, or Golf cannot turn or replace a
+    /// face-down card at all: "That card is not in play."
+    /// </summary>
+    [Fact]
+    public async Task A_face_down_card_can_be_tapped_by_the_name_the_client_knows_it_by()
+    {
+        var (ana, bo) = await TwoAt("golf", 2);
+
+        // Whoever is asked first taps one of their face-down cards.
+        Person? tapper = null; TableView? view = null;
+        for (int i = 0; i < 500 && tapper is null; i++)
+        {
+            foreach (var p in new[] { ana, bo })
+                if (p.View is { IsBusy: false } v && v.SelectableCardIds.Any(id => id.StartsWith("hidden")))
+                { tapper = p; view = v; break; }
+            if (tapper is null) await Task.Delay(20);
+        }
+        Assert.NotNull(tapper);
+
+        string hiddenId = view!.SelectableCardIds.First(id => id.StartsWith("hidden"));
+        await tapper!.Act(new GameAction("select_card", CardId: hiddenId));   // no uid, as the client sends it
+
+        await ana.DisposeAsync(); await bo.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Two_people_play_golf_to_the_end_tapping_face_down_cards_by_name()
+    {
+        var (ana, bo) = await TwoAt("golf", 2);
+        var people = new[] { ana, bo };
+        int swapsOntoHidden = 0;
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
+        while (DateTime.UtcNow < deadline && !(ana.View?.IsGameOver ?? false))
+        {
+            bool moved = false;
+            foreach (var p in people)
+            {
+                var v = p.View;
+                if (v is null || v.IsBusy) continue;
+
+                // Buttons first (draw, flip), then a card — a face-down one when there is one,
+                // named the way the client knows it, with no uid.
+                var move = v.Actions.FirstOrDefault(a => a.Type.StartsWith("draw_from_deck"))
+                        ?? v.Actions.FirstOrDefault(a => a.Label is not null && a.Type != "discard_drawn")
+                        ?? (v.SelectableCardIds.FirstOrDefault(id => id.StartsWith("hidden")) is { } hidden
+                            ? new GameAction("select_card", CardId: hidden) : null)
+                        ?? (v.SelectableCardIds.Count > 0 ? new GameAction("select_card", CardId: v.SelectableCardIds[0]) : null)
+                        ?? v.Actions.FirstOrDefault();
+                if (move is null) continue;
+
+                try
+                {
+                    await p.Act(move);
+                    moved = true;
+                    if (move.CardId?.StartsWith("hidden") == true && v.State.Metadata.ContainsKey("dd_drawn_card"))
+                        swapsOntoHidden++;
+                }
+                catch (HubException ex) when (!ex.Message.Contains("not in play")) { }
+                break;
+            }
+            if (!moved) await Task.Delay(20);
+        }
+
+        Assert.True(ana.View!.IsGameOver, "Golf never finished.");
+        Assert.True(swapsOntoHidden > 0, "No drawn card ever replaced a face-down one.");
+
+        await ana.DisposeAsync(); await bo.DisposeAsync();
+    }
 }

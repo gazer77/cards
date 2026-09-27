@@ -540,7 +540,14 @@ public sealed class GameTableViewModel
 
     // ── Input ─────────────────────────────────────────────────────────────────
 
-    public Task TapCard(string cardId, int uid = -1)
+    /// <summary>
+    /// "No particular card." Not -1: at a shared table a face-down card's uid is a
+    /// negative alias, and treating every negative as "none" dropped exactly the cards
+    /// Golf asks you to tap — so the table was told about a card it could not find.
+    /// </summary>
+    public const int NoUid = int.MinValue;
+
+    public Task TapCard(string cardId, int uid = NoUid)
     {
         if (!CanAcceptInput()) return Task.CompletedTask;
         if (!_logic!.GetSelectableCardIds(_state!).Contains(cardId)) return Task.CompletedTask;
@@ -548,7 +555,7 @@ public sealed class GameTableViewModel
         // The uid says which physical copy was tapped; selectability is by description,
         // since the engine offers "a 4h may be selected", not one particular 4h.
         return ApplyAsync(new GameAction("select_card", CardId: cardId,
-            CardUid: uid >= 0 ? uid : null));
+            CardUid: uid != NoUid ? uid : null));
     }
 
     /// <summary>
@@ -610,11 +617,11 @@ public sealed class GameTableViewModel
     /// phase names nothing, the double tap is just a tap, which is what it was before
     /// any of them named anything.
     /// </summary>
-    public Task ActivateCard(string cardId, int uid = -1)
+    public Task ActivateCard(string cardId, int uid = NoUid)
     {
         if (!CanAcceptInput()) return Task.CompletedTask;
 
-        int? physical = uid >= 0 ? uid : null;
+        int? physical = uid != NoUid ? uid : null;
         var action = _logic!.GetDefaultCardAction(_state!, cardId, physical);
 
         // Still only for cards the phase is offering: a double tap is a shortcut past

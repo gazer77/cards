@@ -262,8 +262,13 @@ public sealed class RoomService(ITableClients clients, GameLoader loader, ILogge
             var seat = room.SeatByToken(token) ?? throw new TableRefusal("That seat is no longer yours.");
             if (room.Busy) throw new TableRefusal("Wait for the table.");
 
-            // A hidden card is named by its alias; the rules know it by what it is.
-            if (action.CardUid is < 0 and var aliased && room.Unalias(aliased) is { } real)
+            // A hidden card is named by its alias; the rules know it by what it is. The alias
+            // may come as the uid or only in the name ("hidden-123") — a client that knows
+            // the card by nothing else sends just that, and Golf is all such cards.
+            int? alias = action.CardUid is < 0 ? action.CardUid
+                       : action.CardId is { } named && named.StartsWith("hidden") && int.TryParse(named[6..], out var n) ? n
+                       : null;
+            if (alias is { } aliased && room.Unalias(aliased) is { } real)
                 action = action with { CardId = real.Id, CardUid = real.Uid };
             action = action with { PlayerId = seat.Id };
 
