@@ -1,0 +1,31 @@
+# Builds, tests and deploys Cards to the home server whenever the deploy branch moves.
+# Runs on a self-hosted runner on that server (labels: self-hosted, linux, jacktheripper);
+# see deploy/README.md for setting one up. To deploy:  git push origin development:deploy
+name: Deploy to jacktheripper
+
+on:
+  push:
+    branches: [deploy]
+  workflow_dispatch:
+
+# One deploy at a time; a push during a deploy waits its turn rather than cancelling it.
+concurrency:
+  group: deploy-cards
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, jacktheripper]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # PaintCost measures timing and is too sensitive to a busy machine to gate a deploy.
+      - name: Test the engine
+        run: dotnet test tests/Cards.Tests/Cards.Tests.csproj -c Release --filter "FullyQualifiedName!~PaintCost"
+
+      - name: Test the server
+        run: dotnet test tests/Cards.Server.Tests/Cards.Server.Tests.csproj -c Release
+
+      - name: Publish and switch over
+        run: bash deploy/deploy.sh

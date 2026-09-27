@@ -1,0 +1,6 @@
+# Scripts and service files run on Linux; they must keep LF line endings wherever
+# the repo is checked out.
+*.sh        text eol=lf
+*.service   text eol=lf
+Caddyfile   text eol=lf
+deploy/sudoers.d/* text eol=lf

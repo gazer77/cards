@@ -1,0 +1,4 @@
+# /etc/sudoers.d/cards-deploy — the one privileged thing the build runner may do:
+# restart the Cards service after switching releases. Install with
+#   sudo install -m 0440 deploy/sudoers.d/cards-deploy /etc/sudoers.d/ && sudo visudo -c
+ghrunner ALL=(root) NOPASSWD: /usr/bin/systemctl restart cards

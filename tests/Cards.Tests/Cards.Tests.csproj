@@ -17,6 +17,8 @@
   <!-- Skia needs its native library to run outside a platform head. -->
   <ItemGroup>
     <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="3.119.2" Condition="$([MSBuild]::IsOSPlatform('windows'))" />
+    <!-- The build server (Ubuntu). Needs libfontconfig1 and a font — see deploy/README.md. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.2" Condition="$([MSBuild]::IsOSPlatform('linux'))" />
   </ItemGroup>
 
   <ItemGroup>

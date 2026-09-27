@@ -1,0 +1,20 @@
+# /etc/systemd/system/avahi-alias@.service — announces <name>.local on the home network
+# (mDNS), pointing at this server, so each app can have a name of its own.
+#
+#   sudo systemctl enable --now avahi-alias@cards     ->  cards.local
+#
+# Uses the server's first address; if that is the wrong one (a Docker bridge, say),
+# replace $(hostname -I | cut -d" " -f1) with the LAN address.
+[Unit]
+Description=Announce %i.local on the network
+Requires=avahi-daemon.service
+After=avahi-daemon.service network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/bin/sh -c 'exec /usr/bin/avahi-publish -a -R %i.local $(hostname -I | cut -d" " -f1)'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

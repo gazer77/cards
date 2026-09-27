@@ -1,0 +1,14 @@
+# /etc/caddy/Caddyfile — one block per web app, by name.
+#
+# "http://" keeps Caddy from asking for certificates, which is right on a home network.
+# When an app is opened to the internet, give it its real domain without "http://" and
+# Caddy fetches and renews the certificate itself.
+
+http://cards.local, http://cards.home {
+    reverse_proxy 127.0.0.1:5280
+}
+
+# The next app:
+# http://notes.local, http://notes.home {
+#     reverse_proxy 127.0.0.1:5281
+# }

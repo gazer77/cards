@@ -1,0 +1,17 @@
+# /etc/systemd/system/cards.service — the Cards table server.
+# Serves the web app and the SignalR hub on localhost; Caddy puts it on the network.
+[Unit]
+Description=Cards table server
+After=network.target
+
+[Service]
+User=cards
+WorkingDirectory=/srv/cards/current
+ExecStart=/srv/cards/current/Cards.Server --urls http://127.0.0.1:5280
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_ROOT=/usr/share/dotnet
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
