@@ -707,7 +707,7 @@ public sealed class CardTableRenderer
         _nextPaintCompletion?.TrySetResult();
         _nextPaintCompletion = null;
 
-        DrawTurnGlow(canvas, layouts);
+        _turnGlowShown = false;   // set again by the name plate of the seat to act, if it is drawn
 
         foreach (var layout in layouts)
         {
@@ -780,8 +780,6 @@ public sealed class CardTableRenderer
             canvas.RotateDegrees(layout.RotationDegrees, layout.Bounds.MidX, layout.Bounds.MidY);
         }
 
-        // (The seat to act is lit from behind — see DrawTurnGlow, drawn before any zone.)
-
         // A by-rank zone is never "empty": its slots are the picture, melds or not.
         if (layout.Zone.Definition?.GroupLayout == "by_rank")
             DrawRankSlots(canvas, layout);
@@ -845,46 +843,27 @@ public sealed class CardTableRenderer
     private int  _breathTicks;
 
     /// <summary>
-    /// A soft golden pool of light behind the seat to act, breathing slowly in and out, so
-    /// whose turn it is can be seen at a glance from anywhere on the table.
-    ///
-    /// Behind the seat's main cards — its largest zone holding any — rather than only its
-    /// hand: at Golf the hand is the empty slot a drawn card lands in, so the glow used to
-    /// show nowhere at all. Not boxed: a stroked outline traced a rectangle the cards did
-    /// not fill and read as an alert rather than a turn. Drawn before the zones, so the
-    /// cards sit on the light.
+    /// A soft golden glow around the name plate of the seat to act, breathing slowly in
+    /// and out, so whose turn it is can be seen at a glance from anywhere on the table.
+    /// On the name rather than the cards: the name is where a player looks for a seat,
+    /// and every seat has one — the cards differ by game and are sometimes an empty slot.
+    /// Drawn before the plate, so the plate sits on the light.
     /// </summary>
-    private void DrawTurnGlow(SKCanvas canvas, IReadOnlyList<ZoneLayout> layouts)
+    private void DrawTurnGlow(SKCanvas canvas, SKRect plate)
     {
-        _turnGlowShown = false;
-        if (_state is null || _state.Players.Count == 0 || _state.CurrentPhaseId == "game_over") return;
-
-        string seat = _state.CurrentPlayer.Id;
-        SKRect? area = null;
-        float best = 0f;
-        foreach (var l in layouts)
-        {
-            if (l.Zone.OwnerId != seat || l.Zone.IsEmpty) continue;
-            var r = l.Zone.Type == "grid" ? GridBounds(l)
-                  : l.Hint == ZoneRenderHint.Fan && FanExtent(l) is { } fan ? fan
-                  : CenterCardRect(l);
-            if (r.Width * r.Height > best) { best = r.Width * r.Height; area = r; }
-        }
-        if (area is not { } cards) return;
-
         // One breath: ease in and out on a sine, never quite dark.
         float breath = 0.5f + 0.5f * MathF.Sin(NowMs() % (long)BreathMs / BreathMs * MathF.Tau);
-        float unit   = MathF.Min(cards.Height, MathF.Min(_lastInfo.Width, _lastInfo.Height) * 0.15f);
-        float pad    = unit * (0.22f + 0.12f * breath);
-        var   pool   = new SKRect(cards.Left - pad, cards.Top - pad, cards.Right + pad, cards.Bottom + pad);
+        float unit   = plate.Height;
+        float pad    = unit * (0.18f + 0.22f * breath);
+        var   glow   = new SKRect(plate.Left - pad, plate.Top - pad, plate.Right + pad, plate.Bottom + pad);
 
         using var paint = new SKPaint
         {
             IsAntialias = true,
-            Color       = TurnGold.WithAlpha((byte)(0x40 + 0x70 * breath)),
-            MaskFilter  = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, unit * (0.16f + 0.08f * breath)),
+            Color       = TurnGold.WithAlpha((byte)(0x60 + 0x80 * breath)),
+            MaskFilter  = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, unit * (0.28f + 0.2f * breath)),
         };
-        canvas.DrawRoundRect(pool, unit * 0.25f, unit * 0.25f, paint);
+        canvas.DrawRoundRect(glow, glow.Height / 2f, glow.Height / 2f, paint);
 
         _turnGlowShown = true;
         _driver.RequestFrames();   // it breathes, so it needs frames; see OnAnimTimerTick
@@ -2147,7 +2126,9 @@ public sealed class CardTableRenderer
         using var font  = new SKFont(SKTypeface.Default, size);
         using var paint = new SKPaint
         {
-            Color       = active ? _theme.CurrentPlayerHighlight : _theme.PlayerNameColor.WithAlpha(0xFF),
+            // The seat to act reads in bright cream: its plate sits in a gold glow, and gold
+            // lettering on it washed out, worst over a white card.
+            Color       = active ? new SKColor(0xFF, 0xF6, 0xDC) : _theme.PlayerNameColor.WithAlpha(0xFF),
             IsAntialias = true,
         };
 
@@ -2167,12 +2148,19 @@ public sealed class CardTableRenderer
         top = Math.Clamp(top, 2f, MathF.Max(2f, _lastInfo.Height - boxH - 2f));
         var box = new SKRect(left, top, left + boxW, top + boxH);
 
-        using var band = new SKPaint { Color = new SKColor(0x08, 0x14, 0x0E, 0xBF), IsAntialias = true };
+        if (active && _state?.CurrentPhaseId != "game_over") DrawTurnGlow(canvas, box);
+
+        // Half see-through: the felt, or the card under a name, shows through.
+        using var band = new SKPaint { Color = new SKColor(0x08, 0x14, 0x0E, 0x80), IsAntialias = true };
         canvas.DrawRoundRect(box, boxH / 2f, boxH / 2f, band);
 
         float baseline = box.MidY + size * 0.36f;
         float x = box.Left + padX + pip;
-        if (active) canvas.DrawCircle(box.Left + padX + size * 0.22f, box.MidY, size * 0.22f, paint);
+        if (active)
+        {
+            using var pipPaint = new SKPaint { Color = TurnGold, IsAntialias = true };
+            canvas.DrawCircle(box.Left + padX + size * 0.22f, box.MidY, size * 0.22f, pipPaint);
+        }
         canvas.DrawText(name, x, baseline, font, paint);
 
         DrawDealerMark(canvas, layout, box.Right + size * 0.45f, baseline, size);
