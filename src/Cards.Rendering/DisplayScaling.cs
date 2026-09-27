@@ -39,6 +39,7 @@ public readonly record struct DisplayScaling
         {
             PixelRatio  = ratio,
             RenderScale = ratio / devicePixelRatio,
+            DevicePixelRatio = devicePixelRatio,
         };
     }
 
@@ -47,4 +48,21 @@ public readonly record struct DisplayScaling
     /// the relationship the whole scheme depends on can be asserted directly.
     /// </summary>
     public double BackingPixels(double cssPixels) => cssPixels * PixelRatio;
+
+    /// <summary>The display's own density, uncapped.</summary>
+    public double DevicePixelRatio { get; private init; }
+
+    /// <summary>
+    /// A pointer position, as the browser reports it against the canvas element
+    /// (<c>offsetX</c>/<c>offsetY</c>), in backing pixels — where the renderer draws and
+    /// hit-tests.
+    ///
+    /// The element is laid out at <see cref="RenderScale"/> of the table's size and
+    /// scaled back up by CSS, and the browser measures offsets in the element's own
+    /// untransformed space. Its backing store is its CSS size times the display's full
+    /// density, so that is the factor — not <see cref="PixelRatio"/>, which is right only
+    /// where nothing is capped. Using it put every tap on a dense phone screen at half its
+    /// distance from the corner: a tap on your cards landed on empty felt.
+    /// </summary>
+    public double BackingPixelsFromCanvasOffset(double offset) => offset * DevicePixelRatio;
 }

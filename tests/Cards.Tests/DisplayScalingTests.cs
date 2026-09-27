@@ -78,4 +78,32 @@ public sealed class DisplayScalingTests
         Assert.True(s.PixelRatio > 0);
         Assert.True(s.RenderScale > 0);
     }
+
+    /// <summary>
+    /// A tap lands where it was made, however far the canvas is scaled down. The browser
+    /// reports the tap against the canvas element in its own untransformed space — the
+    /// element is laid out at RenderScale of the table and stretched back up by CSS — and
+    /// the renderer draws and hit-tests in backing pixels. Converting with the capped
+    /// ratio put every tap on a phone at half its distance from the corner.
+    /// </summary>
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    [InlineData(2.625)]
+    [InlineData(3.0)]
+    public void A_tap_lands_where_it_was_made(double dpr)
+    {
+        var s = DisplayScaling.For(dpr, 1.5);
+
+        // A tap 200 CSS pixels into a 400-pixel-wide table: halfway across.
+        const double tableCss = 400, tapCss = 200;
+
+        double elementCss = tableCss * s.RenderScale;          // how wide the element is laid out
+        double backing    = elementCss * dpr;                  // its backing store: element size x density
+        double reported   = tapCss * s.RenderScale;            // the offset the browser reports
+
+        double landed = s.BackingPixelsFromCanvasOffset(reported);
+        Assert.Equal(backing / 2, landed, 3);                  // halfway across what is drawn
+        Assert.Equal(s.BackingPixels(tapCss), landed, 3);      // where anything drawn there is
+    }
 }
