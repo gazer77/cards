@@ -854,14 +854,14 @@ public sealed class CardTableRenderer
         // One breath: ease in and out on a sine, never quite dark.
         float breath = 0.5f + 0.5f * MathF.Sin(NowMs() % (long)BreathMs / BreathMs * MathF.Tau);
         float unit   = plate.Height;
-        float pad    = unit * (0.18f + 0.22f * breath);
+        float pad    = unit * (0.09f + 0.11f * breath);
         var   glow   = new SKRect(plate.Left - pad, plate.Top - pad, plate.Right + pad, plate.Bottom + pad);
 
         using var paint = new SKPaint
         {
             IsAntialias = true,
-            Color       = TurnGold.WithAlpha((byte)(0x60 + 0x80 * breath)),
-            MaskFilter  = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, unit * (0.28f + 0.2f * breath)),
+            Color       = TurnGold.WithAlpha((byte)(0x30 + 0x40 * breath)),
+            MaskFilter  = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, unit * (0.14f + 0.1f * breath)),
         };
         canvas.DrawRoundRect(glow, glow.Height / 2f, glow.Height / 2f, paint);
 

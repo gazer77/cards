@@ -159,7 +159,7 @@ public static class DeclaredLayoutEngine
                     else                          final.Left  = MathF.Max(final.Left,  ob.Right + 4f);
                 }
 
-            layouts.Add(Describe(state, spot, final, baseCardW));
+            layouts.Add(Describe(state, spot, final, baseCardW, info));
         }
 
         return layouts;
@@ -390,7 +390,7 @@ public static class DeclaredLayoutEngine
 
     // ── Zone description ──────────────────────────────────────────────────────
 
-    private static ZoneLayout Describe(GameState state, Spot spot, SKRect bounds, float baseCardW)
+    private static ZoneLayout Describe(GameState state, Spot spot, SKRect bounds, float baseCardW, SKImageInfo table)
     {
         var  zone  = spot.Zone;
         var  seat  = spot.Seat;
@@ -407,6 +407,22 @@ public static class DeclaredLayoutEngine
         // card would shrink to a sliver.
         bool pile  = zone.Type == "hand" && zone.Definition?.Arrangement == "stack";
         bool turns = pile && seat.Side is "left" or "right";
+
+        // A hand at a declared spot, at a side seat — Golf's slot for the card just drawn.
+        // The spot is measured for the bottom seat; turned a quarter and squeezed into the
+        // side column it came out wide and short, and an upright card fitted to it was a
+        // third the size of the same slot at the top and bottom. Only its position turns:
+        // it keeps the size the bottom seat's has, centred where the turned spot landed.
+        // The same goes for a seat sharing the top edge, whose spot is narrowed to its slice.
+        bool squeezed = (seat.Side is "left" or "right" && bounds.Width > bounds.Height) || seat.Slots > 1;
+        if (!pile && zone.Type == "hand" && squeezed
+            && zone.Definition?.Layout?.Place is { Width: { } pw, Height: { } ph })
+        {
+            float w = Pct(pw, 0.1f) * table.Width, h = Pct(ph, 0.1f) * table.Height;
+            float left = Math.Clamp(bounds.MidX - w / 2f, 0f, MathF.Max(0f, table.Width  - w));
+            float top  = Math.Clamp(bounds.MidY - h / 2f, 0f, MathF.Max(0f, table.Height - h));
+            bounds = new SKRect(left, top, left + w, top + h);
+        }
         float fitW = turns ? bounds.Height : bounds.Width;
         float fitH = turns ? bounds.Width  : bounds.Height;
         float cardW = MathF.Min(baseCardW, MathF.Min(fitW, fitH / 1.4f));
