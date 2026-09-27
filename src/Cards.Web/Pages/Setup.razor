@@ -108,7 +108,11 @@ else
 
         @* A shared table: the same choices, played with other people. Seats nobody
            takes are played by the computer when the host deals. *@
-        <button class="start secondary" disabled="@_opening" @onclick="PlayWithFriends">
+        <label class="host-name">
+            Your name at the table
+            <input maxlength="24" placeholder="Your name" @bind="_hostName" @bind:event="oninput" />
+        </label>
+        <button class="start secondary" disabled="@(_opening || _hostName.Trim().Length == 0)" @onclick="PlayWithFriends">
             @(_opening ? "Opening a table…" : "Play with friends")
         </button>
         <label class="drop-choice">
@@ -215,6 +219,18 @@ else
     private string? _onlineError;
     private int     _dropTimeout = 60;
 
+    /// <summary>
+    /// The host's name for the table, started from the last one used. "Player" is only the
+    /// settings default, not a name anyone chose, so it starts the box empty instead.
+    /// </summary>
+    private string _hostName = "";
+
+    protected override void OnParametersSet()
+    {
+        if (_hostName.Length == 0 && Settings.PlayerName is { Length: > 0 } saved && saved != "Player")
+            _hostName = saved;
+    }
+
     private async Task PlayWithFriends()
     {
         _opening     = true;
@@ -224,7 +240,9 @@ else
             var enabled = _rules.Where(r => r.IsEnabled).Select(r => r.Id).ToList();
             string? variant = _variant is { Length: > 0 } && _variants.Count > 1 ? _variant : null;
 
-            var ticket = await Table.CreateAsync(GameId, _players, enabled, variant, Settings.PlayerName, _dropTimeout);
+            // Remembered, so the next table — and the join screen — starts with it.
+            Settings.PlayerName = _hostName.Trim();
+            var ticket = await Table.CreateAsync(GameId, _players, enabled, variant, _hostName.Trim(), _dropTimeout);
             Nav.NavigateTo($"/room/{ticket.Code}");
         }
         catch (Exception ex)

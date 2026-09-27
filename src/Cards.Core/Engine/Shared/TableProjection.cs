@@ -52,6 +52,8 @@ public static class TableProjection
                      && !state.PlayerAgents.ContainsKey(viewerId);
         if (!acting)
             foreach (var key in PrivateToActor) snap.Metadata.Remove(key);
+        else if (snap.Metadata.TryGetValue("selected_card", out var picked))
+            snap.Metadata["selected_card"] = PickAsSeen(state, picked, hidden);
 
         var view = new TableView
         {
@@ -135,6 +137,28 @@ public static class TableProjection
                                || (card.IsFaceUp && index == zone.Cards.Count - 1),
             _               => false,   // none, count_only
         };
+    }
+
+    /// <summary>
+    /// The acting seat's pick, in the names its view gives the cards. The rules keep a pick
+    /// as real uids (or, from some phases, card ids); a face-down card reaches this seat
+    /// under an alias, so the real uid matched nothing on its screen — Golf's cards picked
+    /// to flip never lit up — and named a card the seat is not meant to know.
+    /// </summary>
+    private static string PickAsSeen(GameState state, string picked, Dictionary<int, int> hidden)
+    {
+        var cards = state.Zones.Values.SelectMany(z => z.Cards).ToList();
+        return string.Join(",", picked.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(token =>
+        {
+            if (int.TryParse(token, out var uid))
+                return hidden.TryGetValue(uid, out var a) ? a.ToString() : token;
+
+            // Picked by id: an id this seat can see stays as it is; one it can only see the
+            // back of goes by the back's name.
+            if (cards.Any(c => c.Id == token && !hidden.ContainsKey(c.Uid))) return token;
+            var back = cards.FirstOrDefault(c => c.Id == token && hidden.ContainsKey(c.Uid));
+            return back is null ? token : $"hidden{hidden[back.Uid]}";
+        }));
     }
 
     /// <summary>An action as this seat names its cards.</summary>

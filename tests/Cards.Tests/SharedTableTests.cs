@@ -129,6 +129,24 @@ public sealed class SharedTableTests
     }
 
     [Fact]
+    public void A_picked_face_down_card_is_picked_by_the_name_the_seat_sees()
+    {
+        var (state, logic) = Table("golf", 2);
+        string me = state.CurrentPlayer.Id;
+        state.PlayerAgents.Remove(me);
+        var faceDown = state.Zones[$"grid:{me}"].Cards.First(c => !c.IsFaceUp);
+        state.Metadata["selected_card"] = faceDown.Uid.ToString();
+
+        var view = View(state, logic, me);
+        var shown = view.State.Zones.Single(z => z.Id == $"grid:{me}").Cards;
+
+        // The pick names the back the seat can see — so it lights up — and never the real uid.
+        int picked = int.Parse(view.State.Metadata["selected_card"]);
+        Assert.Contains(shown, c => c.IsHidden && c.Uid == picked);
+        Assert.NotEqual(faceDown.Uid, picked);
+    }
+
+    [Fact]
     public void Nobody_sees_into_the_deck()
     {
         var (state, logic) = Table("hearts", 4);

@@ -624,3 +624,22 @@ html, body {
     font: inherit;
     font-size: 0.85rem;
 }
+
+.host-name {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 1.25rem;
+    color: var(--ink-dim);
+    font-size: 0.9rem;
+}
+.host-name input {
+    padding: 0.55rem 0.8rem;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid #ffffff30;
+    border-radius: 0.45rem;
+    font: inherit;
+    font-size: 1rem;
+}
+.host-name + .start.secondary { margin-top: 0.6rem; }

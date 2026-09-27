@@ -131,7 +131,7 @@
     protected override async Task OnInitializedAsync()
     {
         Table.RoomChanged += OnRoomChanged;
-        _name = Settings.PlayerName;
+        _name = Settings.PlayerName is var saved && saved != "Player" ? saved : "";   // "Player" is only the default
 
         try
         {
