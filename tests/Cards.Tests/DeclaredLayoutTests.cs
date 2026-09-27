@@ -56,9 +56,9 @@ public sealed class DeclaredLayoutTests
         Assert.True(mine.MidY > Canvas.Height / 2f);
         Assert.True(theirs.MidY < Canvas.Height / 2f);
 
-        // And the far seat's cards are turned to face it.
-        Assert.Equal(180f, Layout(layouts, "hand:player1").RotationDegrees);
-        Assert.Equal(0f,   Layout(layouts, "hand:player0").RotationDegrees);
+        // Both stand upright — the far seat's cards are no longer turned upside down.
+        Assert.Equal(0f, Layout(layouts, "hand:player1").RotationDegrees);
+        Assert.Equal(0f, Layout(layouts, "hand:player0").RotationDegrees);
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public sealed class DeclaredLayoutTests
     }
 
     [Fact]
-    public void Side_seats_are_turned_on_their_side()
+    public void Side_seats_sit_at_the_sides_with_their_cards_upright()
     {
         var state   = HandAndFoot(4);
         var layouts = ZoneLayoutEngine.Compute(state, Canvas);
@@ -104,8 +104,11 @@ public sealed class DeclaredLayoutTests
         var right = Layout(layouts, "hand:player1");
         var left  = Layout(layouts, "hand:player3");
 
-        Assert.Equal(90f,  right.RotationDegrees);
-        Assert.Equal(270f, left.RotationDegrees);
+        // Upright, not turned sideways: a side hand read sideways, and so did its name.
+        Assert.Equal(0f, right.RotationDegrees);
+        Assert.Equal(0f, left.RotationDegrees);
+        Assert.Equal("right", right.SeatSide);
+        Assert.Equal("left",  left.SeatSide);
         Assert.True(right.Bounds.MidX > Canvas.Width * 0.75f);
         Assert.True(left.Bounds.MidX  < Canvas.Width * 0.25f);
 

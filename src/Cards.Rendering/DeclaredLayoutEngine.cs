@@ -398,11 +398,17 @@ public static class DeclaredLayoutEngine
         bool mine  = owned && seat.Index == 0;
 
         // Cards are sized to the bounds they must fit, never larger than the table's base.
-        // A zone turned a quarter is drawn in its own frame, where its width and height
-        // trade places — a side seat's band is tall on screen and wide to its player.
-        bool onSide = zone.Type == "hand" && seat.Side is "left" or "right";
-        float fitW = onSide ? bounds.Height : bounds.Width;
-        float fitH = onSide ? bounds.Width  : bounds.Height;
+        // Hands stand upright at every seat, so a side seat's band — tall and narrow on
+        // screen — is fitted as it is, and its hand closes up into a compact fan.
+        //
+        // A face-down pile (a hand arranged as a stack — Hand and Foot's foot) keeps being
+        // turned to face its seat: backs read the same either way, and a spot declared
+        // for the bottom seat and turned a quarter is wide and short, where an upright
+        // card would shrink to a sliver.
+        bool pile  = zone.Type == "hand" && zone.Definition?.Arrangement == "stack";
+        bool turns = pile && seat.Side is "left" or "right";
+        float fitW = turns ? bounds.Height : bounds.Width;
+        float fitH = turns ? bounds.Width  : bounds.Height;
         float cardW = MathF.Min(baseCardW, MathF.Min(fitW, fitH / 1.4f));
         float cardH = cardW * 1.4f;
 
@@ -430,10 +436,15 @@ public static class DeclaredLayoutEngine
         return new ZoneLayout(zone, bounds, cardW, cardH,
             zone.IsEmpty && zone.Definition?.GroupLayout != "by_rank" ? ZoneRenderHint.Empty : HintFor(zone),
             FaceUp: faceUp,
-            RotationDegrees: revealed ? 0f : (zone.Type == "hand" ? seat.Rotation : 0f),
+            // Upright at every seat but a face-down pile. Hands used to be turned to face
+            // their players — side seats sideways, the top seat upside down — which made
+            // them hard to read and turned the names with them, too small to read and
+            // pushed off the table.
+            RotationDegrees: pile && !revealed ? seat.Rotation : 0f,
             Label: label,
             IsCurrentPlayer: current && zone.Type == "hand",
-            SeatQuarterTurns: owned ? (int)(seat.Rotation / 90f) : 0);
+            SeatQuarterTurns: owned ? (int)(seat.Rotation / 90f) : 0,
+            SeatSide: owned ? seat.Side : null);
     }
 
     private static bool IsShowdownRevealed(GameState state, string playerId)

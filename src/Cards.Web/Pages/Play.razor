@@ -159,6 +159,9 @@
     }
     else
     {
+        @* The table fills the page; the status and buttons float over its bottom edge on
+           a see-through band, and the renderer lays the cards out above them. *@
+        <div class="table-area">
         <GameTableCanvas @ref="_canvas"
                          CardTapped="OnCardTapped"
                          ZoneTapped="OnZoneTapped"
@@ -168,6 +171,7 @@
                          CardDropped="OnCardDropped"
                          CardReordered="OnCardReordered" />
 
+        <div class="table-footer">
         @if (_offline)
         {
             <div class="notice">Connection lost — reconnecting…</div>
@@ -212,6 +216,8 @@
                     </button>
                 }
             }
+        </div>
+        </div>
         </div>
     }
 </div>
@@ -286,6 +292,9 @@
         // fans out â so starting from OnInitializedAsync meant the entire opening
         // deal, and every AI turn before the player's first, played out against no
         // table at all and was over before anything was ever drawn.
+        try { _remPx = await JS.InvokeAsync<double>("eval", "parseFloat(getComputedStyle(document.documentElement).fontSize) || 16"); }
+        catch { /* 16 is the browser default */ }
+
         if (_canvas?.Renderer is not null)
         {
             Vm.Animator = new RendererTableAnimator(_canvas.Renderer);
@@ -479,6 +488,12 @@
     /// load and whenever one changes, so a size takes effect where it was chosen
     /// rather than on the next deal.
     /// </summary>
+    /// <summary>The footer's height in rem — keep in step with .table-footer in app.css.</summary>
+    private const double FooterRem = 4.4;
+
+    /// <summary>CSS pixels in a rem on this page, read once; 16 until then.</summary>
+    private double _remPx = 16;
+
     private void ApplyDisplaySettings()
     {
         _showCardValues = Settings.ShowCardValues;
@@ -487,6 +502,10 @@
         renderer.CardScale     = (float)Settings.UiScale("cards");
         renderer.BubbleScale   = (float)Settings.UiScale("bubbles");
         renderer.TooltipScale  = (float)Settings.UiScale("tooltip");
+        renderer.NameScale     = (float)Settings.UiScale("names");
+
+        // The footer's height, as the CSS sets it (.table-footer), in this page's pixels.
+        _canvas.BottomInsetCss = FooterRem * _remPx;
         renderer.ShowCardValues = _showCardValues;
         _canvas.Redraw();
     }

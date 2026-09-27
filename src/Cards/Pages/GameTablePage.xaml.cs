@@ -742,6 +742,7 @@ public partial class GameTablePage : ContentPage
     {
         TableCanvas.CardScale      = (float)_settings.UiScale("cards");
         TableCanvas.BubbleScale    = (float)_settings.UiScale("bubbles");
+        TableCanvas.NameScale      = (float)_settings.UiScale("names");
         TableCanvas.TooltipScale   = (float)_settings.UiScale("tooltip");
         TableCanvas.ShowCardValues = _settings.ShowCardValues;
     }

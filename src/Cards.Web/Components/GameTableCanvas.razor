@@ -152,8 +152,18 @@
         Redraw();
     }
 
+    /// <summary>
+    /// CSS pixels along the bottom that the page covers with its own footer — the status
+    /// line and buttons laid over the felt. The table is laid out above them.
+    /// </summary>
+    public double BottomInsetCss { get; set; }
+
     private void OnPaint(SKPaintSurfaceEventArgs e)
-        => _renderer?.Paint(e.Surface.Canvas, e.Info);
+    {
+        if (_renderer is null) return;
+        _renderer.BottomInset = (float)(BottomInsetCss * _pixelRatio);
+        _renderer.Paint(e.Surface.Canvas, e.Info);
+    }
 
     // Offsets are relative to the wrapper, which keeps its full CSS size, so the
     // element's own shrink-and-scale-up is invisible here.

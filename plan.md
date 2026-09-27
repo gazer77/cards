@@ -323,6 +323,12 @@ See `docs/shared-tables.md`.
       `GameServer`/`GameClient` over `TcpTransport` should then be retired.
 - [ ] **Backlog: shared games survive a restart** — see "Save and resume multiplayer
       games" under Customization.
+- [ ] **Backlog: bot names** — computer seats are "Bot 1", "Bot 2"… today. A list of names
+      to draw from instead, bot-flavoured where it is fun ("Botticelli", "Robo Rita",
+      "Chip", "Deal-E", "Ace-9000") and plain elsewhere, never repeating at one table and
+      never taking a seated person's name. Worth deciding: one list for every game or a
+      game-specific flavour in the definition (`players.bot_names`), and whether bots
+      keep their names across a session.
 - [ ] **Backlog: kicking and banning** — the host removes someone from the table: in the
       lobby the seat opens again; during play it goes to the computer, as when someone
       leaves, and the seat's token is revoked so they cannot rejoin it. Banning keeps them

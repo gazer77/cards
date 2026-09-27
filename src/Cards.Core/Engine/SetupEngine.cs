@@ -36,11 +36,20 @@ public sealed class SetupEngine : ISetupStrategy
     {
         var names        = state.Definition.Players?.Names;
         int startScore   = state.Definition.Players?.StartingScore ?? 0;
+        int bots         = 0;
         for (int i = 0; i < playerCount; i++)
         {
-            string id   = $"player{i}";
+            string id = $"player{i}";
+
+            // A seat the computer plays is a bot, and is called one: "Player 3" read as a
+            // person who had not arrived. At a shared table the people are the named seats;
+            // at a single-player table the person is seat 0.
+            bool bot = state.SeatNames is { } table ? i >= table.Count || table[i] is null : i > 0;
+
             string name = state.SeatNames is { } seated && i < seated.Count && seated[i] is { Length: > 0 } person ? person
-                        : names is not null && i < names.Count ? names[i] : $"Player {i + 1}";
+                        : names is not null && i < names.Count ? names[i]
+                        : bot ? $"Bot {++bots}"
+                        : $"Player {i + 1}";
             state.Players.Add(new Player(id, name));
             if (startScore > 0) state.Scores[id] = startScore;
         }

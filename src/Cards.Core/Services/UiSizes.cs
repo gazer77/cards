@@ -30,6 +30,7 @@ public static class UiSizes
         ("cards",   "Cards"),
         ("bubbles", "Speech bubbles"),
         ("tooltip", "Card name bubble"),
+        ("names",   "Player names"),
         ("status",  "Status line"),
     ];
 

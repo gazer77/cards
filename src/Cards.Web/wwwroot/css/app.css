@@ -643,3 +643,43 @@ html, body {
     font-size: 1rem;
 }
 .host-name + .start.secondary { margin-top: 0.6rem; }
+
+/* ── The table and its footer ────────────────────────────────────────────────
+   The table fills the page and the status line and buttons float over its bottom
+   edge on a see-through band. The renderer is told the band's height and lays the
+   cards out above it (Play.razor FooterRem — keep in step with the height below),
+   so the felt runs under the band but no card does.
+
+   Floating also ends the old constraint on these two: they no longer take space
+   from the canvas, so nothing they do can resize it and flash the table. */
+.table-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.table-footer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(8, 20, 14, 0.55);
+    backdrop-filter: blur(3px);
+    border-top: 1px solid #ffffff10;
+}
+
+.table-footer .status {
+    height: 1.8rem;
+    padding: 0.3rem 0.9rem 0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.table-footer .action-bar {
+    height: 2.6rem;
+    padding: 0 0.9rem 0.35rem;
+}
+
+.table-footer .action { padding: 0.35rem 0.9rem; }

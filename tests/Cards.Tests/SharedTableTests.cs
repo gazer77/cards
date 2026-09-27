@@ -256,4 +256,25 @@ public sealed class SharedTableTests
         Assert.True(mine.FaceUp);
         Assert.False(seat0.FaceUp);
     }
+
+    // ── Names ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Computer_seats_are_called_bots()
+    {
+        // Single-player: the person is seat 0, everyone else a bot.
+        var (golf, _) = Table("golf", 4);
+        Assert.Equal(["Player 1", "Bot 1", "Bot 2", "Bot 3"], golf.Players.Select(p => p.Name));
+
+        // A shared table: people by name, the empty seats as bots.
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var def = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var shared = new GameState { GameId = def.Id, Definition = def, SeatNames = ["Ana", null, "Bo", null] };
+        LogicRegistry.Create(def).Initialize(shared, 4, []);
+        Assert.Equal(["Ana", "Bot 1", "Bo", "Bot 2"], shared.Players.Select(p => p.Name));
+
+        // A game that names a seat keeps that name; the rest are bots.
+        var (fish, _) = Table("go-fish", 3);
+        Assert.Equal(["You", "Bot 1", "Bot 2"], fish.Players.Select(p => p.Name));
+    }
 }

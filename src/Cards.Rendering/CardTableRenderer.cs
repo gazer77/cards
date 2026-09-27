@@ -177,6 +177,16 @@ public sealed class CardTableRenderer
     /// <summary>The size of the card name bubble a tap raises.</summary>
     public float TooltipScale { get; set; } = 1f;
 
+    /// <summary>The size of the players' names at their seats.</summary>
+    public float NameScale { get; set; } = 1f;
+
+    /// <summary>
+    /// Canvas pixels along the bottom that something else covers — the page's status line
+    /// and buttons, laid over the felt. The felt runs under them; the table is laid out
+    /// above them, so no card sits where it cannot be seen or tapped.
+    /// </summary>
+    public float BottomInset { get; set; }
+
     /// <summary>
     /// Writes each visible card's worth under this game's scoring in its lower corner.
     /// A learning aid, so it is drawn over the card rather than baked into the cached
@@ -659,10 +669,14 @@ public sealed class CardTableRenderer
 
     private void PaintTable(SKCanvas canvas, SKImageInfo info)
     {
-        _lastInfo = info;
         // No Clear: the felt is opaque and covers the whole canvas, so clearing first
         // is a full-canvas write that every following pixel overwrites.
         DrawFelt(canvas, info);
+
+        // Everything else is laid out above whatever covers the bottom edge.
+        if (BottomInset > 0 && BottomInset < info.Height * 0.5f)
+            info = new SKImageInfo(info.Width, info.Height - (int)BottomInset, info.ColorType, info.AlphaType);
+        _lastInfo = info;
 
         if (_state is null)
         {
@@ -2076,40 +2090,60 @@ public sealed class CardTableRenderer
             return;
         }
 
-        // The seat to act wears its name in the accent, with a pip beside it. This and
-        // the glow under the cards are the whole turn indicator: quiet, and attached
-        // to the player rather than drawn around a box.
-        bool  active = layout.IsCurrentPlayer;
-        var   color  = active ? _theme.CurrentPlayerHighlight : _theme.PlayerNameColor;
-        using var paint = new SKPaint { Color = color, IsAntialias = true };
-        using var font  = new SKFont(SKTypeface.Default, labelSz);
-        float w = font.MeasureText(layout.Label!);
+        DrawSeatName(canvas, layout);
+    }
 
-        float x, y;
-        if (layout.Hint == ZoneRenderHint.Fan && FanExtent(layout) is { } cards
-            && cards.Bottom + labelSz * 1.4f > layout.Bounds.Bottom)
-        {
-            // A hand pinned to the band's bottom edge has no room below it, and a name
-            // drawn there was covered by the cards. It sits above the fan instead, at
-            // the left, where nothing else lives. In a turned zone's own frame "above"
-            // is toward the table, so this holds at every seat.
-            x = cards.Left;
-            y = cards.Top - labelSz * 0.6f;
-        }
-        else
-        {
-            x = layout.Bounds.MidX - w / 2f;
-            y = layout.Bounds.Bottom + labelSz * 1.4f;
-        }
+    /// <summary>
+    /// A seat's name, level and legible at every seat: on a see-through band laid over
+    /// the bottom edge of the cards at the top and bottom seats, and just under them at
+    /// the sides. Sized from the table, not the cards, and by the player's own setting.
+    ///
+    /// Names used to be drawn in the seat's turned frame at a fraction of a card's width:
+    /// sideways at the sides, too small to read, and at the top and bottom pushed off
+    /// the table altogether.
+    ///
+    /// The seat to act wears its name in the accent, with a pip beside it. This and the
+    /// glow under the cards are the whole turn indicator: quiet, and attached to the
+    /// player rather than drawn around a box.
+    /// </summary>
+    private void DrawSeatName(SKCanvas canvas, ZoneLayout layout)
+    {
+        string name = layout.Label!;
+        bool active = layout.IsCurrentPlayer;
+        float size  = MathF.Max(11f, MathF.Min(_lastInfo.Width, _lastInfo.Height) * 0.02f) * NameScale;
 
-        if (active)
+        using var font  = new SKFont(SKTypeface.Default, size);
+        using var paint = new SKPaint
         {
-            float r = labelSz * 0.28f;
-            canvas.DrawCircle(x - r * 2.2f, y - labelSz * 0.32f, r, paint);
-        }
-        canvas.DrawText(layout.Label!, x, y, font, paint);
+            Color       = active ? _theme.CurrentPlayerHighlight : _theme.PlayerNameColor.WithAlpha(0xFF),
+            IsAntialias = true,
+        };
 
-        DrawDealerMark(canvas, layout, x + w + labelSz * 0.5f, y, labelSz);
+        float w    = font.MeasureText(name);
+        float pip  = active ? size * 0.7f : 0f;
+        float padX = size * 0.55f, padY = size * 0.3f;
+
+        var   cards = ZoneCardsRect(layout);
+        bool  side  = layout.SeatSide is "left" or "right";
+        float boxH  = size * 1.1f + padY * 2;
+        float top   = side
+            ? cards.Bottom + size * 0.35f     // under the cards
+            : cards.Bottom - boxH * 0.85f;    // over their bottom edge
+
+        float boxW = w + pip + padX * 2;
+        float left = Math.Clamp(cards.MidX - boxW / 2f, 4f, MathF.Max(4f, _lastInfo.Width - boxW - 4f));
+        top = Math.Clamp(top, 2f, MathF.Max(2f, _lastInfo.Height - boxH - 2f));
+        var box = new SKRect(left, top, left + boxW, top + boxH);
+
+        using var band = new SKPaint { Color = new SKColor(0x08, 0x14, 0x0E, 0xC8), IsAntialias = true };
+        canvas.DrawRoundRect(box, boxH / 2f, boxH / 2f, band);
+
+        float baseline = box.MidY + size * 0.36f;
+        float x = box.Left + padX + pip;
+        if (active) canvas.DrawCircle(box.Left + padX + size * 0.22f, box.MidY, size * 0.22f, paint);
+        canvas.DrawText(name, x, baseline, font, paint);
+
+        DrawDealerMark(canvas, layout, box.Right + size * 0.45f, baseline, size);
     }
 
     /// <summary>

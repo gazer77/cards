@@ -27,5 +27,7 @@ public sealed record ZoneLayout(
     /// 2 top, 3 left. Decorations declared relative to the cards ("bottom" = toward the
     /// player) are turned by this, so a label under my melds is over the opponent's.
     /// </summary>
-    int SeatQuarterTurns = 0
+    int SeatQuarterTurns = 0,
+    /// <summary>Which edge of the table the owning seat sits at — bottom, right, top or left — or null for a shared zone.</summary>
+    string? SeatSide = null
 );
