@@ -110,6 +110,28 @@ Watch it on the **Actions** tab. When it finishes, open http://cards.local.
 A deploy restarts the server, and shared games live in memory — **a deploy ends any game
 in progress.** Deploy between games until shared games are saved (on the backlog).
 
+## Troubleshooting
+
+**The runner service fails with `status=200/CHDIR`.** It was set up somewhere `ghrunner`
+cannot open — typically inside your own home folder, which other users cannot enter on
+Ubuntu 24.04. Move it to `ghrunner`'s home and reinstall the service:
+
+```bash
+cd <where the runner is> && sudo ./svc.sh stop && sudo ./svc.sh uninstall && cd ~
+sudo mv <where the runner is> /home/ghrunner/actions-runner
+sudo chown -R ghrunner:ghrunner /home/ghrunner/actions-runner
+sudo bash -c 'cd /home/ghrunner/actions-runner && ./svc.sh install ghrunner && ./svc.sh start && ./svc.sh status'
+```
+
+**`cards.local` does not resolve.** Check `hostname -I`: the alias announces the first
+address listed. If that is not the LAN address, put the LAN address in
+`/etc/systemd/system/avahi-alias@.service` in place of the `$(hostname -I …)` part, then
+`sudo systemctl daemon-reload && sudo systemctl restart avahi-alias@cards`.
+
+**A deploy fails in a test step.** The log on the Actions tab names the test. Tests had
+never run on Linux before this server; a font or native-library problem there shows up
+as a rendering test failing, not as a game bug.
+
 ## Another app
 
 Give it its own service user, a folder under `/srv/<app>`, a service file on its own port
