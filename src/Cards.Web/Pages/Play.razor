@@ -19,8 +19,64 @@
         <button class="link @(_diagnostics ? "on" : "")"
                 title="Frame timings"
                 @onclick="ToggleDiagnostics">fps</button>
+        @if (_scoresAsSheet && Vm.State is { } scored && Cards.Engine.ScoreSheet.For(scored) is not null)
+        {
+            <button class="link score-button" title="Scores" aria-label="Scores" @onclick="() => _scoresOpen = true">
+                <TrophyIcon />
+            </button>
+        }
         <button class="link gear" title="Menu" @onclick="() => _menu = !_menu">&#9881;</button>
     </header>
+
+    @if (_scoresOpen && Vm.State is { } table && Cards.Engine.ScoreSheet.For(table) is { } sheet)
+    {
+        @* The scores as a sheet of their own, in type a phone can read. Drawn on the
+           table, sized to fit a corner of a phone screen, they were too small to. *@
+        <div class="scrim" @onclick="() => _scoresOpen = false"></div>
+        <section class="overlay scores" role="dialog" aria-label="@sheet.Label">
+            <h2><TrophyIcon /> @sheet.Label</h2>
+
+            @if (sheet.Rounds.Count > 0)
+            {
+                <div class="score-views">
+                    <button class="@(_scoresByRound ? "action" : "action primary")" @onclick="() => _scoresByRound = false">Total</button>
+                    <button class="@(_scoresByRound ? "action primary" : "action")" @onclick="() => _scoresByRound = true">By round</button>
+                </div>
+            }
+
+            <div class="score-table-wrap">
+                <table class="score-table">
+                    @if (_scoresByRound && sheet.Rounds.Count > 0)
+                    {
+                        <thead>
+                            <tr>
+                                <th></th>
+                                @foreach (var round in sheet.Rounds) { <th>@sheet.RoundLabel@round</th> }
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                    }
+                    <tbody>
+                        @foreach (var row in sheet.Rows)
+                        {
+                            <tr class="@(row.IsMe ? "me" : "")">
+                                <th>@row.Name</th>
+                                @if (_scoresByRound)
+                                {
+                                    @foreach (var cell in row.ByRound) { <td>@(cell?.ToString() ?? "–")</td> }
+                                }
+                                <td class="total">@row.Total</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="overlay-buttons">
+                <button class="action" @onclick="() => _scoresOpen = false">Close</button>
+            </div>
+        </section>
+    }
 
     @if (_menu)
     {
@@ -295,6 +351,9 @@
         try { _remPx = await JS.InvokeAsync<double>("eval", "parseFloat(getComputedStyle(document.documentElement).fontSize) || 16"); }
         catch { /* 16 is the browser default */ }
 
+        try { _scoresAsSheet = await JS.InvokeAsync<bool>("eval", "matchMedia('(pointer: coarse)').matches || innerWidth < 760"); }
+        catch { /* drawn on the table, as on a desktop */ }
+
         if (_canvas?.Renderer is not null)
         {
             Vm.Animator = new RendererTableAnimator(_canvas.Renderer);
@@ -346,6 +405,15 @@
     /// <summary>Set briefly when the table refuses a move, in place of the status line.</summary>
     private string? _notice;
     private bool    _offline;
+
+    /// <summary>
+    /// On a phone the scores open as a sheet of their own, from the trophy in the top
+    /// bar, instead of being drawn in a corner of the table where the type was too small
+    /// to read. Decided once, from the screen: touch, or narrow.
+    /// </summary>
+    private bool    _scoresAsSheet;
+    private bool    _scoresOpen;
+    private bool    _scoresByRound;
     private bool    _sharedStarted;
 
     /// <summary>
@@ -503,6 +571,7 @@
         renderer.BubbleScale   = (float)Settings.UiScale("bubbles");
         renderer.TooltipScale  = (float)Settings.UiScale("tooltip");
         renderer.NameScale     = (float)Settings.UiScale("names");
+        renderer.ShowScoreCard = !_scoresAsSheet;
 
         // The footer's height, as the CSS sets it (.table-footer), in this page's pixels.
         _canvas.BottomInsetCss = FooterRem * _remPx;

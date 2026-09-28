@@ -2624,6 +2624,62 @@ public sealed class CardTableRenderer
     private bool? _scoreCardDetail;
 
     /// <summary>
+    /// Whether the table draws its score card at all. A phone turns it off and opens the
+    /// scores as a sheet of its own instead: drawn to fit a corner of a phone-sized
+    /// table, the type came out too small to read.
+    /// </summary>
+    public bool ShowScoreCard { get; set; } = true;
+
+    /// <summary>
+    /// Folded down to a trophy badge, by the player's choice this sitting. A tap on the
+    /// badge opens it again; the header's fold mark closes it.
+    /// </summary>
+    public bool ScoreCardCollapsed
+    {
+        get => _scoreCardCollapsed;
+        set { _scoreCardCollapsed = value; RequestRedraw(); }
+    }
+    private bool _scoreCardCollapsed;
+
+    /// <summary>The expanded card's fold mark, so a tap on it folds rather than switching view.</summary>
+    private SKRect? _scoreCardFoldRect;
+
+    /// <summary>The score card's gold: the same gold as the turn glow, so the emblem reads as a prize.</summary>
+    private static SKColor ScoreGold => TurnGold;
+
+    /// <summary>
+    /// A trophy, the score card's emblem — drawn from shapes, since a browser's canvas has
+    /// no emoji font to lean on. The web page's score button uses the same outline.
+    /// </summary>
+    private static void DrawTrophy(SKCanvas canvas, SKRect r, SKColor color)
+    {
+        float w = r.Width, h = r.Height, cx = r.MidX;
+        using var fill   = new SKPaint { Color = color, IsAntialias = true };
+        using var stroke = new SKPaint { Color = color, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = w * 0.07f };
+
+        float cupL = r.Left + w * 0.26f, cupR = r.Left + w * 0.74f;
+        float cupT = r.Top  + h * 0.10f, cupB = r.Top  + h * 0.58f;
+
+        using var cup = new SKPath();
+        cup.MoveTo(cupL, cupT);
+        cup.LineTo(cupR, cupT);
+        cup.LineTo(cupR, cupT + h * 0.12f);
+        cup.QuadTo(cupR, cupB, cx, cupB);
+        cup.QuadTo(cupL, cupB, cupL, cupT + h * 0.12f);
+        cup.Close();
+        canvas.DrawPath(cup, fill);
+
+        // Handles.
+        canvas.DrawArc(new SKRect(r.Left + w * 0.08f, cupT + h * 0.04f, cupL + w * 0.06f, cupT + h * 0.30f), 90, 180, false, stroke);
+        canvas.DrawArc(new SKRect(cupR - w * 0.06f, cupT + h * 0.04f, r.Right - w * 0.08f, cupT + h * 0.30f), 270, 180, false, stroke);
+
+        // Stem and base.
+        canvas.DrawRect(new SKRect(cx - w * 0.05f, cupB - h * 0.02f, cx + w * 0.05f, r.Top + h * 0.78f), fill);
+        canvas.DrawRoundRect(new SKRect(r.Left + w * 0.28f, r.Top + h * 0.76f, r.Right - w * 0.28f, r.Top + h * 0.90f),
+                             w * 0.04f, w * 0.04f, fill);
+    }
+
+    /// <summary>
     /// Draws the score card a definition places on the table: a row per side, either
     /// as one total each or as a column per round with the total at the end.
     ///
@@ -2633,11 +2689,30 @@ public sealed class CardTableRenderer
     /// </summary>
     private void DrawScoreCard(SKCanvas canvas, SKImageInfo info)
     {
-        _scoreCardRect = null;
+        _scoreCardRect     = null;
+        _scoreCardFoldRect = null;
+        if (!ShowScoreCard) return;
         if (_state?.Definition.ScoreCard is not { Place: not null } card) return;
 
         var rows = ScoreRows(card);
         if (rows.Count == 0) return;
+
+        // Folded: a trophy badge where the card would sit, and nothing else.
+        if (_scoreCardCollapsed && card.Collapsible)
+        {
+            float side  = MathF.Max(28f, MathF.Min(info.Width, info.Height) * 0.055f);
+            var   badge = ResolvePlace(card.Place, new SKRect(0, 0, info.Width, info.Height), side, side);
+            badge = new SKRect(badge.Left, badge.Top, badge.Left + side, badge.Top + side);
+
+            using var badgeFill = new SKPaint { Color = new SKColor(0x0D, 0x25, 0x18, 0xD8), IsAntialias = true };
+            using var badgeEdge = new SKPaint { Color = ScoreGold.WithAlpha(0x70), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
+            canvas.DrawRoundRect(badge, side * 0.25f, side * 0.25f, badgeFill);
+            canvas.DrawRoundRect(badge, side * 0.25f, side * 0.25f, badgeEdge);
+            DrawTrophy(canvas, SKRect.Inflate(badge, -side * 0.18f, -side * 0.18f), ScoreGold);
+
+            _scoreCardRect = badge;
+            return;
+        }
 
         bool detail = _scoreCardDetail ?? card.View == "detail";
         var  rounds = detail
@@ -2677,9 +2752,12 @@ public sealed class CardTableRenderer
 
         // The heading and the "tap for the other view" hint share a line, so the card
         // is at least wide enough for both with a gap — they ran together otherwise.
+        // Plus the trophy before the heading, and the fold mark after the hint.
+        // The "detail" hint is left out of the sum: it is drawn where it fits and skipped
+        // where it does not, rather than shrinking every score to make room for it.
         float headW = card.Label.Length == 0 ? 0f
-            : font.MeasureText(card.Label)
-              + (card.Collapsible ? headFont.MeasureText("detail") + pad * 2f : 0f);
+            : size * 1.3f + font.MeasureText(card.Label)
+              + (card.Collapsible ? pad + size * 1.4f : 0f);
 
         var box = ResolvePlace(card.Place, new SKRect(0, 0, info.Width, info.Height),
                                MathF.Max(bodyW, headW) + pad * 2f,
@@ -2703,12 +2781,23 @@ public sealed class CardTableRenderer
 
         if (card.Label.Length > 0)
         {
-            canvas.DrawText(card.Label, x, y, font, ink);
-            // The affordance is a word, not an icon: "tap for holes" needs no legend.
+            DrawTrophy(canvas, new SKRect(x, y - size * 0.95f, x + size * 1.05f, y + size * 0.1f), ScoreGold);
+            canvas.DrawText(card.Label, x + size * 1.3f, y, font, ink);
+
+            // The affordance is a word, not an icon: "tap for holes" needs no legend. The
+            // fold mark at the end folds the card down to its trophy.
             if (card.Collapsible)
             {
-                string hint = detail ? "total" : "detail";
-                canvas.DrawText(hint, box.Right - pad - headFont.MeasureText(hint), y, headFont, dim);
+                float foldW = size * 1.4f;
+                var   fold  = new SKRect(box.Right - pad - foldW, y - size * 1.05f, box.Right - pad * 0.4f, y + size * 0.45f);
+                using var foldInk = new SKPaint { Color = dim.Color, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = MathF.Max(1.5f, size * 0.12f), StrokeCap = SKStrokeCap.Round };
+                canvas.DrawLine(fold.MidX - size * 0.35f, fold.MidY, fold.MidX + size * 0.35f, fold.MidY, foldInk);
+                _scoreCardFoldRect = fold;
+
+                string hint  = detail ? "total" : "detail";
+                float  hintX = fold.Left - pad * 0.5f - headFont.MeasureText(hint);
+                if (hintX > x + size * 1.3f + font.MeasureText(card.Label) + pad * 0.5f)
+                    canvas.DrawText(hint, hintX, y, headFont, dim);
             }
             y += lineH;
         }
@@ -2765,8 +2854,8 @@ public sealed class CardTableRenderer
         float headH   = card.Label.Length > 0 ? lineH : 0f;
         float roundsH = roundCount > 0 ? lineH : 0f;
         float headW   = card.Label.Length == 0 ? 0f
-            : font.MeasureText(card.Label)
-              + (card.Collapsible ? font.MeasureText("detail") * 0.85f + pad * 2f : 0f);
+            : size * 1.3f + font.MeasureText(card.Label)
+              + (card.Collapsible ? pad + size * 1.4f : 0f);
 
         return (MathF.Max(bodyW, headW) + pad * 2f,
                 headH + roundsH + rows.Count * lineH + pad * 2f);
@@ -2774,16 +2863,10 @@ public sealed class CardTableRenderer
     /// <summary>One row per player, or per team when the definition asks for sides.</summary>
     private List<(string Id, string Name, int Total, bool IsMe)> ScoreRows(Cards.Models.ScoreCardDefinition card)
     {
-        if (_state is null) return [];
-
-        if (card.By == "team")
-            return [.. _state.Teams.Select(t => (t.Id, t.Name, _state.GetTeamScore(t.Id), false))];
-
-        // The person at this screen looks for their own row first, so it is the one
-        // drawn brightest.
-        // Role seats hold no score — the house is not a player — so they get no row.
-        return [.. _state.Players.Where(p => p.Role is null)
-                                 .Select(p => (p.Id, p.Name, _state.GetScore(p.Id), p.Id == _state.Viewer))];
+        // The same sheet a phone opens, so the two never disagree. The person at this
+        // screen looks for their own row first, so it is the one drawn brightest.
+        if (_state is null || ScoreSheet.For(_state) is not { } sheet) return [];
+        return [.. sheet.Rows.Select(r => (r.Id, r.Name, r.Total, r.IsMe))];
     }
 
     /// <summary>
@@ -2792,11 +2875,19 @@ public sealed class CardTableRenderer
     /// </summary>
     private bool TapScoreCard(SKPoint location)
     {
+        if (!ShowScoreCard) return false;
         if (_state?.Definition.ScoreCard is not { Collapsible: true } card) return false;
         if (_scoreCardRect is not { } box || !box.Contains(location)) return false;
 
-        bool detail = _scoreCardDetail ?? card.View == "detail";
-        _scoreCardDetail = !detail;
+        // The badge opens the card; the fold mark folds it; anywhere else on it switches
+        // between the totals and the rounds.
+        if (_scoreCardCollapsed)
+            _scoreCardCollapsed = false;
+        else if (_scoreCardFoldRect is { } fold && fold.Contains(location))
+            _scoreCardCollapsed = true;
+        else
+            _scoreCardDetail = !(_scoreCardDetail ?? card.View == "detail");
+
         RequestRedraw();
         return true;
     }

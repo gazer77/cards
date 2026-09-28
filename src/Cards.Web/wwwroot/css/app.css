@@ -683,3 +683,54 @@ html, body {
 }
 
 .table-footer .action { padding: 0.35rem 0.9rem; }
+
+/* ── Scores ───────────────────────────────────────────────────────────────────
+   The trophy in the top bar, and the score sheet it opens on a phone — in type a
+   phone can read, rather than drawn into a corner of the table. */
+.trophy-icon {
+    width: 1.35em;
+    height: 1.35em;
+    vertical-align: -0.25em;
+    color: #F2C54B;
+}
+
+.score-button { padding: 0.2rem 0.4rem; line-height: 1; }
+
+.overlay.scores h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.score-views { display: flex; gap: 0.5rem; }
+.score-views .action { flex: 1; font-size: 1.05rem; padding: 0.55rem; }
+
+.score-table-wrap {
+    overflow: auto;              /* many rounds scroll sideways, not off the sheet */
+    min-height: 0;
+}
+
+.score-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 1.25rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.score-table th,
+.score-table td {
+    padding: 0.55rem 0.6rem;
+    border-bottom: 1px solid #ffffff14;
+    white-space: nowrap;
+}
+
+.score-table tbody th { text-align: left; font-weight: 500; color: var(--ink-dim); }
+.score-table td { text-align: right; color: var(--ink-dim); }
+.score-table thead th { font-size: 0.95rem; color: var(--ink-dim); font-weight: 500; text-align: right; }
+.score-table td.total { color: var(--ink); font-weight: 700; }
+
+.score-table tr.me th,
+.score-table tr.me td { color: var(--ink); }
+.score-table tr.me th { color: #F2C54B; font-weight: 700; }
