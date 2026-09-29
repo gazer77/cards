@@ -323,6 +323,14 @@ See `docs/shared-tables.md`.
       `GameServer`/`GameClient` over `TcpTransport` should then be retired.
 - [ ] **Backlog: shared games survive a restart** — see "Save and resume multiplayer
       games" under Customization.
+- [ ] **Backlog: small-screen layouts** — a definition may give its zones a second
+      layout for a phone, the way it gives one for the table today: a place or region
+      per zone, used when the screen is small (narrow, or held upright). A phone is tall
+      and narrow where a desktop is wide, so the same spots squeeze everything into the
+      middle and leave the top and bottom empty. Hand and Foot's meld strip is the clear
+      case: thirteen slots across a phone make each one tiny, where seven to a row, or
+      the strip moved to the long axis, would not. For now a phone only doubles the small
+      labels (`CardTableRenderer.LabelScale`), and the meld strip's by half.
 - [ ] **Backlog: deal for the first dealer** — choose the first dealer the way a table
       does: deal cards face up round the table until one turns up the card the game
       names. Poker commonly deals to the first ace (or the first black ace); Euchre to

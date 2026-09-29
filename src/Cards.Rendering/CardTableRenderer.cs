@@ -181,6 +181,15 @@ public sealed class CardTableRenderer
     public float NameScale { get; set; } = 1f;
 
     /// <summary>
+    /// A multiplier for the table's small labels — seat names, badges, zone captions and
+    /// slot labels — on top of their own sizes. A phone sets 2: those labels are sized
+    /// from the canvas, and a phone's canvas is drawn at a fraction of its pixels, so on
+    /// a phone they came out too small to read while the cards, sized to the table,
+    /// looked right.
+    /// </summary>
+    public float LabelScale { get; set; } = 1f;
+
+    /// <summary>
     /// Canvas pixels along the bottom that something else covers — the page's status line
     /// and buttons, laid over the felt. The felt runs under them; the table is laid out
     /// above them, so no card sits where it cannot be seen or tapped.
@@ -1333,6 +1342,10 @@ public sealed class CardTableRenderer
     /// </summary>
     private void DrawRankSlots(SKCanvas canvas, ZoneLayout layout)
     {
+        // The strip's labels grow by half at most: it has a fixed share of the table, and
+        // between two rows of slots on a phone there was no room for them doubled.
+        float stripScale = MathF.Min(LabelScale, 1.5f);
+
         var zone = layout.Zone;
         if (_state is null) return;
 
@@ -1369,7 +1382,12 @@ public sealed class CardTableRenderer
         int   rows   = (slots + perRow - 1) / perRow;
 
         float cardH  = cardW * 1.4f;
-        float extra  = (capTB ? cardW * 0.16f * 1.6f : 0f) + (badgeTB ? cardW * 0.15f * 1.8f : 0f);
+        // Labels grow with LabelScale, and the room for them with it: slot labels placed
+        // outside their slot fit the gap between rows at their own size, and ran into the
+        // next row once doubled on a phone.
+        float extra  = (capTB ? cardW * 0.16f * 1.6f * stripScale : 0f)
+                     + (badgeTB ? MathF.Max(cardW * 0.15f, 10f) * 1.8f * stripScale : 0f)
+                     + (stripScale > 1f && slotDefs.Any(s => s.LabelPlace is not null) ? cardW * 0.5f * stripScale : 0f);
         float rowH   = cardH + extra;
         float rowGap = 8f;
 
@@ -1387,7 +1405,7 @@ public sealed class CardTableRenderer
                  + (caption?.Placement == "top" ? cardW * 0.16f * 1.6f : 0f);
 
         using var rankPaint = new SKPaint { Color = _theme.ZoneLabelColor, IsAntialias = true };
-        using var rankFont  = new SKFont(SKTypeface.Default, cardW * 0.42f);
+        using var rankFont  = new SKFont(SKTypeface.Default, cardW * 0.42f * stripScale);
 
         for (int s = 0; s < slots; s++)
         {
@@ -1407,8 +1425,8 @@ public sealed class CardTableRenderer
                 if (caption is not null)
                     DrawPlacedLabel(canvas, rect,
                         FillLabel(caption.Text, zone, slotDefs[s].Label ?? "", meld.Count),
-                        cardW * 0.16f, caption);
-                DrawGroupBadges(canvas, zone, rect, meld.Count, cardW);
+                        cardW * 0.16f * stripScale, caption);
+                DrawGroupBadges(canvas, zone, rect, meld.Count, cardW, stripScale);
             }
             else
             {
@@ -1421,8 +1439,8 @@ public sealed class CardTableRenderer
                         // Positioned like any other label: in the slot's proportions,
                         // turned to the seat.
                         var place = TurnPlace(lp);
-                        var box   = ResolvePlace(place, rect, rankFont.MeasureText(name) + cardW * 0.2f, cardW * 0.5f);
-                        DrawTextInBox(canvas, name, box, rankFont, rankPaint, cardW * 0.42f,
+                        var box   = ResolvePlace(place, rect, rankFont.MeasureText(name) + cardW * 0.2f, cardW * 0.5f * stripScale);
+                        DrawTextInBox(canvas, name, box, rankFont, rankPaint, cardW * 0.42f * stripScale,
                                       place.TextAlign, place.VerticalAlign, inset: cardW * 0.1f);
                     }
                     else
@@ -1431,7 +1449,7 @@ public sealed class CardTableRenderer
                         canvas.DrawText(name, rect.MidX - tw / 2f, rect.MidY + cardW * 0.15f, rankFont, rankPaint);
                     }
                 }
-                DrawGroupBadges(canvas, zone, rect, 0, cardW);
+                DrawGroupBadges(canvas, zone, rect, 0, cardW, stripScale);
             }
         }
     }
@@ -2086,7 +2104,7 @@ public sealed class CardTableRenderer
 
     private void DrawLabel(SKCanvas canvas, ZoneLayout layout)
     {
-        float labelSz = layout.CardWidth * 0.18f;
+        float labelSz = layout.CardWidth * 0.18f * LabelScale;
 
         // A declared caption wins over the renderer's default, and may decline to show.
         if (layout.Zone.Label is { } declared)
@@ -2121,7 +2139,7 @@ public sealed class CardTableRenderer
     {
         string name = layout.Label!;
         bool active = layout.IsCurrentPlayer;
-        float size  = MathF.Max(11f, MathF.Min(_lastInfo.Width, _lastInfo.Height) * 0.02f) * NameScale;
+        float size  = MathF.Max(11f, MathF.Min(_lastInfo.Width, _lastInfo.Height) * 0.02f) * NameScale * LabelScale;
 
         using var font  = new SKFont(SKTypeface.Default, size);
         using var paint = new SKPaint
@@ -2268,13 +2286,13 @@ public sealed class CardTableRenderer
     /// on the side each asks for. Badges sharing a side sit in a row, in declaration
     /// order, so "cards | books" reads left to right the way a player thinks of it.
     /// </summary>
-    private void DrawGroupBadges(SKCanvas canvas, Zone zone, SKRect group, int cardCount, float cardW)
+    private void DrawGroupBadges(SKCanvas canvas, Zone zone, SKRect group, int cardCount, float cardW, float? scale = null)
     {
         var badges = zone.Definition?.GroupBadges;
         if (badges is null || badges.Count == 0 || _state is null) return;
 
         int bookSize = ScoringEngine.BookSize(_state.Definition);
-        float size   = MathF.Max(cardW * 0.15f, 10f);
+        float size   = MathF.Max(cardW * 0.15f, 10f) * (scale ?? LabelScale);
 
         // Per side, how far along the row the next badge starts.
         var cursor = new Dictionary<string, float>();

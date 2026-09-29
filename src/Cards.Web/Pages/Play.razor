@@ -573,6 +573,10 @@
         renderer.NameScale     = (float)Settings.UiScale("names");
         renderer.ShowScoreCard = !_scoresAsSheet;
 
+        // A phone (the same test that opens the scores as a sheet) doubles the table's
+        // small labels: names and badges came out too small to read, the cards did not.
+        renderer.LabelScale    = _scoresAsSheet ? 2f : 1f;
+
         // The footer's height, as the CSS sets it (.table-footer), in this page's pixels.
         _canvas.BottomInsetCss = FooterRem * _remPx;
         renderer.ShowCardValues = _showCardValues;
