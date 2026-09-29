@@ -143,8 +143,13 @@ as a rendering test failing, not as a game bug.
 
 Give it its own service user, a folder under `/srv/<app>`, a service file on its own port
 (5281, 5282, …), an `avahi-alias@<app>` for its name, a block in the Caddyfile, and — if it
-should build itself — a workflow like `.github/workflows/deploy.yml` in its repo, running on
-the same runner (a runner can be registered to several repos, or once for an organisation).
+should build itself — a workflow like `.github/workflows/deploy.yml` in its repo, and a
+runner for that repo. On a personal account a runner serves one repository, so install a
+second one beside the first — same `ghrunner` user, its own folder
+(`/home/ghrunner/actions-runner-<app>`), registered from that repo's Settings → Actions →
+Runners with the `jacktheripper` label, and its own `svc.sh install ghrunner`. (Under a
+GitHub organisation, one runner registered to the organisation can serve every repo.)
+Its sudoers line restarts only its own service.
 
 ## Later: open to the internet
 
