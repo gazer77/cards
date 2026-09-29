@@ -1087,7 +1087,10 @@ At a shared table every seat reads each line in its own words, and a line said b
 player is shown as a speech bubble beside **the seat it is about**. Instructions —
 `turn*`, `pass_*`, `reveal_*`, `gf_turn`, `gf_choosing`, `war_flip`, the Blackjack hand
 and "tap to continue" lines, and rule refusals like `not_a_meld` — stay in the status
-line and are never bubbled; a bubble carries only the first line of a message, so "You
+line and are never bubbled, and so do summaries: a tie (`game_drawn`), a team's win
+(`game_won_team`), a round's scores. A meld (`meld_laid`, `melds_laid`,
+`added_to_meld`) is beside the one who laid it; `dealer_discarded` beside the dealer.
+A bubble carries only the first line of a message, so "You
 win this round!
 Tap to collect." bubbles as "You win this round!".
 

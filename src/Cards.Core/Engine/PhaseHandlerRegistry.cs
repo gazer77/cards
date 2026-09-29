@@ -474,7 +474,7 @@ public static class PhaseHandlerRegistry
             string next = state.Metadata.GetValueOrDefault("dealer_discard_next") ?? _fallbackNextPhaseId;
             state.Metadata.Remove("dealer_discard_next");
             state.Metadata["status"] = GameText.Message(state, "dealer_discarded",
-                "Dealer discarded. Let's play!");
+                "Dealer discarded. Let's play!", state.DealerId);
             state.CurrentPhaseId     = next;
         }
 

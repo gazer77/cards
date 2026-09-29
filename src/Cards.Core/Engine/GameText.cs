@@ -140,7 +140,7 @@ public static class GameText
     [
         "gf_turn", "gf_choosing", "war_flip", "war_tie", "blackjack_hand", "blackjack_split_hand", "bj_continue",
         "add_one_rank", "keep_a_discard", "must_meld_first", "no_meld_of_rank", "no_meld_takes_wilds",
-        "not_a_meld", "opening_too_low", "rank_unmeldable", "too_many_wilds", "game_started", "round_started",
+        "not_a_meld", "opening_too_low", "rank_unmeldable", "too_many_wilds", "game_started", "round_started", "game_drawn",
     ];
 
     /// <summary>
@@ -162,7 +162,8 @@ public static class GameText
     {
         string neutral = Fill(state, Template(state, key, fallback, you: false).Replace("{team}", team.Name), null, values);
         string ours    = Fill(state, Template(state, key, fallback, you: true).Replace("{team}", team.Name), null, values);
-        return Remember(state, neutral, team.PlayerIds.Select(id => (id, ours)).ToList());
+        // About a team, which sits in more than one chair: no one seat to put it beside.
+        return About(state, Remember(state, neutral, team.PlayerIds.Select(id => (id, ours)).ToList()), Nobody);
     }
 
 

@@ -303,7 +303,9 @@ See `docs/shared-tables.md`.
 - [x] **Speech bubbles beside the right seat** — each line records who it is about as it
       is written (`GameText.SubjectOf`); instructions and summaries are never bubbled, and
       a bubble carries only what was said, not the "Tap to …" after it. Also fixes the
-      same misplacement at a single-player table.
+      same misplacement at a single-player table. `StatusSubjectTests` plays every game
+      at its smallest and largest table and fails on any line that never said whose it
+      is; the last few (melds laid, the Euchre dealer's discard, ties and team wins) now do.
 - [x] **Hosting split from the server** — rooms, seats, votes and the game loop live in
       `Cards.Hosting` (plain .NET: `ITableClients` to reach people, `TableRefusal` to say
       no, `RunHousekeepingAsync` for its clock); `Cards.Server` is only the SignalR shell.

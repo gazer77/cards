@@ -1117,11 +1117,12 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             state.Metadata.Remove("dd_must_meld");
 
         state.Metadata.Remove("selected_card");
+        string layer = state.CurrentPlayer.Id;   // said beside the one who laid them
         state.Metadata["status"] = melds.Count > 1
-            ? GameText.Message(state, "melds_laid", "{count} melds laid!", values: ("count", melds.Count))
+            ? GameText.Message(state, "melds_laid", "{count} melds laid!", layer, ("count", melds.Count))
             : joined
-                ? GameText.Message(state, "added_to_meld", "Added to meld.")
-                : GameText.Message(state, "meld_laid", "Meld laid!");
+                ? GameText.Message(state, "added_to_meld", "Added to meld.", layer)
+                : GameText.Message(state, "meld_laid", "Meld laid!", layer);
 
         // Melding away the last card of the hand picks the foot up at once, and the
         // turn goes on with it. The pickup only ran after a discard, so a hand emptied
