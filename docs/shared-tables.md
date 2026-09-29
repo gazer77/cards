@@ -120,8 +120,12 @@ leaves your own network.
 3. The host presses **Deal**. Seats nobody took are played by the computer.
 4. Leaving mid-game hands your seat to the computer so the others can finish.
 
-Rooms close after six hours with nobody touching them, and all rooms end when the server
-restarts — games live in memory.
+Rooms close after six hours with nobody touching them. A server restart — every deploy is
+one — keeps them: each room is written to `Tables:RoomDirectory` (or systemd's
+`$STATE_DIRECTORY/rooms`) within a second of changing and once more on shutdown, and read
+back before the server takes connections. Everyone reconnects by the seat their device
+remembers, as after any dropped connection; the web client keeps retrying for five
+minutes. With no folder configured, rooms last only as long as the server runs.
 
 ## Someone drops out
 
@@ -144,7 +148,8 @@ Leaving on purpose (the menu's Leave game) hands the seat to the computer for go
 
 - **The phone app** is not wired to the server yet. `TableConnection` (in `Cards.App`) is
   the client both should use.
-- **Saving a shared game** — rooms live in memory, so a server restart ends every game.
+- **Reopening a finished or closed table later** with the same people — rooms survive a
+  restart, but once closed they are gone.
 - **Computer difficulty** — computer seats all play the default strategy.
 - Two tabs in one browser share the remembered seat, so testing two players on one
   machine wants two browsers (or a private window).

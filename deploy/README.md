@@ -55,6 +55,12 @@ sudo systemctl enable cards          # started by the first deploy
 `/srv/cards/current` does not exist until the first deploy, so the service is enabled now
 and started by the deploy.
 
+The service's `StateDirectory=cards` gives it `/var/lib/cards`, where shared tables are
+kept (`rooms/`) so a restart — every deploy is one — does not end the games being played.
+A server set up before that line existed needs the unit copied again (the three commands
+above, then `sudo systemctl restart cards`); until then it runs, but forgets its tables
+on each deploy. The log says which: `Rooms are kept in /var/lib/cards/rooms`.
+
 ## 4. Names and the front door
 
 ```bash

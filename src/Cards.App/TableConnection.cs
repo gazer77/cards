@@ -157,7 +157,7 @@ public sealed class TableConnection(Uri hubUrl, ISettingsStore store) : IAsyncDi
             {
                 _hub = new HubConnectionBuilder()
                     .WithUrl(hubUrl)
-                    .WithAutomaticReconnect()
+                    .WithAutomaticReconnect(new PatientRetry())
                     .Build();
 
                 _hub.On<RoomInfo>(TableHubContract.RoomChanged, room =>
@@ -245,6 +245,23 @@ public sealed class TableConnection(Uri hubUrl, ISettingsStore store) : IAsyncDi
     {
         if (_hub is not null) await _hub.DisposeAsync();
     }
+}
+
+/// <summary>
+/// Keeps trying for five minutes: at once, then every two, then every five seconds. The
+/// default gives up after about forty-five, which a server restarting for a deploy can
+/// outlast — and the table is still there when it comes back.
+/// </summary>
+internal sealed class PatientRetry : IRetryPolicy
+{
+    public TimeSpan? NextRetryDelay(RetryContext context)
+        => context.ElapsedTime > TimeSpan.FromMinutes(5) ? null
+         : context.PreviousRetryCount switch
+           {
+               0 => TimeSpan.Zero,
+               < 5 => TimeSpan.FromSeconds(2),
+               _ => TimeSpan.FromSeconds(5),
+           };
 }
 
 /// <summary>What went wrong reaching a shared table, in words for the player.</summary>

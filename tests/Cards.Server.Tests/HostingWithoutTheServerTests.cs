@@ -63,6 +63,109 @@ public sealed class HostingWithoutTheServerTests
         Assert.All(boView.State.Zones.Single(z => z.Id == "hand:player0").Cards, c => Assert.True(c.IsHidden));
     }
 
+    private sealed class MemoryStore : IRoomStore
+    {
+        public readonly Dictionary<string, string> Rooms = [];
+        public Task SaveAsync(string code, string json) { lock (Rooms) Rooms[code] = json; return Task.CompletedTask; }
+        public Task DeleteAsync(string code) { lock (Rooms) Rooms.Remove(code); return Task.CompletedTask; }
+        public Task<IReadOnlyList<(string Code, string Json)>> LoadAllAsync()
+        {
+            lock (Rooms) return Task.FromResult<IReadOnlyList<(string, string)>>(Rooms.Select(r => (r.Key, r.Value)).ToList());
+        }
+    }
+
+    private static RoomService Host(Recorder clients, IRoomStore store)
+        => new(clients, new GameLoader(new EmbeddedGameAssetSource()), NullLogger<RoomService>.Instance, store) { TurnPace = 0 };
+
+    /// <summary>A move for whichever of these people the table is waiting on; false when it waits on none.</summary>
+    private static async Task<bool> SomeoneMoves(RoomService rooms, Recorder clients, params (string Connection, SeatTicket Ticket)[] people)
+    {
+        foreach (var (connection, ticket) in people)
+        {
+            if (clients.Latest(connection) is not { IsBusy: false } view) continue;
+            var move = view.Actions.FirstOrDefault()
+                    ?? view.SelectableCardIds.Select(id => view.DefaultCardActions.GetValueOrDefault(id)
+                                                           ?? new GameAction("select_card", CardId: id)).FirstOrDefault();
+            if (move is null) continue;
+            try { await rooms.ActAsync(ticket.Code, ticket.Token, move); return true; }
+            catch (TableRefusal) { }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// A restart — every deploy is one — keeps the table: the same code, seats and tokens,
+    /// the same cards in the same hands, each seat still reading the table in its own
+    /// words, and the game carries on from there.
+    /// </summary>
+    [Fact]
+    public async Task A_table_outlives_its_host_restarting()
+    {
+        var store   = new MemoryStore();
+        var before  = new Recorder();
+        var rooms   = Host(before, store);
+
+        var ana = await rooms.CreateAsync("ana-1", "go-fish", 3, [], null, "Ana");
+        var bo  = await rooms.JoinAsync("bo-1", ana.Code, "Bo");
+        await rooms.StartAsync(ana.Code, ana.Token);
+
+        int moves = 0;
+        for (int i = 0; i < 6; i++)
+            if (await SomeoneMoves(rooms, before, ("ana-1", ana), ("bo-1", bo))) moves++;
+            else break;
+        Assert.True(moves > 0, "Nobody moved before the restart; the test proves nothing.");
+        await Task.Delay(50);   // the computer's seat finishes its turn
+
+        var anaBefore = before.Latest("ana-1")!;
+        var boBefore  = before.Latest("bo-1")!;
+        await rooms.SaveChangedAsync();
+        Assert.Single(store.Rooms);
+
+        // The host stops, and a new one starts on the same store.
+        var after = new Recorder();
+        var again = Host(after, store);
+        Assert.Equal(1, await again.RestoreAsync());
+
+        await again.RejoinAsync("ana-2", ana.Code, ana.Token);
+        await again.RejoinAsync("bo-2", bo.Code, bo.Token);
+        var anaAfter = after.Latest("ana-2")!;
+        var boAfter  = after.Latest("bo-2")!;
+
+        static List<string> Hand(TableView v, string seat)
+            => v.State.Zones.Single(z => z.Id == $"hand:{seat}").Cards.Select(c => $"{c.Rank}/{c.Suit}/{c.Uid}").ToList();
+
+        Assert.Equal(Hand(anaBefore, "player0"), Hand(anaAfter, "player0"));
+        Assert.Equal(Hand(boBefore, "player1"), Hand(boAfter, "player1"));
+        Assert.Equal(anaBefore.State.PlayerIndex, anaAfter.State.PlayerIndex);
+        Assert.Equal(anaBefore.Seats.Select(s => s.Name), anaAfter.Seats.Select(s => s.Name));
+
+        // Each still reads the table in their own words: a line "about you" for Ana
+        // is not "about you" for Bo.
+        Assert.Equal(anaBefore.Status, anaAfter.Status);
+        Assert.Equal(boBefore.Status, boAfter.Status);
+
+        // A view from before is never mistaken for a newer one.
+        Assert.True(anaAfter.Version > anaBefore.Version);
+
+        // And play goes on.
+        await Task.Delay(50);
+        Assert.True(await SomeoneMoves(again, after, ("ana-2", ana), ("bo-2", bo)));
+    }
+
+    [Fact]
+    public async Task A_closed_table_leaves_nothing_behind()
+    {
+        var store = new MemoryStore();
+        var rooms = Host(new Recorder(), store);
+
+        var ana = await rooms.CreateAsync("ana", "hearts", 4, [], null, "Ana");
+        await rooms.SaveChangedAsync();
+        Assert.Single(store.Rooms);
+
+        await rooms.LeaveAsync(ana.Code, ana.Token);
+        Assert.Empty(store.Rooms);
+    }
+
     [Fact]
     public async Task A_refusal_comes_back_in_words_the_host_can_show()
     {

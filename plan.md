@@ -123,12 +123,9 @@ heuristics, and conservative poker betting; everything else falls through to ran
       seat count and house rules it was written at, listed for resuming on the setup
       screen. Replaces one-slot-per-game, which let a four-player save load into a
       two-player game and strand cards in hands nobody could reach
-- [ ] **Backlog: save and resume multiplayer games** — now unblocked. Seats have stable identity
-      (a token per seat) and reconnect works, and the server holds the only copy of a
-      game, so "which save is authoritative" has one answer. What remains: the server
-      writing rooms to disk (the save shape plus the roster and tokens) so a restart
-      does not end every game, and a way for the host to reopen one later with the same
-      people.
+- [ ] **Backlog: save and resume multiplayer games** — rooms are written to disk and
+      survive a restart (below). What remains: a way for the host to reopen a closed or
+      finished table later with the same people.
 - [x] Hand sort remembered per game — the web client stores the player's choice under
       `sort:{gameId}` and reapplies it each deal; "Free" is remembered too, so a
       hand arranged by hand is not re-sorted underneath the player
@@ -323,8 +320,13 @@ See `docs/shared-tables.md`.
       the app is in the foreground and asks for local-network permission). The host's own
       player talks to `RoomService` in process. The old peer-hosted
       `GameServer`/`GameClient` over `TcpTransport` should then be retired.
-- [ ] **Backlog: shared games survive a restart** — see "Save and resume multiplayer
-      games" under Customization.
+- [x] **Shared games survive a restart** — each room (seats, tokens, votes, the game,
+      and how each seat reads the lines on show) is written to an `IRoomStore` within a
+      second of changing and on shutdown, and read back before the server takes
+      connections; people rejoin by the token they hold. `FileRoomStore` in
+      `Cards.Hosting`, so a phone host can keep its tables too. On the home server,
+      systemd's `StateDirectory=cards` gives it `/var/lib/cards` — the unit file must be
+      copied once more (deploy/README.md). The web client retries for five minutes.
 - [ ] **Backlog: small-screen layouts** — a definition may give its zones a second
       layout for a phone, the way it gives one for the table today: a place or region
       per zone, used when the screen is small (narrow, or held upright). A phone is tall

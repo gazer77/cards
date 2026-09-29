@@ -40,6 +40,18 @@ builder.Services.AddSingleton<GameLoader>();
 // this project only carries them over SignalR.
 builder.Services.AddSingleton<ITableClients, SignalRTableClients>();
 builder.Services.AddSingleton<RoomService>();
+
+// Rooms kept on disk, so a restart — every deploy is one — does not end every game.
+// Tables:RoomDirectory names the folder; under systemd, StateDirectory= gives one
+// ($STATE_DIRECTORY) that is used when nothing is configured. Neither: rooms live only
+// as long as the process.
+var roomDirectory = builder.Configuration["Tables:RoomDirectory"] is { Length: > 0 } configured
+    ? Path.GetFullPath(configured, builder.Environment.ContentRootPath)
+    : Environment.GetEnvironmentVariable("STATE_DIRECTORY") is { Length: > 0 } state
+        ? Path.Combine(state.Split(':')[0], "rooms")
+        : null;
+if (roomDirectory is not null)
+    builder.Services.AddSingleton<IRoomStore>(new FileRoomStore(roomDirectory));
 builder.Services.AddHostedService<RoomHousekeeping>();
 
 var app = builder.Build();
@@ -60,6 +72,13 @@ app.MapGet("/health", () => "ok");
 
 if (serveWebClient) app.MapFallbackToFile("index.html");
 else                app.MapGet("/", () => "Cards table server. The hub is at " + TableHubContract.Path + ".");
+
+// Before the first connection: a device rejoining a room not yet restored would be told
+// its table had closed, and forget it.
+await app.Services.GetRequiredService<RoomService>().RestoreAsync();
+app.Logger.LogInformation(roomDirectory is null
+    ? "Rooms are not kept across restarts (no Tables:RoomDirectory)"
+    : $"Rooms are kept in {roomDirectory}");
 
 app.Run();
 

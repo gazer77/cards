@@ -68,6 +68,9 @@ public sealed class Room
 
     public DateTime LastActivity { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Changed since it was last written to the host's store.</summary>
+    public bool Dirty { get; set; } = true;
+
     public SemaphoreSlim Lock { get; } = new(1, 1);
 
     /// <summary>

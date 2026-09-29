@@ -17,7 +17,8 @@ namespace Cards.Hosting;
 /// its own <see cref="TableView"/>. No client ever holds another's cards, and no two
 /// copies of a game exist to disagree.
 /// </summary>
-public sealed class RoomService(ITableClients clients, GameLoader loader, ILogger<RoomService> log)
+public sealed class RoomService(
+    ITableClients clients, GameLoader loader, ILogger<RoomService> log, IRoomStore? store = null)
 {
     private readonly ConcurrentDictionary<string, Room> _rooms = new(StringComparer.OrdinalIgnoreCase);
 
@@ -110,6 +111,7 @@ public sealed class RoomService(ITableClients clients, GameLoader loader, ILogge
             seat.ConnectionId   = connectionId;
             seat.DisconnectedAt = null;
             room.LastActivity   = DateTime.UtcNow;
+            room.Dirty          = true;
 
             // Back: a question about them is moot, and a stand-in hands the seat over.
             if (room.Vote?.SeatId == seat.Id) room.Vote = null;
@@ -125,6 +127,7 @@ public sealed class RoomService(ITableClients clients, GameLoader loader, ILogge
         await clients.JoinRoomAsync(connectionId, room.Code);
         await SendRoomAsync(room);
         await SendViewsAsync(room);
+        _ = RunTableAsync(room);   // a table stopped mid-way through its own turns, by a restart, carries on
         return new SeatTicket { Code = room.Code, SeatId = seat.Id, Token = token };
     }
 
@@ -157,11 +160,12 @@ public sealed class RoomService(ITableClients clients, GameLoader loader, ILogge
                 seat.Token = null; seat.ConnectionId = null; seat.IsComputer = true; seat.StandIn = false;
                 room.State.PlayerAgents[seat.Id] = new SmartDefaultAiAgent(seat.Id, room.State.Rng);
             }
+            room.Dirty = true;
 
             // Nobody left: close the table.
             if (room.Seats.All(s => !s.IsTaken))
             {
-                _rooms.TryRemove(room.Code, out _);
+                await CloseAsync(room.Code);
                 return;
             }
         }
@@ -241,6 +245,7 @@ public sealed class RoomService(ITableClients clients, GameLoader loader, ILogge
             room.State = state;
             room.Logic = logic;
             room.LastActivity = DateTime.UtcNow;
+            room.Dirty = true;
         }
         finally { room.Lock.Release(); }
 
@@ -279,6 +284,7 @@ public sealed class RoomService(ITableClients clients, GameLoader loader, ILogge
             RecordStatus(room, state, logic);
             room.Version++;
             room.LastActivity = DateTime.UtcNow;
+            room.Dirty = true;
         }
         finally { room.Lock.Release(); }
 
@@ -351,6 +357,7 @@ public sealed class RoomService(ITableClients clients, GameLoader loader, ILogge
                 state.PlayerAgents[away.Id] = new SmartDefaultAiAgent(away.Id, state.Rng);
                 room.Vote = null;
                 room.Version++;
+                room.Dirty = true;
             }
             else if (vote.Defeated)
             {
@@ -417,6 +424,7 @@ public sealed class RoomService(ITableClients clients, GameLoader loader, ILogge
                         logic.Apply(state, logic.GetAutoAction(state));
                         RecordStatus(room, state, logic);
                         room.Version++;
+                        room.Dirty = true;
                     }
                 }
                 finally { room.Lock.Release(); }
@@ -520,10 +528,213 @@ public sealed class RoomService(ITableClients clients, GameLoader loader, ILogge
         seat.ConnectionId = connectionId;
         seat.IsComputer   = false;
         room.LastActivity = DateTime.UtcNow;
+        room.Dirty = true;
 
         // A new ballot starts from the game's own defaults.
         room.Ballots[seat.Id] = room.Offered.Where(r => r.Default).Select(r => r.Id).ToHashSet();
         return new SeatTicket { Code = room.Code, SeatId = seat.Id, Token = seat.Token };
+    }
+
+    // ── Keeping rooms across a restart ────────────────────────────────────────
+
+    private static readonly System.Text.Json.JsonSerializerOptions StoreJson = new() { WriteIndented = false };
+
+    /// <summary>
+    /// Views sent before a restart outnumber the ones the store last saw by however many
+    /// went out in the second after it. A client drops a view older than one it has, so
+    /// a restored room starts its count well past anything it could have sent.
+    /// </summary>
+    private const long ViewSequenceMargin = 100_000;
+
+    /// <summary>Writes every room that has changed since it was last written.</summary>
+    public async Task SaveChangedAsync()
+    {
+        if (store is null) return;
+
+        foreach (var room in _rooms.Values.Where(r => r.Dirty))
+        {
+            string json;
+            await room.Lock.WaitAsync();
+            try
+            {
+                json = System.Text.Json.JsonSerializer.Serialize(Snapshot(room), StoreJson);
+                room.Dirty = false;
+            }
+            finally { room.Lock.Release(); }
+
+            try { await store.SaveAsync(room.Code, json); }
+            catch (Exception ex)
+            {
+                room.Dirty = true;   // try again next time round
+                log.LogError(ex, "Room {Code} could not be saved", room.Code);
+            }
+        }
+    }
+
+    private async Task CloseAsync(string code)
+    {
+        _rooms.TryRemove(code, out _);
+        if (store is null) return;
+        try { await store.DeleteAsync(code); }
+        catch (Exception ex) { log.LogError(ex, "Room {Code} closed but its save could not be removed", code); }
+    }
+
+    /// <summary>
+    /// Opens again every room the store holds, as it was: the same code, the same seats
+    /// and tokens, the same game. Nobody is connected — each person comes back by the
+    /// token their device kept, exactly as after a dropped connection. Run it before the
+    /// host takes connections, or a device that asks first is told its table has closed
+    /// and forgets it. Returns how many rooms came back.
+    /// </summary>
+    public async Task<int> RestoreAsync()
+    {
+        if (store is null) return 0;
+
+        int restored = 0;
+        foreach (var (code, json) in await store.LoadAllAsync())
+        {
+            try
+            {
+                var saved = System.Text.Json.JsonSerializer.Deserialize<SavedRoom>(json, StoreJson)
+                    ?? throw new InvalidDataException("empty");
+
+                if (DateTime.UtcNow - saved.LastActivity > IdleLimit)
+                {
+                    await store.DeleteAsync(code);
+                    continue;
+                }
+
+                var room = await RebuildAsync(saved);
+                if (room is null)
+                {
+                    log.LogWarning("Room {Code} is for {Game}, which this host no longer has", code, saved.GameId);
+                    continue;
+                }
+
+                room.Dirty = false;
+                _rooms[room.Code] = room;
+                restored++;
+            }
+            catch (Exception ex)
+            {
+                log.LogError(ex, "Room {Code} could not be restored", code);
+            }
+        }
+
+        // A table that was playing its own turns when the host stopped carries on.
+        foreach (var room in _rooms.Values.Where(r => r.State is not null))
+            _ = RunTableAsync(room);
+
+        if (restored > 0) log.LogInformation("Restored {Count} room(s)", restored);
+        return restored;
+    }
+
+    private static SavedRoom Snapshot(Room room)
+    {
+        var saved = new SavedRoom
+        {
+            Code               = room.Code,
+            GameId             = room.Definition.Id,
+            Configuration      = room.Configuration,
+            PlayerCount        = room.PlayerCount,
+            Rules              = [.. room.Rules],
+            Ballots            = room.Ballots.ToDictionary(b => b.Key, b => b.Value.ToList()),
+            Forced             = new(room.Forced),
+            DropTimeoutSeconds = (int)room.DropTimeout.TotalSeconds,
+            Seats              = room.Seats.Select(s => new SavedSeat
+            {
+                Id = s.Id, Name = s.Name, Token = s.Token, IsComputer = s.IsComputer, StandIn = s.StandIn,
+            }).ToList(),
+            LastActivity = room.LastActivity,
+            Version      = room.Version,
+            ViewSequence = room.ViewSequence,
+            LastStatus   = room.LastStatus,
+        };
+
+        if (room.State is { } state)
+        {
+            saved.Game        = GameStateSerializer.Snapshot(state, room.PlayerCount, room.Rules);
+            saved.PlayerNames = state.Players.Select(p => p.Name).ToList();
+
+            // Only the lines still on show: the log, and what the metadata holds (the
+            // status among it). Everything else was said and has gone.
+            var shown = state.GameLog.Concat(state.Metadata.Values).ToHashSet();
+            foreach (var line in shown)
+            {
+                if (state.TextVariants.TryGetValue(line, out var v))
+                    saved.Wordings[line] = new SavedWording { Neutral = v.Neutral, ByViewer = new(v.ByViewer) };
+                if (state.TextSubjects.TryGetValue(line, out var about))
+                    saved.Subjects[line] = about;
+            }
+        }
+
+        return saved;
+    }
+
+    private async Task<Room?> RebuildAsync(SavedRoom saved)
+    {
+        var definition = await loader.LoadAsync(saved.GameId);
+        if (definition is null) return null;
+
+        var room = new Room
+        {
+            Code          = saved.Code,
+            Definition    = definition,
+            Configuration = saved.Configuration,
+            PlayerCount   = saved.PlayerCount,
+            Rules         = saved.Rules,
+            Offered       = GameConfiguration.Resolve(definition, saved.PlayerCount, saved.Configuration).HouseRules,
+            Seats         = saved.Seats.Select(s => new RoomSeat
+            {
+                Id = s.Id, Name = s.Name, Token = s.Token, IsComputer = s.IsComputer, StandIn = s.StandIn,
+                // Away since the host came back: the drop timeout runs from now.
+                DisconnectedAt = s.Token is not null && !s.IsComputer ? DateTime.UtcNow : null,
+            }).ToList(),
+            DropTimeout   = TimeSpan.FromSeconds(saved.DropTimeoutSeconds),
+            LastActivity  = saved.LastActivity,
+            Version       = saved.Version,
+            ViewSequence  = saved.ViewSequence + ViewSequenceMargin,
+            LastStatus    = saved.LastStatus,
+        };
+        foreach (var (seat, ballot) in saved.Ballots) room.Ballots[seat] = [.. ballot];
+        foreach (var (rule, forced) in saved.Forced) room.Forced[rule] = forced;
+
+        if (saved.Game is { } game)
+        {
+            var state = new GameState
+            {
+                GameId            = definition.Id,
+                Definition        = definition,
+                ConfigurationName = saved.Configuration,
+                Rng               = new SeededRandomSource((ulong)RandomNumberGenerator.GetInt32(int.MaxValue) << 16
+                                                           ^ (ulong)RandomNumberGenerator.GetInt32(int.MaxValue)),
+                // Everyone keeps the name they had, the computer's seats included.
+                SeatNames = saved.PlayerNames.Take(saved.PlayerCount).Select(n => (string?)n).ToList(),
+            };
+            var logic = LogicRegistry.Create(definition);
+            GameStateSerializer.Restore(state, logic, game, saved.PlayerCount, saved.Rules);
+
+            foreach (var (line, wording) in saved.Wordings)
+            {
+                var variant = new TextVariant { Neutral = wording.Neutral };
+                foreach (var (viewer, text) in wording.ByViewer) variant.ByViewer[viewer] = text;
+                state.TextVariants[line] = variant;
+            }
+            foreach (var (line, about) in saved.Subjects) state.TextSubjects[line] = about;
+
+            foreach (var seat in room.Seats)
+            {
+                if (seat.IsComputer)
+                    state.PlayerAgents[seat.Id] = new SmartDefaultAiAgent(seat.Id, state.Rng);
+                else
+                    state.PlayerAgents.Remove(seat.Id);
+            }
+
+            room.State = state;
+            room.Logic = logic;
+        }
+
+        return room;
     }
 
     // ── House rules ───────────────────────────────────────────────────────────
@@ -543,6 +754,7 @@ public sealed class RoomService(ITableClients clients, GameLoader loader, ILogge
             var ballot = room.Ballots.TryGetValue(seat.Id, out var b) ? b : room.Ballots[seat.Id] = [];
             if (yes) ballot.Add(ruleId); else ballot.Remove(ruleId);
             room.LastActivity = DateTime.UtcNow;
+            room.Dirty = true;
         }
         finally { room.Lock.Release(); }
 
@@ -567,6 +779,7 @@ public sealed class RoomService(ITableClients clients, GameLoader loader, ILogge
 
             if (forced is { } f) room.Forced[ruleId] = f;
             else                 room.Forced.Remove(ruleId);
+            room.Dirty = true;
         }
         finally { room.Lock.Release(); }
 
@@ -584,17 +797,25 @@ public sealed class RoomService(ITableClients clients, GameLoader loader, ILogge
         while (!stoppingToken.IsCancellationRequested)
         {
             try { await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken); }
-            catch (OperationCanceledException) { return; }
+            catch (OperationCanceledException)
+            {
+                // Shutting down: whatever changed in the last second goes to the store
+                // too, so a restart picks up exactly where the table was.
+                await SaveChangedAsync();
+                return;
+            }
 
             try { await CheckDropsAsync(DateTime.UtcNow); }
             catch (Exception ex) { log.LogError(ex, "Checking for dropped players failed"); }
+
+            await SaveChangedAsync();
 
             if (DateTime.UtcNow - lastSweep < TimeSpan.FromMinutes(10)) continue;
             lastSweep = DateTime.UtcNow;
 
             foreach (var (code, room) in _rooms)
                 if (DateTime.UtcNow - room.LastActivity > IdleLimit)
-                    _rooms.TryRemove(code, out _);
+                    await CloseAsync(code);
         }
     }
 }

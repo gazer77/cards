@@ -10,6 +10,9 @@ WorkingDirectory=/srv/cards/current
 ExecStart=/srv/cards/current/Cards.Server --urls http://127.0.0.1:5280
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=DOTNET_ROOT=/usr/share/dotnet
+# /var/lib/cards, owned by the service user: where rooms are kept across restarts
+# (the server reads $STATE_DIRECTORY). Outside the release folders, so a deploy keeps them.
+StateDirectory=cards
 Restart=always
 RestartSec=5
 
