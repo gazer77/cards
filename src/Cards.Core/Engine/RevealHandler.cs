@@ -224,7 +224,8 @@ public sealed class RevealHandler : IPhaseHandler
         state.AdvancePlayer();
         state.Metadata["reveal_done"] = "0";
         state.Metadata.Remove("selected_card");
-        if (state.CurrentPlayerIndex == 0)
+        // Round the table once, back to the seat that started: it goes first in play too.
+        if (state.CurrentPlayerIndex == StartSeat(state))
         {
             state.Metadata.Remove("reveal_done");
             state.CurrentPhaseId = _nextPhaseId;
@@ -240,9 +241,20 @@ public sealed class RevealHandler : IPhaseHandler
     private void Ensure(GameState state)
     {
         if (state.Metadata.ContainsKey("reveal_done")) return;
-        state.CurrentPlayerIndex = 0;
+        state.CurrentPlayerIndex = StartSeat(state);
         state.Metadata["reveal_done"] = "0";
         UpdateStatus(state);
+    }
+
+    /// <summary>
+    /// The seat to the dealer's left, who reveals first and so plays first — seat 0 when
+    /// nobody has dealt. It was always seat 0, so the same player went first every round
+    /// however the deal rotated.
+    /// </summary>
+    private static int StartSeat(GameState state)
+    {
+        int dealer = state.DealerId is { } id ? state.Players.FindIndex(p => p.Id == id) : -1;
+        return dealer < 0 ? 0 : (dealer + 1) % state.Players.Count;
     }
 
     private static int Done(GameState state)

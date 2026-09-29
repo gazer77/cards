@@ -678,6 +678,14 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             return;
         }
 
+        // Discarding the last card, with the foot played and the side able to go out, is
+        // going out. It used to leave an empty hand and carry on to the next turn.
+        if (_goOutRequires is not null && hand.IsEmpty && GoOutConditionMet(state))
+        {
+            GoOut(state);
+            return;
+        }
+
         state.Metadata.Remove("dd_turn_state");
 
         AdvanceTurn(state);
@@ -1001,15 +1009,15 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             return null;
         }
 
-        // Laying every card with the foot already up leaves nothing to discard, and that
-        // is allowed only as the way out. Without this a player could meld their last
-        // card short of the books going out needs and sit at a turn with no move — no
-        // card to discard, no Go Out — and the table stopped.
-        if (selectedCards.Count == hand.Count && !FootWaiting(state)
+        // With the foot already up, a lay must leave two cards — one to discard and one to
+        // hold — unless it is the way out. Discarding the last card is going out, so a
+        // lay leaving one card left nothing to do but discard it and go out without the
+        // books; laying every card left no move at all, and the table stopped.
+        if (hand.Count - selectedCards.Count < 2 && !FootWaiting(state)
             && !WouldMeetGoOut(state, meldZone, melds, addTarget, wilds))
         {
             reason = GameText.Message(state, "keep_a_discard",
-                "Keep a card to discard — {player} cannot go out yet.",
+                "{player} can't go out yet — keep two cards: one to discard and one to hold.",
                 forPlayerId: state.CurrentPlayer.Id);
             return null;
         }

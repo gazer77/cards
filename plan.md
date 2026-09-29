@@ -323,6 +323,15 @@ See `docs/shared-tables.md`.
       `GameServer`/`GameClient` over `TcpTransport` should then be retired.
 - [ ] **Backlog: shared games survive a restart** — see "Save and resume multiplayer
       games" under Customization.
+- [ ] **Backlog: deal for the first dealer** — choose the first dealer the way a table
+      does: deal cards face up round the table until one turns up the card the game
+      names. Poker commonly deals to the first ace (or the first black ace); Euchre to
+      the first jack (often the first black jack). Declared in the definition — say
+      `rounds.first_dealer: { "deal_until": { "rank": "J", "color": "black" } }` — beside
+      today's `random` and `high_card`, using the card matches definitions already use.
+      The deal should be shown (cards flying out one seat at a time until the one that
+      decides it), logged ("Ana deals — first black jack"), and then gathered back before
+      the real shuffle.
 - [ ] **Backlog: bot names** — computer seats are "Bot 1", "Bot 2"… today. A list of names
       to draw from instead, bot-flavoured where it is fun ("Botticelli", "Robo Rita",
       "Chip", "Deal-E", "Ace-9000") and plain elsewhere, never repeating at one table and

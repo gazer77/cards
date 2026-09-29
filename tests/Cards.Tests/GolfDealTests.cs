@@ -25,11 +25,13 @@ public sealed class GolfDealTests
             Assert.Equal(0, state.Zones[$"grid:{p.Id}"].Cards.Count(c => c.IsFaceUp));
         Assert.Equal("peek", state.CurrentPhaseId);
 
-        // Each seat turns the two it picks — here the LAST two, which the deal's old
-        // "first two" could never have produced.
-        for (int seat = 0; seat < seats; seat++)
+        // Round the table from the dealer's left, each seat turning the two it picks — here
+        // the LAST two, which the deal's old "first two" could never have produced.
+        int dealer = state.Players.FindIndex(p => p.Id == state.DealerId);
+        int start  = (dealer + 1) % seats;
+        for (int k = 0; k < seats; k++)
         {
-            Assert.Equal(seat, state.CurrentPlayerIndex);
+            Assert.Equal((start + k) % seats, state.CurrentPlayerIndex);
             var grid = state.Zones[$"grid:{state.CurrentPlayer.Id}"];
             foreach (var pick in new[] { grid.Cards[5], grid.Cards[4] })
                 logic.Apply(state, new GameAction("select_card", CardId: pick.Id, CardUid: pick.Uid));
@@ -47,8 +49,9 @@ public sealed class GolfDealTests
             Assert.True(grid.Cards[4].IsFaceUp && grid.Cards[5].IsFaceUp);
         }
 
+        // The dealer's left, who peeked first, plays first.
         Assert.Equal("play", state.CurrentPhaseId);
-        Assert.Equal(0, state.CurrentPlayerIndex);
+        Assert.Equal(start, state.CurrentPlayerIndex);
 
         // And the seat count is the seat count.
         Assert.Equal(seats, state.Players.Count);
@@ -236,6 +239,7 @@ public sealed class DefaultCardActionTests
         // Golf's peek: the double tap turns the card, which is what Flip would have
         // done for the same card a moment later.
         var (state, logic) = Game("golf", 2);
+        state.PlayerAgents.Remove(state.CurrentPlayer.Id);   // the dealer's left peeks first; a person here
         var grid = state.Zones[$"grid:{state.CurrentPlayer.Id}"];
 
         var shortcut = logic.GetDefaultCardAction(state, grid.Cards[2].Id, grid.Cards[2].Uid);
@@ -321,6 +325,8 @@ public sealed class RevealDistinctTests
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(9) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 2, []);
+        // Whoever peeks first — the dealer's left — is a person here, asked before turning.
+        state.PlayerAgents.Remove(state.CurrentPlayer.Id);
         return (state, logic, state.Zones[$"grid:{state.CurrentPlayer.Id}"]);
     }
 

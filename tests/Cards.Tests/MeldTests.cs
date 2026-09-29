@@ -81,8 +81,10 @@ public sealed class MeldTests
             added.Add(card);
         }
 
-        // And a card kept back to discard. The feet are cleared, so without one every lay
-        // would be the last card, which is allowed only as the way out.
+        // And two cards kept back, one to discard and one to hold. The feet are cleared,
+        // so without them every lay would leave the hand short, which is allowed only as
+        // the way out.
+        hand.Add(new Card(Suit.Diamonds, Rank.Jack, isFaceUp: true) { Uid = _nextUid++ });
         hand.Add(new Card(Suit.Diamonds, Rank.Jack, isFaceUp: true) { Uid = _nextUid++ });
         return added;
     }
@@ -146,7 +148,7 @@ public sealed class MeldTests
 
         Assert.Equal(0, MeldsLaid(state));
         Assert.Equal(3, Melds(state).Count);   // only the opening meld
-        Assert.Equal(4, Hand(state).Count);   // and the cards stay in hand
+        Assert.Equal(5, Hand(state).Count);   // and the cards stay in hand
     }
 
     [Fact]
@@ -260,7 +262,7 @@ public sealed class MeldTests
             (Rank.Queen, Suit.Clubs), (Rank.Queen, Suit.Hearts), (Rank.Queen, Suit.Spades)));
 
         Assert.Equal(2, MeldsLaid(state));
-        Assert.Equal(1, Hand(state).Count);
+        Assert.Equal(2, Hand(state).Count);
     }
 
     [Fact]
@@ -307,7 +309,7 @@ public sealed class MeldTests
 
         // Nothing moves: half a lay reaching the table would strand the queens.
         Assert.Equal(0, MeldsLaid(state));
-        Assert.Equal(6, Hand(state).Count);
+        Assert.Equal(7, Hand(state).Count);
     }
 
     [Fact]
@@ -339,7 +341,7 @@ public sealed class MeldTests
         Lay(state, logic, cards);
 
         Assert.Equal(0, MeldsLaid(state));
-        Assert.Equal(4, Hand(state).Count);
+        Assert.Equal(5, Hand(state).Count);
     }
 
     [Fact]
@@ -354,7 +356,7 @@ public sealed class MeldTests
 
         Assert.Equal(1, MeldGroups(state));
         Assert.Equal(4, Melds(state).GroupCards(0).Count);
-        Assert.Single(Hand(state).Cards);
+        Assert.Equal(2, Hand(state).Count);
     }
 
     /// <summary>
@@ -376,7 +378,7 @@ public sealed class MeldTests
         }
 
         Assert.Equal(6, Melds(state).GroupCards(0).Count);   // 3 aces + 3 wilds, not 7
-        Assert.Equal(2, Hand(state).Count);                    // the refused wild stays put, beside the spare
+        Assert.Equal(3, Hand(state).Count);                    // the refused wild stays put, beside the spares
     }
 
     [Fact]
@@ -391,7 +393,7 @@ public sealed class MeldTests
 
         // The old path quietly created a one-card "meld".
         Assert.Equal(1, MeldGroups(state));
-        Assert.Equal(2, Hand(state).Count);
+        Assert.Equal(3, Hand(state).Count);
     }
 
     /// <summary>

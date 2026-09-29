@@ -47,7 +47,7 @@ public abstract class GameLogicBase : IGameLogic
     /// before any question is asked about it — in particular before a client asks whose
     /// turn it is, which is the first thing it asks.
     /// </summary>
-    private void EnterPhaseIfNeeded(GameState state)
+    protected void EnterPhaseIfNeeded(GameState state)
     {
         if (state.EnteredPhase == state.CurrentPhaseId) return;
         state.EnteredPhase = state.CurrentPhaseId;

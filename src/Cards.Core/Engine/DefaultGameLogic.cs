@@ -63,6 +63,10 @@ public sealed class DefaultGameLogic : GameLogicBase
         // Only set a default status if the first phase handler didn't already set one.
         if (!state.Metadata.ContainsKey("status"))
             state.Metadata["status"] = GameText.Message(state, "game_started", "Game started!");
+
+        // Settle the first phase now, so the dealt table already says whose turn it is —
+        // not only once something asks. Golf's peek starts left of the dealer.
+        EnterPhaseIfNeeded(state);
     }
 
     // ── Phase registration ────────────────────────────────────────────────────

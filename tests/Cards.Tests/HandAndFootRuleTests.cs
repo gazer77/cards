@@ -189,9 +189,9 @@ public sealed class HandAndFootRuleTests
 
         // The side is open now, so a small meld is fine.
         hand.Clear();
-        // (A card is kept back: the foot is up, and the last card is the discard.)
+        // (Two cards kept back: the foot is up, so a lay leaves one to discard and one to hold.)
         var fours = Give(hand, (Rank.Four, Suit.Clubs), (Rank.Four, Suit.Hearts), (Rank.Four, Suit.Spades),
-                               (Rank.Nine, Suit.Clubs));
+                               (Rank.Nine, Suit.Clubs), (Rank.Ten, Suit.Clubs));
         Lay(state, logic, fours.Take(3));
 
         Assert.Equal(2, Melds(state).Groups.Count);
@@ -344,11 +344,12 @@ public sealed class HandAndFootRuleTests
     }
 
     /// <summary>
-    /// With the foot already up, melding the last card leaves nothing to discard. Short
-    /// of the books going out needs, that was a turn with no move at all.
+    /// With the foot already up, a lay must leave two cards — one to discard, one to hold —
+    /// short of the books going out needs. Laying the last card left no move at all; laying
+    /// down to one left only discarding it, which went out without the books.
     /// </summary>
     [Fact]
-    public void The_last_card_cannot_be_melded_unless_it_goes_out()
+    public void A_lay_must_leave_two_cards_unless_it_goes_out()
     {
         var (state, logic) = Table();
         logic.Apply(state, new GameAction("draw_from_deck"));
@@ -365,8 +366,13 @@ public sealed class HandAndFootRuleTests
         Assert.DoesNotContain(logic.GetValidActions(state), a => a.Type == "add_to_meld");
         Assert.Contains("discard", state.Metadata.GetValueOrDefault("status", ""));
 
-        // With a card left over it is an ordinary addition.
+        // One card left over is still refused: it could only be discarded, and
+        // discarding the last card is going out.
         Give(hand, (Rank.Five, Suit.Clubs));
+        Assert.DoesNotContain(logic.GetValidActions(state), a => a.Type == "add_to_meld");
+
+        // Two left over — one to discard, one to hold — and it is an ordinary addition.
+        Give(hand, (Rank.Six, Suit.Clubs));
         Assert.Contains(logic.GetValidActions(state), a => a.Type == "add_to_meld");
     }
 

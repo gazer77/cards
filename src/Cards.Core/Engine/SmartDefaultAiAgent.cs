@@ -183,8 +183,11 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
             .ToList();
         Rank RankOf(IReadOnlyList<Card> g) => MeldRules.MeldRankOf(g, wilds);
 
-        // A lay may empty the hand only when the foot is waiting to come up.
-        bool Keeps(int laying) => laying < hand.Count || footLeft;
+        // The table's rule: with the foot played, a lay leaves two cards — one to discard,
+        // one to hold — unless the side can already go out, when anything may go down.
+        // Before the foot, a lay may empty the hand, which picks the foot up.
+        bool canGoOut = SideCanGoOut(state);
+        bool Keeps(int laying) => footLeft || canGoOut || hand.Count - laying >= 2;
 
         if (opened)
         {
@@ -257,6 +260,18 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         }
 
         return lay.Count > 0 && MeldRules.PartitionIntoMelds(lay, wilds) is not null ? lay : null;
+    }
+
+    /// <summary>
+    /// Whether this seat's side meets the game's own condition for going out
+    /// (<c>go_out_condition</c> — Hand and Foot's two books), read from the definition.
+    /// </summary>
+    private static bool SideCanGoOut(GameState state)
+    {
+        var phase = state.Definition?.Phases.FirstOrDefault(p => p.Id == state.CurrentPhaseId);
+        return phase?.Extra?.TryGetValue("go_out_condition", out var condition) == true
+            && condition.ValueKind == System.Text.Json.JsonValueKind.Object
+            && RuleCondition.Evaluate(condition, state);
     }
 
     /// <summary>

@@ -696,11 +696,13 @@ hold — Hand and Foot asks for one natural book and one wild book. Being out of
 and foot both) is required underneath either form; a definition cannot let a player go out
 holding cards.
 
-With a `go_out_condition` set, a lay (meld or add) that would take the last card of the hand
-while the foot is already up is refused unless, with it down, the side meets that
-condition — otherwise the player is left with nothing to discard and no way out. The
-check is made on the melds as they would stand after the lay, so the card that finishes
-the last book needed may go.
+With a `go_out_condition` set, and the foot already up, a lay (meld or add) must leave the
+player two cards — one to discard and one to hold — unless, with it down, the side meets
+that condition. Discarding the last card is going out, so a lay leaving one card would
+let a player go out without the books, and a lay leaving none would leave no move at
+all. The check is made on the melds as they would stand after the lay, so the card that
+finishes the last book needed may go. And discarding the last card when the side does
+meet the condition goes out: the round ends.
 
 `round_ends_when`: also accepts `"stock_exhausted"` — the round ends when the draw pile
 runs out, which is how Hand and Foot and Gin Rummy end a round nobody goes out of. Without
@@ -770,7 +772,9 @@ filed there by `on_receive` does not count.
 
 ### `reveal`
 Each player in turn chooses cards of their own to turn face-up — Golf's two peeks before
-play. A rule about *choice*, so a phase rather than a side effect of the deal.
+play. A rule about *choice*, so a phase rather than a side effect of the deal. It goes
+round the table from the dealer's left, and that player takes the first turn of play, so
+who goes first moves round with the deal.
 ```json
 { "id": "peek", "type": "reveal", "zone": "grid", "count": 2, "confirm": true, "next": "play" }
 ```
