@@ -397,4 +397,29 @@ public sealed class HandAndFootRuleTests
         Assert.Empty(hand.Cards);
         Assert.Contains(logic.GetValidActions(state), a => a.Type == "go_out");
     }
+
+    /// <summary>
+    /// With the foot played and the books down, discarding the last card is going out —
+    /// the round ends. It used to leave an empty hand and carry on.
+    /// </summary>
+    [Fact]
+    public void Discarding_the_last_card_with_the_books_down_goes_out()
+    {
+        var (state, logic) = Table();
+        logic.Apply(state, new GameAction("draw_from_deck"));
+        var me = state.CurrentPlayer.Id;
+        state.Zones[$"foot:{me}"].Clear();
+
+        Melds(state).AddGroup(Book(Rank.King, wilds: 0, uidBase: 10300));
+        Melds(state).AddGroup(Book(Rank.Nine, wilds: 2, uidBase: 10320));
+        var hand = Hand(state);
+        hand.Clear();
+        var last = Give(hand, (Rank.Four, Suit.Clubs));
+
+        state.Metadata["selected_card"] = last[0].Uid.ToString();
+        logic.Apply(state, new GameAction("discard"));
+
+        Assert.Empty(hand.Cards);
+        Assert.Equal(me, state.Metadata.GetValueOrDefault("dd_go_out_player"));
+    }
 }
