@@ -781,7 +781,7 @@ public sealed class CardTableRenderer
         }
 
         // A by-rank zone is never "empty": its slots are the picture, melds or not.
-        if (layout.Zone.Definition?.GroupLayout == "by_rank")
+        if (ZoneSlots.IsSlotted(layout.Zone.Definition))
             DrawRankSlots(canvas, layout);
         else if (layout.Zone.Type == "pot")
         {
@@ -1225,7 +1225,7 @@ public sealed class CardTableRenderer
     {
         var zone = layout.Zone;
 
-        if (zone.Definition?.GroupLayout == "by_rank")
+        if (ZoneSlots.IsSlotted(zone.Definition))
         {
             DrawRankSlots(canvas, layout);
             return;

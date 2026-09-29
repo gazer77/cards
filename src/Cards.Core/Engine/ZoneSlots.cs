@@ -13,6 +13,14 @@ public static class ZoneSlots
     /// <summary>A resolved slot: what it holds and what it says while empty.</summary>
     public sealed record Slot(CardMatch Match, string? Label, PlaceDefinition? LabelPlace = null);
 
+    /// <summary>
+    /// Whether a zone lays its groups out in fixed slots — written out ("slots") or one of
+    /// each rank ("by_rank") — rather than flowing. Asked by everything that draws such a
+    /// zone: the renderer asked only after "by_rank" when "slots" was added, and Hand and
+    /// Foot's strip lost its slots, labels and all.
+    /// </summary>
+    public static bool IsSlotted(ZoneDefinition? def) => def?.GroupLayout is "by_rank" or "slots";
+
     /// <summary>The zone's slots in order, or empty for a zone that flows.</summary>
     public static IReadOnlyList<Slot> For(Zone zone, GameState state)
     {

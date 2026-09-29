@@ -30,6 +30,25 @@ public sealed class DeclaredLayoutTests
     private static ZoneLayout Layout(IReadOnlyList<ZoneLayout> layouts, string zoneId)
         => layouts.Single(l => l.Zone.Id == zoneId);
 
+    /// <summary>
+    /// A strip that writes its slots out ("slots") is drawn as slots, even before anyone
+    /// has melded. The renderer asked only after "by_rank", so when Hand and Foot moved to
+    /// writing its slots out, its meld strip was drawn as an empty space — no rank slots,
+    /// no labels — and melds landed in a plain row.
+    /// </summary>
+    [Fact]
+    public void A_written_out_slot_strip_is_drawn_as_slots()
+    {
+        var state   = HandAndFoot(2);
+        foreach (var z in state.Zones.Values.Where(z => z.Id.StartsWith("meld"))) z.Clear();
+        var layouts = ZoneLayoutEngine.Compute(state, Canvas);
+
+        var strip = Layout(layouts, "meld:player0");
+        Assert.Equal("slots", strip.Zone.Definition?.GroupLayout);
+        Assert.NotEqual(ZoneRenderHint.Empty, strip.Hint);
+        Assert.True(ZoneSlots.IsSlotted(strip.Zone.Definition));
+    }
+
     [Fact]
     public void Hand_and_foot_uses_the_declared_engine()
     {

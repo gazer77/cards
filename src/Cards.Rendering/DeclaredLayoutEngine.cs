@@ -450,7 +450,7 @@ public static class DeclaredLayoutEngine
         bool current = owner is not null && state.CurrentPlayer.Id == owner.Id;
 
         return new ZoneLayout(zone, bounds, cardW, cardH,
-            zone.IsEmpty && zone.Definition?.GroupLayout != "by_rank" ? ZoneRenderHint.Empty : HintFor(zone),
+            zone.IsEmpty && !ZoneSlots.IsSlotted(zone.Definition) ? ZoneRenderHint.Empty : HintFor(zone),
             FaceUp: faceUp,
             // Upright at every seat but a face-down pile. Hands used to be turned to face
             // their players — side seats sideways, the top seat upside down — which made
