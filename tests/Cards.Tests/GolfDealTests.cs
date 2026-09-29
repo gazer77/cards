@@ -15,7 +15,7 @@ public sealed class GolfDealTests
     public void Each_grid_is_dealt_face_down_and_each_player_turns_two_of_their_choosing(int seats)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "golf")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(4) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, seats, []);
@@ -70,7 +70,7 @@ public sealed class GolfTurnTests
     private static (GameState State, IGameLogic Logic, Zone Grid) InPlay()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "golf")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(4) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 2, []);
@@ -166,7 +166,7 @@ public sealed class GolfTurnTests
     public void A_double_tap_turns_a_peeked_card_there_and_then()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "golf")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(4) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 2, []);
@@ -215,7 +215,7 @@ public sealed class DefaultCardActionTests
     private static (GameState State, IGameLogic Logic) Game(string id, int seats)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync(id).GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, id)!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(5) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, seats, []);
@@ -260,7 +260,7 @@ public sealed class DoubleTapFallbackTests
     private static (GameState State, IGameLogic Logic) Golf()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "golf")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(6) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 2, []);
@@ -295,7 +295,7 @@ public sealed class DoubleTapFallbackTests
         // The selection channel is what the table draws a border around, so a pick that
         // lives anywhere else is a pick the player cannot see.
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "golf")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(6) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 2, []);
@@ -321,7 +321,7 @@ public sealed class RevealDistinctTests
     private static (GameState State, IGameLogic Logic, Zone Grid) Golf()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "golf")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(9) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 2, []);

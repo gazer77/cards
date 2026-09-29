@@ -19,7 +19,7 @@ public sealed class GoFishTests
     {
         var loader = new GameLoader(
             new FileSystemGameAssetSource(FileSystemGameAssetSource.FindRepoRoot()));
-        var definition = loader.LoadAsync("go-fish").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "go-fish")!;
 
         var state = new GameState
         {

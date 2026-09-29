@@ -14,7 +14,7 @@ public sealed class ScoreSheetTests
 {
     private sealed class NoDriver : IAnimationDriver
     {
-        public event Action? Tick;
+        public event Action? Tick { add { } remove { } }   // never ticks: these tests paint by hand
         public void RequestFrames() { }
         public void StopFrames() { }
     }

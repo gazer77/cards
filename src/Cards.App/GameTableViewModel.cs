@@ -62,6 +62,12 @@ public sealed class GameTableViewModel
     public double TurnPace { get; set; } = 1.0;
 
     /// <summary>
+    /// The name of the person at this screen, for seat 0 of a single-player table. Null
+    /// keeps the default, "Player 1".
+    /// </summary>
+    public string? PlayerName { get; set; }
+
+    /// <summary>
     /// Floor for an automatic turn's pause, so a step the engine considers instant is
     /// still visible when it changes the table.
     ///
@@ -344,10 +350,15 @@ public sealed class GameTableViewModel
                 _enabledRules = slot.EnabledRules;
                 SlotId        = resumeSlotId;
             }
+
+            // A game saved before the name was set, or under another one, is still yours.
+            if (restored && PlayerName is { Length: > 0 } mine && state.Players.Count > 0)
+                state.Players[0].Name = mine;
         }
 
         if (!restored)
         {
+            if (PlayerName is { Length: > 0 } me) state.SeatNames = [me];
             logic.Initialize(state, playerCount, _enabledRules);
             SlotId = null;   // a fresh game gets its own slot on first save
         }

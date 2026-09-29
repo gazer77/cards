@@ -27,7 +27,7 @@ public sealed class GoFishHouseRuleCensus
 
             for (ulong seed = 1; seed <= 120; seed++)
             {
-                var definition = loader.LoadAsync("go-fish").GetAwaiter().GetResult()!;
+                var definition = TestGames.Load(loader, "go-fish")!;
                 var state = new GameState
                 {
                     GameId = definition.Id, Definition = definition,

@@ -18,7 +18,7 @@ public sealed class TablePaintCostTests
 {
     private sealed class StubDriver : IAnimationDriver
     {
-        public event Action? Tick;
+        public event Action? Tick { add { } remove { } }   // never ticks: these tests paint by hand
         public void RequestFrames() { }
         public void StopFrames() { }
     }

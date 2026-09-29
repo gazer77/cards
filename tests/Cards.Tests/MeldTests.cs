@@ -25,7 +25,7 @@ public sealed class MeldTests
     {
         var loader = new GameLoader(
             new FileSystemGameAssetSource(FileSystemGameAssetSource.FindRepoRoot()));
-        var definition = loader.LoadAsync("hand-and-foot").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "hand-and-foot")!;
 
         var state = new GameState
         {

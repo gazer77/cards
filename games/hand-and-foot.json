@@ -15,7 +15,6 @@
     "arrangement": "alternating",
     "only_when_players": [4, 6]
   },
-  "dealer": "random",
   "rounds": {
     "repeat_until": "win_condition",
     "dealer": "rotates_left"

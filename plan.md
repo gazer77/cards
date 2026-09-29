@@ -393,12 +393,8 @@ See `docs/shared-tables.md`.
       `GameLoader.LoadWarnings`) now names every definition property nothing reads, and
       `DefinitionAuditTests` pins today's list so no new one can join it quietly. What
       is on that list and worth doing:
-      - `dealer: "random"` on ten games — a duplicate of `rounds.first_dealer`, which the
-        engine does read and which already defaults to random. These lines should be
-        deleted rather than implemented.
-      - `deal.order` and a bidding phase's `order` ("clockwise", "left_of_dealer") —
-        descriptive today; the deal and the bidding are both hard-wired to go clockwise
-        from the dealer's left.
+      - ~~`dealer: "random"` and the descriptive `order` lines~~ — deleted: they
+        duplicated `rounds.first_dealer` and described play the engine does by rule.
       - Hand and Foot's `locked_until` on the foot, Pinochle's `scoring.meld_table`,
         Euchre's bidding `prompt`.
       Each is either a rule to implement or a line to delete; leaving them stated and
@@ -429,10 +425,17 @@ See `docs/shared-tables.md`.
       sit on the table. Would also cover Cribbage-style peg boards drawn as cards later.
 - [x] **Score card: total, detail, folded, and a sheet on phones** — a tap switches
       totals and rounds; the fold mark folds it to a trophy badge, and a tap on the
-      badge opens it again. On a phone it is not drawn at all: the trophy in the top bar
-      opens the scores as a sheet in readable type. One reading of the scores
-      (`ScoreSheet`) feeds both. Every game with scores gets the phone sheet, by team
-      where there are teams, even without a `score_card` of its own.
+      badge opens it again; the fold is remembered from one game to the next. On a phone
+      it is not drawn at all: the trophy in the top bar opens the scores as a sheet in
+      readable type. One reading of the scores (`ScoreSheet`) feeds both. Every game with
+      scores gets the phone sheet, by team where there are teams, even without a
+      `score_card` of its own.
+- [x] **Your name at your own table** — seat 0 of a single-player game takes the name
+      saved in settings (the same one a shared table asks for), fresh or resumed; the
+      computer seats stay "Bot N".
+- [x] **Tidy build** — no compiler or analyzer warnings across the solution; the
+      cache timing test judges each side on its best of seven rounds, so a busy full run
+      no longer fails it.
 - [ ] **Collapsible table elements — detail and total** — the score card is done (above);
       anything else placed on the table that can grow (meld spreads, badges) should
       declare a collapsed and an expanded form, with a tap to switch. For scores that

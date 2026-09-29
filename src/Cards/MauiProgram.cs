@@ -14,7 +14,7 @@ public static class MauiProgram
     {
         var builder = MauiApp.CreateBuilder();
         builder
-            .UseMauiApp<App>()
+            .UseMauiApp<CardsApp>()
             .UseSkiaSharp()
             .ConfigureFonts(fonts =>
             {

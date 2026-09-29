@@ -15,7 +15,7 @@ public sealed class SharedTableTests
     private static (GameState State, IGameLogic Logic) Table(string gameId, int seats, ulong seed = 3)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync(gameId).GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, gameId)!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(seed) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, seats, []);
@@ -165,7 +165,7 @@ public sealed class SharedTableTests
         var view = View(state, logic, "player2");
 
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var rebuilt = TableProjection.ToState(view, loader.LoadAsync("hearts").GetAwaiter().GetResult()!);
+        var rebuilt = TableProjection.ToState(view, TestGames.Load(loader, "hearts")!);
 
         Assert.Equal("player2", rebuilt.Viewer);
         Assert.Equal("Cy", rebuilt.Players[2].Name);
@@ -268,7 +268,7 @@ public sealed class SharedTableTests
 
         // A shared table: people by name, the empty seats as bots.
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var def = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var def = TestGames.Load(loader, "golf")!;
         var shared = new GameState { GameId = def.Id, Definition = def, SeatNames = ["Ana", null, "Bo", null] };
         LogicRegistry.Create(def).Initialize(shared, 4, []);
         Assert.Equal(["Ana", "Bot 1", "Bo", "Bot 2"], shared.Players.Select(p => p.Name));

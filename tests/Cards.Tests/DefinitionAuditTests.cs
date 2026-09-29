@@ -23,23 +23,15 @@ public sealed class DefinitionAuditTests
     /// </summary>
     private static readonly Dictionary<string, string[]> KnownGaps = new()
     {
-        // A top-level "dealer": "random" — who deals first. The engine always starts
-        // the deal at seat 0 and rotates from there.
-        ["gin-rummy.json"]     = ["dealer"],
-        ["go-fish.json"]       = ["dealer"],
-        ["golf.json"]          = ["dealer"],
+        // (The top-level "dealer": "random" lines and the descriptive "order" lines of
+        // the deal and the bidding were deleted: rounds.first_dealer already says who
+        // deals, and play goes clockwise from the dealer's left by rule.)
+
         // locked_until: the foot opens when the hand empties, which the engine does by
         // rule rather than by reading this.
-        ["hand-and-foot.json"] = ["dealer", "scoring.meld_types", "zones[3].locked_until"],
-        ["hearts.json"]        = ["deal.order", "dealer"],
-        ["high-card.json"]     = ["deal.order"],
+        ["hand-and-foot.json"] = ["scoring.meld_types", "zones[3].locked_until"],
         // meld_table: pinochle's meld values are a table in the scoring engine.
-        ["pinochle.json"]      = ["deal.order", "dealer", "phases[0].order", "scoring.meld_table"],
-        ["spades.json"]        = ["deal.order", "dealer", "phases[0].order"],
-        // deal.order / phase order: "clockwise", "left_of_dealer". The deal and the
-        // bidding both go clockwise from the dealer's left already, so these describe
-        // what happens without being what decides it.
-        ["war.json"]           = ["deal.order"],
+        ["pinochle.json"]      = ["scoring.meld_table"],
     };
 
     public static TheoryData<string> Games
@@ -113,13 +105,13 @@ public sealed class DefinitionAuditTests
     public void A_loaded_game_carries_its_warnings_without_being_stopped_by_them()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        // Hearts still states a deal order that nothing reads.
-        var game   = loader.LoadAsync("hearts").GetAwaiter().GetResult();
+        // Pinochle still states a meld table that nothing reads.
+        var game   = TestGames.Load(loader, "pinochle");
 
         Assert.NotNull(game);                                   // a warning never blocks a game
-        Assert.True(loader.LoadWarnings.ContainsKey("hearts"));
-        Assert.Contains("deal.order", loader.LoadWarnings["hearts"]);
-        Assert.False(loader.LoadErrors.ContainsKey("hearts"));
+        Assert.True(loader.LoadWarnings.ContainsKey("pinochle"));
+        Assert.Contains("scoring.meld_table", loader.LoadWarnings["pinochle"]);
+        Assert.False(loader.LoadErrors.ContainsKey("pinochle"));
     }
 }
 

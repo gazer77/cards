@@ -73,7 +73,7 @@ public sealed class BubbleTests
     public void Instructions_belong_to_nobody()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("hand-and-foot").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "hand-and-foot")!;
         var state = new GameState { GameId = definition.Id, Definition = definition };
         LogicRegistry.Create(definition).Initialize(state, 2, []);
 

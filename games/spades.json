@@ -10,15 +10,13 @@
     "size": 2,
     "arrangement": "alternating"
   },
-  "dealer": "random",
   "rounds": {
     "repeat_until": "win_condition",
     "dealer": "rotates_left"
   },
   "deal": {
     "cards_per_player": 13,
-    "face": "owner",
-    "order": "clockwise"
+    "face": "owner"
   },
   "zones": [
     { "id": "deck",       "type": "deck",  "visibility": "none" },
@@ -33,7 +31,6 @@
       "id": "bid",
       "type": "bidding",
       "style": "number",
-      "order": "left_of_dealer",
       "min_bid": 0,
       "max_bid": 13,
       "pass_allowed": false,

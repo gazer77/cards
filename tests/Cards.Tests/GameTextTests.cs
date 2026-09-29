@@ -12,7 +12,7 @@ public sealed class GameTextTests
     private static (GameState State, IGameLogic Logic) HandAndFoot()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("hand-and-foot").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "hand-and-foot")!;
         var state = new GameState
         {
             GameId = definition.Id, Definition = definition,

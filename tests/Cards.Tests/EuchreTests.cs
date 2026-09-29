@@ -13,7 +13,7 @@ public sealed class EuchreTests
     private static (GameState State, IGameLogic Logic) Table(string id = "euchre", int seats = 4)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync(id).GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, id)!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(4) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, seats, []);
@@ -114,7 +114,7 @@ public sealed class EuchreTests
         var kitty = state.Zones["kitty"];
 
         Assert.Equal(4, kitty.Count);
-        Assert.Single(kitty.Cards.Where(c => c.IsFaceUp));
+        Assert.Single(kitty.Cards, c => c.IsFaceUp);
         Assert.Same(kitty.TopCard, kitty.Cards.Single(c => c.IsFaceUp));
     }
 }
@@ -226,7 +226,7 @@ public sealed class HandFacingTests
     private static (GameState State, IGameLogic Logic) Euchre()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("euchre").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "euchre")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(4) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 4, []);
@@ -255,7 +255,7 @@ public sealed class HandFacingTests
     {
         // Pinochle shows its melds for scoring and then picks them up again.
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("pinochle").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "pinochle")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(2) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 4, []);
@@ -293,7 +293,7 @@ public sealed class CardMovementLogTests
     private static (GameState State, IGameLogic Logic) Game(string id, int seats, ulong seed = 4)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync(id).GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, id)!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(seed) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, seats, []);
@@ -370,7 +370,7 @@ public sealed class DealerTests
     private static (GameState State, IGameLogic Logic) Euchre(ulong seed = 4)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("euchre").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "euchre")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(seed) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 4, []);
@@ -453,14 +453,14 @@ public sealed class DealerTests
         // whose rounds rotate one.
         foreach (var id in new[] { "euchre", "pinochle", "hearts", "golf" })
         {
-            var definition = loader.LoadAsync(id).GetAwaiter().GetResult()!;
+            var definition = TestGames.Load(loader, id)!;
             bool shows = definition.Ui?.ShowDealer
                       ?? (definition.Rounds?.Dealer is not null || definition.Rounds?.FirstDealer is not null);
             Assert.True(shows, $"{id} rotates a dealer but marks nobody.");
         }
 
         // War deals once and has no dealer to speak of.
-        var war = loader.LoadAsync("war").GetAwaiter().GetResult()!;
+        var war = TestGames.Load(loader, "war")!;
         Assert.False(war.Ui?.ShowDealer
                   ?? (war.Rounds?.Dealer is not null || war.Rounds?.FirstDealer is not null));
     }
@@ -476,7 +476,7 @@ public sealed class TrickLogTests
     private static (GameState State, IGameLogic Logic) Euchre(ulong seed = 4)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("euchre").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "euchre")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(seed) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, 4, []);

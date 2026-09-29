@@ -14,7 +14,7 @@ public sealed class TableSheet
 {
     private sealed class StubDriver : IAnimationDriver
     {
-        public event Action? Tick;
+        public event Action? Tick { add { } remove { } }   // never ticks: these tests paint by hand
         public void RequestFrames() { }
         public void StopFrames() { }
     }
@@ -28,7 +28,7 @@ public sealed class TableSheet
         string dir = Environment.GetEnvironmentVariable("SHEET_DIR") ?? Path.GetTempPath();
         var loader = new GameLoader(new FileSystemGameAssetSource(FileSystemGameAssetSource.FindRepoRoot()));
 
-        foreach (var def in loader.LoadAllAsync().GetAwaiter().GetResult())
+        foreach (var def in TestGames.LoadAll(loader))
         {
             foreach (int seats in new SortedSet<int> { def.MinPlayers, def.MaxPlayers })
             {

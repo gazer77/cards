@@ -1493,7 +1493,7 @@ scored on the way there. Optional: a game with no `score_card` shows none.
 |---|---|
 | `label` | Heading above the rows. `""` for none. Default `"Scores"`. |
 | `view` | `"total"` (default) — one number per side; `"detail"` — a column per round, total last. |
-| `collapsible` | `true` (default): a tap switches between the two views. The choice is the viewer's and is not saved into the game. |
+| `collapsible` | `true` (default): a tap switches between the two views. The choice is the viewer's and is not saved into the game. Folding it to its badge is remembered from one game to the next. |
 | `by` | `"player"` (default) or `"team"`. `"team"` requires the game to have teams. |
 | `round_label` | What a round column is called — `"H"` gives H1, H2 … Default `"R"`. |
 | `max_rounds` | How many round columns the detail view shows, most recent last. Default 9. |

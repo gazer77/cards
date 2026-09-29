@@ -15,7 +15,7 @@ public sealed class TableInputTests
     private static (GameState State, IGameLogic Logic) HandAndFoot(int seats = 2)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("hand-and-foot").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "hand-and-foot")!;
 
         var state = new GameState
         {

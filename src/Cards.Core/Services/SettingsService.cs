@@ -21,6 +21,7 @@ public class SettingsService
     private const string KeyTurnPace       = "turn_pace";
     private const string KeyDefaultSort    = "default_hand_sort";
     private const string KeyShowCardValues = "show_card_values";
+    private const string KeyScoreCardCollapsed = "score_card_collapsed";
 
     private readonly ISettingsStore _store;
 
@@ -170,6 +171,13 @@ public class SettingsService
     {
         get => _store.Get(KeyShowCardValues, false);
         set => _store.Set(KeyShowCardValues, value);
+    }
+
+    /// <summary>The table's score card folded to its badge — kept from one game to the next.</summary>
+    public bool ScoreCardCollapsed
+    {
+        get => _store.Get(KeyScoreCardCollapsed, false);
+        set => _store.Set(KeyScoreCardCollapsed, value);
     }
 
     /// <summary>

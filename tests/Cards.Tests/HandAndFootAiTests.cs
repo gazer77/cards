@@ -12,7 +12,7 @@ public sealed class HandAndFootAiTests
     private static (GameState State, IGameLogic Logic) Table(int seats, ulong seed = 11)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("hand-and-foot").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "hand-and-foot")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(seed) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, seats, []);

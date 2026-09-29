@@ -10,7 +10,7 @@ public static class TestTable
         var loader = new GameLoader(
             new FileSystemGameAssetSource(FileSystemGameAssetSource.FindRepoRoot()));
 
-        var definition = loader.LoadAsync(gameId).GetAwaiter().GetResult()
+        var definition = TestGames.Load(loader, gameId)
             ?? throw new InvalidOperationException($"Could not load '{gameId}'.");
 
         var state = new GameState { GameId = definition.Id, Definition = definition };

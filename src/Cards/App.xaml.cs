@@ -2,9 +2,13 @@
 
 namespace Cards;
 
-public partial class App : Application
+/// <summary>
+/// The phone app itself. Not "App": the shared Cards.App project's namespace is visible
+/// here too (through Cards.Rendering), and Cards.App named both.
+/// </summary>
+public partial class CardsApp : Application
 {
-	public App()
+	public CardsApp()
 	{
 		InitializeComponent();
 	}

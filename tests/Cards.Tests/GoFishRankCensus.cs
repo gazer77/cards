@@ -18,7 +18,7 @@ public sealed class GoFishRankCensus
 
         var loader = new GameLoader(
             new FileSystemGameAssetSource(FileSystemGameAssetSource.FindRepoRoot()));
-        var definition = loader.LoadAsync("go-fish").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "go-fish")!;
 
         int stalls = 0, censusFailures = 0, finished = 0;
 

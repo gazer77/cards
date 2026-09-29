@@ -25,7 +25,7 @@ public sealed class StuckGameProbe
 
         var loader = new GameLoader(
             new FileSystemGameAssetSource(FileSystemGameAssetSource.FindRepoRoot()));
-        var definition = loader.LoadAsync(gameId).GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, gameId)!;
 
         var state = new GameState
         {

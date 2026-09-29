@@ -12,7 +12,7 @@ namespace Cards.Tests;
 public sealed class PokerConfigTests
 {
     private static Cards.Models.GameDefinition Poker()
-        => new GameLoader(new EmbeddedGameAssetSource()).LoadAsync("poker").GetAwaiter().GetResult()!;
+        => TestGames.Load(new GameLoader(new EmbeddedGameAssetSource()), "poker")!;
 
     private static (GameState State, IGameLogic Logic) Seated(int seats, string? variant)
     {
@@ -34,10 +34,10 @@ public sealed class PokerConfigTests
     [Fact]
     public void One_entry_covers_three_games()
     {
-        var games = new GameLoader(new EmbeddedGameAssetSource()).LoadAllAsync().GetAwaiter().GetResult();
+        var games = TestGames.LoadAll(new GameLoader(new EmbeddedGameAssetSource()));
 
         Assert.DoesNotContain(games, g => g.Id is "texas-holdem" or "poker-stud" or "poker-wilds");
-        var poker = Assert.Single(games.Where(g => g.Id == "poker"));
+        var poker = Assert.Single(games, g => g.Id == "poker");
 
         Assert.Equal(["Texas Hold'em", "Deuces Wild", "Seven-Card Stud"],
                      GameConfiguration.Offered(poker, 6).Select(c => c.Name));

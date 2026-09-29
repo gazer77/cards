@@ -15,7 +15,7 @@ public sealed class BlackjackTests
     private static (GameState State, IGameLogic Logic) Table(int players, params string[] rules)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("blackjack").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "blackjack")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(3) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, players, rules);
@@ -105,7 +105,7 @@ public sealed class BlackjackTests
         for (ulong seed = 1; seed < 400; seed++)
         {
             var loader = new GameLoader(new EmbeddedGameAssetSource());
-            var definition = loader.LoadAsync("blackjack").GetAwaiter().GetResult()!;
+            var definition = TestGames.Load(loader, "blackjack")!;
             var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(seed) };
             LogicRegistry.Create(definition).Initialize(state, 3, []);
 

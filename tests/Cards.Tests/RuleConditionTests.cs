@@ -17,7 +17,7 @@ public sealed class RuleConditionTests
     private static (GameState State, IGameLogic Logic) Table(int seats = 2)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("hand-and-foot").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "hand-and-foot")!;
 
         var state = new GameState
         {

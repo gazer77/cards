@@ -15,7 +15,7 @@ public sealed class GolfScoringTests
     private static int Score(params string[] cards)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "golf")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(1) };
         LogicRegistry.Create(definition).Initialize(state, 2, []);
 
@@ -96,7 +96,7 @@ public sealed class ZoneScoreBadgeTests
     private static (GameState State, IGameLogic Logic) Golf(int seats)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "golf")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(12) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, seats, []);
@@ -153,7 +153,7 @@ public sealed class ZoneScoreBadgeTests
     public void Score_is_a_kind_of_badge_the_validator_knows()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "golf")!;
         Assert.Empty(DefinitionValidator.Validate(definition));
 
         definition.Zones.Single(z => z.Id == "grid").GroupBadges[0].Shows = "vibes";

@@ -369,6 +369,10 @@
             _canvas.Renderer.RevealAllCards =
                 Config.GetValue<bool>("Debug:RevealAllCards");
 
+            // A score card folded away stays folded at the next table.
+            _canvas.Renderer.ScoreCardCollapsed = Settings.ScoreCardCollapsed;
+            _canvas.Renderer.ScoreCardFolded   += folded => Settings.ScoreCardCollapsed = folded;
+
             ApplyDisplaySettings();
         }
 
@@ -377,6 +381,10 @@
         // longer, and how much longer is a matter of taste.
         Vm.TurnPace         = Settings.TurnPace;
         Vm.MinimumTurnPause = TimeSpan.FromMilliseconds(650);
+
+        // Seat 0 of a table of your own is you, by the name you gave. "Player" is only
+        // the setting's default, not a name anyone chose.
+        Vm.PlayerName = Settings.PlayerName is { Length: > 0 } name && name != "Player" ? name : null;
 
         PushToCanvas();
 

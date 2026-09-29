@@ -17,7 +17,7 @@ public sealed class DeclaredLayoutTests
     private static GameState HandAndFoot(int seats)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("hand-and-foot").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "hand-and-foot")!;
         var state = new GameState
         {
             GameId = definition.Id, Definition = definition,
@@ -141,7 +141,7 @@ public sealed class DeclaredLayoutTests
         {
             var data   = new TheoryData<string, int>();
             var loader = new GameLoader(new EmbeddedGameAssetSource());
-            foreach (var def in loader.LoadAllAsync().GetAwaiter().GetResult())
+            foreach (var def in TestGames.LoadAll(loader))
                 for (int seats = def.MinPlayers; seats <= def.MaxPlayers; seats++)
                     data.Add(def.Id, seats);
             return data;
@@ -159,7 +159,7 @@ public sealed class DeclaredLayoutTests
     public void Every_zone_is_on_the_table_and_none_overlap(string gameId, int seats)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync(gameId).GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, gameId)!;
         Assert.True(definition.Zones.Any(z => z.Layout is not null), $"{gameId} is not on the declared engine.");
 
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(1) };
@@ -193,7 +193,7 @@ public sealed class DeclaredLayoutTests
     public void Every_dealt_card_has_somewhere_to_fly_to(string gameId, int seats)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync(gameId).GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, gameId)!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(2) };
         LogicRegistry.Create(definition).Initialize(state, seats, []);
 
@@ -216,7 +216,7 @@ public sealed class DeclaredLayoutTests
 
     private sealed class NoDriver : IAnimationDriver
     {
-        public event Action? Tick;
+        public event Action? Tick { add { } remove { } }   // never ticks: these tests paint by hand
         public void RequestFrames() { }
         public void StopFrames() { }
     }
@@ -235,7 +235,7 @@ public sealed class DeclaredLayoutTests
 public sealed class TableRoomTests
 {
     private sealed class StubDriver : IAnimationDriver
-    { public event Action? Tick; public void RequestFrames() { } public void StopFrames() { } }
+    { public event Action? Tick { add { } remove { } } public void RequestFrames() { } public void StopFrames() { } }
 
     private static readonly SKImageInfo Canvas = new(1400, 900);
 
@@ -245,7 +245,7 @@ public sealed class TableRoomTests
         {
             var data = new TheoryData<string, int>();
             var loader = new GameLoader(new EmbeddedGameAssetSource());
-            foreach (var def in loader.LoadAllAsync().GetAwaiter().GetResult())
+            foreach (var def in TestGames.LoadAll(loader))
                 for (int seats = def.MinPlayers; seats <= def.MaxPlayers; seats++)
                     data.Add(def.Id, seats);
             return data;
@@ -255,7 +255,7 @@ public sealed class TableRoomTests
     private static GameState Table(string gameId, int seats)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync(gameId).GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, gameId)!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(1) };
         LogicRegistry.Create(definition).Initialize(state, seats, []);
         return state;

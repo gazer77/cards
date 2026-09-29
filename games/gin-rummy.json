@@ -6,7 +6,6 @@
   "deck": "standard-52",
   "players": { "min": 2, "max": 2 },
   "teams": false,
-  "dealer": "random",
   "rounds": {
     "repeat_until": "win_condition",
     "dealer": "alternates"

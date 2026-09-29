@@ -16,7 +16,7 @@ public sealed class EuchreConfigTests
     private static GameState Table(int seats)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("euchre").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "euchre")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(3) };
         LogicRegistry.Create(definition).Initialize(state, seats, []);
         return state;
@@ -26,10 +26,10 @@ public sealed class EuchreConfigTests
     public void One_entry_in_the_picker_covers_three_players_and_four()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var games  = loader.LoadAllAsync().GetAwaiter().GetResult();
+        var games  = TestGames.LoadAll(loader);
 
         Assert.DoesNotContain(games, g => g.Id is "euchre-3p" or "euchre-4p");
-        var euchre = Assert.Single(games.Where(g => g.Id == "euchre"));
+        var euchre = Assert.Single(games, g => g.Id == "euchre");
         Assert.Equal(3, euchre.MinPlayers);
         Assert.Equal(4, euchre.MaxPlayers);
     }
@@ -96,7 +96,7 @@ public sealed class EuchreConfigTests
     {
         // Resolution happens first, so a house rule patches the game being played.
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("euchre").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "euchre")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(3) };
         LogicRegistry.Create(definition).Initialize(state, 3, ["no_stick_dealer"]);
 

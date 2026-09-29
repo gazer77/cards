@@ -15,7 +15,7 @@ public sealed class ScoreCardTests
 {
     private sealed class StubDriver : IAnimationDriver
     {
-        public event Action? Tick;
+        public event Action? Tick { add { } remove { } }   // never ticks: these tests paint by hand
         public void RequestFrames() { }
         public void StopFrames() { }
     }
@@ -23,7 +23,7 @@ public sealed class ScoreCardTests
     private static (GameState State, IGameLogic Logic) Game(string id, int seats)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync(id).GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, id)!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(7) };
         var logic = LogicRegistry.Create(definition);
         logic.Initialize(state, seats, []);
@@ -89,7 +89,7 @@ public sealed class ScoreCardTests
     public void A_score_card_without_a_place_is_a_definition_error()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "golf")!;
         definition.ScoreCard!.Place = null;
 
         Assert.Contains(DefinitionValidator.Validate(definition), p => p.StartsWith("score_card:"));

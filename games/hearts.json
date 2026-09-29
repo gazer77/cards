@@ -6,15 +6,13 @@
   "deck": "standard-52",
   "players": { "min": 4, "max": 4 },
   "teams": false,
-  "dealer": "random",
   "rounds": {
     "repeat_until": "win_condition",
     "dealer": "rotates_left"
   },
   "deal": {
     "cards_per_player": 13,
-    "face": "owner",
-    "order": "clockwise"
+    "face": "owner"
   },
   "zones": [
     { "id": "deck",       "type": "deck",   "visibility": "none" },

@@ -2649,8 +2649,9 @@ public sealed class CardTableRenderer
     public bool ShowScoreCard { get; set; } = true;
 
     /// <summary>
-    /// Folded down to a trophy badge, by the player's choice this sitting. A tap on the
-    /// badge opens it again; the header's fold mark closes it.
+    /// Folded down to a trophy badge, by the player's choice. A tap on the badge opens it
+    /// again; the header's fold mark closes it. The host remembers the choice through
+    /// <see cref="ScoreCardFolded"/> and sets it back at the next table.
     /// </summary>
     public bool ScoreCardCollapsed
     {
@@ -2658,6 +2659,9 @@ public sealed class CardTableRenderer
         set { _scoreCardCollapsed = value; RequestRedraw(); }
     }
     private bool _scoreCardCollapsed;
+
+    /// <summary>The player folded (true) or opened (false) the score card with a tap.</summary>
+    public event Action<bool>? ScoreCardFolded;
 
     /// <summary>The expanded card's fold mark, so a tap on it folds rather than switching view.</summary>
     private SKRect? _scoreCardFoldRect;
@@ -2900,9 +2904,15 @@ public sealed class CardTableRenderer
         // The badge opens the card; the fold mark folds it; anywhere else on it switches
         // between the totals and the rounds.
         if (_scoreCardCollapsed)
+        {
             _scoreCardCollapsed = false;
+            ScoreCardFolded?.Invoke(false);
+        }
         else if (_scoreCardFoldRect is { } fold && fold.Contains(location))
+        {
             _scoreCardCollapsed = true;
+            ScoreCardFolded?.Invoke(true);
+        }
         else
             _scoreCardDetail = !(_scoreCardDetail ?? card.View == "detail");
 

@@ -67,6 +67,11 @@ public sealed class PaintCostTests
     /// <summary>
     /// The cache must actually be faster, not merely present. Asserted as a ratio
     /// rather than an absolute time so it means the same thing on any machine.
+    ///
+    /// Timed in alternating rounds and judged on each side's best round: a garbage
+    /// collection or a busy neighbouring test only ever adds time, so the fastest round
+    /// is the nearest the true cost. One round each failed now and then in a full run
+    /// and never alone.
     /// </summary>
     [Fact]
     public void Cached_cards_are_much_cheaper_than_redrawing_them()
@@ -78,23 +83,30 @@ public sealed class PaintCostTests
         using var canvas = new SKCanvas(bitmap);
         var rect = new SKRect(10, 10, 110, 160);
 
-        CardRenderer.ClearCache();
-        CardRenderer.DrawCardFace(canvas, rect, card, skin);   // populate
+        const int Rounds = 7, Draws = 500;
+        double cachedMs = double.MaxValue, uncachedMs = double.MaxValue;
+        var clock = new Stopwatch();
 
-        var clock = Stopwatch.StartNew();
-        for (int i = 0; i < 2000; i++)
-            CardRenderer.DrawCardFace(canvas, rect, card, skin);
-        double cachedMs = clock.Elapsed.TotalMilliseconds;
-
-        // Defeat the cache by asking for a different size every time, which is the
-        // same work the renderer used to do on every card of every frame.
-        clock.Restart();
-        for (int i = 0; i < 2000; i++)
+        for (int round = 0; round < Rounds; round++)
         {
             CardRenderer.ClearCache();
-            CardRenderer.DrawCardFace(canvas, rect, card, skin);
+            CardRenderer.DrawCardFace(canvas, rect, card, skin);   // populate
+
+            clock.Restart();
+            for (int i = 0; i < Draws; i++)
+                CardRenderer.DrawCardFace(canvas, rect, card, skin);
+            cachedMs = Math.Min(cachedMs, clock.Elapsed.TotalMilliseconds);
+
+            // Defeat the cache by emptying it before every draw, which is the same work
+            // the renderer used to do on every card of every frame.
+            clock.Restart();
+            for (int i = 0; i < Draws; i++)
+            {
+                CardRenderer.ClearCache();
+                CardRenderer.DrawCardFace(canvas, rect, card, skin);
+            }
+            uncachedMs = Math.Min(uncachedMs, clock.Elapsed.TotalMilliseconds);
         }
-        double uncachedMs = clock.Elapsed.TotalMilliseconds;
 
         Assert.True(cachedMs * 3 < uncachedMs,
             $"Cached draws ({cachedMs:F1} ms) are not meaningfully cheaper than " +

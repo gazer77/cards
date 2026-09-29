@@ -39,7 +39,7 @@ public sealed class HouseRuleVoteTests
     [Fact]
     public void A_game_that_says_nothing_gets_the_defaults()
     {
-        var hearts = new GameLoader(new EmbeddedGameAssetSource()).LoadAsync("hearts").GetAwaiter().GetResult()!;
+        var hearts = TestGames.Load(new GameLoader(new EmbeddedGameAssetSource()), "hearts")!;
         Assert.Equal("majority", hearts.HouseRuleVote.DecideBy);
         Assert.False(hearts.HouseRuleVote.HostOverride);
     }

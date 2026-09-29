@@ -20,7 +20,7 @@ public static class PhaseHandlerRegistry
         new(StringComparer.OrdinalIgnoreCase)
         {
             ["flip_compare_ready"]  = (def, next) => new FlipCompareReadyHandler(def, next),
-            ["flip_compare_result"] = (def, next) => new FlipCompareResultHandler(def, next),
+            ["flip_compare_result"] = (_, next) => new FlipCompareResultHandler(next),
             ["score"]               = (def, next) => new ScorePhaseHandler(next),
             ["trick_taking"]        = (def, next) => new TrickTakingHandler(def, next),
             ["bidding"]             = (def, next) => new BiddingHandler(def, next),
@@ -125,7 +125,7 @@ public static class PhaseHandlerRegistry
     // ── flip_compare_result ───────────────────────────────────────────────────
     // The round's winner collects all played cards, then the game advances.
 
-    private sealed class FlipCompareResultHandler(PhaseDefinition _, string readyPhaseId) : IPhaseHandler
+    private sealed class FlipCompareResultHandler(string readyPhaseId) : IPhaseHandler
     {
         public IReadOnlyList<GameAction> GetValidActions(GameState _) => [new GameAction("tap")];
 

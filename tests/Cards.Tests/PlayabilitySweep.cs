@@ -97,7 +97,7 @@ public sealed class PlayabilitySweep
 
     private static Outcome Run(GameLoader loader, string gameId, int seats)
     {
-        var definition = loader.LoadAsync(gameId).GetAwaiter().GetResult();
+        var definition = TestGames.Load(loader, gameId);
         if (definition is null) return new(gameId, seats, false, 0, "-", "definition failed to load");
 
         var state = new GameState

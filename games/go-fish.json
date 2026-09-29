@@ -6,7 +6,6 @@
   "deck": "standard-52",
   "players": { "min": 2, "max": 6, "names": ["You"] },
   "teams": false,
-  "dealer": "random",
   "deal": {
     "cards_per_player": [
       { "max_players": 3, "cards": 7 },

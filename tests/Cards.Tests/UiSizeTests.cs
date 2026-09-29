@@ -58,7 +58,7 @@ public sealed class UiSizeTests
     public void A_smaller_card_size_draws_smaller_cards_in_the_same_place()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var definition = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var definition = TestGames.Load(loader, "golf")!;
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(4) };
         LogicRegistry.Create(definition).Initialize(state, 2, []);
         var canvas = new SKImageInfo(1000, 800);
@@ -77,8 +77,8 @@ public sealed class UiSizeTests
     public void Card_points_are_offered_only_by_games_that_score_cards()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var golf   = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
-        var hearts = loader.LoadAsync("hearts").GetAwaiter().GetResult()!;
+        var golf   = TestGames.Load(loader, "golf")!;
+        var hearts = TestGames.Load(loader, "hearts")!;
 
         Assert.True(ScoringEngine.HasCardValues(golf));
         Assert.Equal(0, ScoringEngine.CardPointValue(golf, [new Card(Suit.Spades, Rank.King)]));
@@ -105,7 +105,7 @@ public sealed class CardTooltipTests
     public void A_card_reads_with_its_value_in_a_game_that_scores_cards()
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
-        var golf   = loader.LoadAsync("golf").GetAwaiter().GetResult()!;
+        var golf   = TestGames.Load(loader, "golf")!;
         var jack   = new Card(Suit.Clubs, Rank.Jack);
 
         Assert.Equal("Jack of Clubs", jack.DisplayName);
@@ -121,7 +121,7 @@ public sealed class CardTooltipTests
 public sealed class CardValueNameTests
 {
     private static GameDefinition Load(string id)
-        => new GameLoader(new EmbeddedGameAssetSource()).LoadAsync(id).GetAwaiter().GetResult()!;
+        => TestGames.Load(new GameLoader(new EmbeddedGameAssetSource()), id)!;
 
     [Theory]
     [InlineData("golf")]

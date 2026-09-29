@@ -6,7 +6,6 @@
   "deck": "standard-52-jokers",
   "players": { "min": 2, "max": 8 },
   "teams": false,
-  "dealer": "random",
   "rounds": {
     "repeat_until": "win_condition",
     "dealer": "rotates_left"

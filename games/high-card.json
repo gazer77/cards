@@ -9,7 +9,6 @@
   "deal": {
     "cards_per_player": 26,
     "face": "down",
-    "order": "clockwise",
     "anim_delay_ms": 20
   },
   "zones": [
