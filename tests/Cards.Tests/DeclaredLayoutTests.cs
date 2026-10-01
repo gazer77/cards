@@ -135,6 +135,91 @@ public sealed class DeclaredLayoutTests
         Assert.True(right.Bounds.Height > right.Bounds.Width);
     }
 
+    private static GameState Game(string id, int seats)
+    {
+        var loader = new GameLoader(new EmbeddedGameAssetSource());
+        var definition = TestGames.Load(loader, id)!;
+        var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(1) };
+        LogicRegistry.Create(definition).Initialize(state, seats, []);
+        return state;
+    }
+
+    /// <summary>
+    /// Upright, nobody sits at the sides: a phone's sides are too narrow to seat anyone,
+    /// and Hearts' side players came out as a single card each down the edges. Every
+    /// opponent is across the top, each a full-width row, with tricks still played to a
+    /// compass around the middle.
+    /// </summary>
+    [Fact]
+    public void Upright_every_opponent_sits_across_the_top()
+    {
+        var layouts = ZoneLayoutEngine.Compute(Game("hearts", 4), Phone);
+
+        var opponents = new[] { "hand:player1", "hand:player2", "hand:player3" }.Select(id => Layout(layouts, id)).ToList();
+        Assert.All(opponents, o =>
+        {
+            Assert.Equal("top", o.SeatSide);
+            Assert.True(o.Bounds.Bottom < Phone.Height * 0.3f, $"{o.Zone.Id} at {o.Bounds} is not across the top.");
+            Assert.True(o.Bounds.Width > Phone.Width * 0.6f, $"{o.Zone.Id} at {o.Bounds} is not a full row.");
+        });
+        // One row each, in seating order down the screen.
+        Assert.True(opponents[0].Bounds.Bottom <= opponents[1].Bounds.Top);
+        Assert.True(opponents[1].Bounds.Bottom <= opponents[2].Bounds.Top);
+
+        // The tricks stay round the middle, left and right of it as at a desktop.
+        var left  = Layout(layouts, "trick:player3").Bounds;
+        var right = Layout(layouts, "trick:player1").Bounds;
+        Assert.True(left.MidX < Phone.Width / 2f && right.MidX > Phone.Width / 2f);
+        Assert.Equal(Phone.Height / 2f, left.MidY, 1f);
+    }
+
+    /// <summary>
+    /// A team's melds are the whole team's: upright, the other team's strip gets a row
+    /// across the full width rather than a corner of one player's cell.
+    /// </summary>
+    [Fact]
+    public void Upright_the_other_teams_melds_get_a_row_of_their_own()
+    {
+        var state   = HandAndFoot(4);
+        var layouts = ZoneLayoutEngine.Compute(state, Phone);
+
+        var theirs = state.Teams.Single(t => !t.PlayerIds.Contains(state.Viewer));
+        var strip  = Layout(layouts, $"meld:{theirs.Id}").Bounds;
+        Assert.True(strip.Width > Phone.Width * 0.85f, $"Their melds at {strip} do not run the width.");
+
+        // Below every player's hand, above the middle.
+        foreach (var p in state.Players.Skip(1))
+            Assert.True(Layout(layouts, $"hand:{p.Id}").Bounds.Bottom <= strip.Top);
+        Assert.True(strip.Bottom < Phone.Height * 0.4f);
+    }
+
+    /// <summary>
+    /// A definition's portrait layout is used on a table taller than wide, and only there.
+    /// </summary>
+    [Fact]
+    public void A_portrait_layout_is_used_upright_and_only_upright()
+    {
+        var state = HandAndFoot(2);
+
+        // Declared: x 50%, y 71%, 96% wide, 28% high — upright only.
+        var upright = Layout(ZoneLayoutEngine.Compute(state, Phone), "meld:player0").Bounds;
+        Assert.Equal(0.96f * Phone.Width,  upright.Width,  1f);
+        Assert.Equal(0.28f * Phone.Height, upright.Height, 1f);
+        Assert.Equal(0.71f * Phone.Height, upright.MidY,   1f);
+
+        var desk = Layout(ZoneLayoutEngine.Compute(state, Canvas), "meld:player0").Bounds;
+        Assert.Equal(0.72f * Canvas.Width, desk.Width, 1f);
+    }
+
+    [Fact]
+    public void A_portrait_layout_is_checked_like_any_other()
+    {
+        var definition = TestGames.Load(new GameLoader(new EmbeddedGameAssetSource()), "hearts")!;
+        definition.Zones.Single(z => z.Id == "hand").Layout!.Portrait = new Cards.Models.ZoneLayoutDefinition { Region = "center" };
+
+        Assert.Contains(DefinitionValidator.Validate(definition), p => p.Contains("layout.portrait") && p.Contains("center"));
+    }
+
     public static TheoryData<string, int> EveryTable
     {
         get
@@ -165,22 +250,31 @@ public sealed class DeclaredLayoutTests
         var state = new GameState { GameId = definition.Id, Definition = definition, Rng = new SeededRandomSource(1) };
         LogicRegistry.Create(definition).Initialize(state, seats, []);
 
-        var layouts = ZoneLayoutEngine.Compute(state, Canvas);
-        Assert.Equal(state.Zones.Count, layouts.Count);
+        // A desktop, and a phone held upright (its table, above the footer, at the web
+        // client's 1.5 pixel cap) — which seats everyone differently.
+        foreach (var screen in new[] { Canvas, Phone })
+        {
+            string where = screen.Width == Canvas.Width ? "" : " upright";
+            var layouts = ZoneLayoutEngine.Compute(state, screen);
+            Assert.Equal(state.Zones.Count, layouts.Count);
 
-        var canvas = new SKRect(0, 0, Canvas.Width, Canvas.Height);
-        foreach (var l in layouts)
-            Assert.True(canvas.Contains(l.Bounds), $"{gameId}/{seats}p: {l.Zone.Id} at {l.Bounds} is off the table.");
+            var canvas = new SKRect(0, 0, screen.Width, screen.Height);
+            foreach (var l in layouts)
+                Assert.True(canvas.Contains(l.Bounds), $"{gameId}/{seats}p{where}: {l.Zone.Id} at {l.Bounds} is off the table.");
 
-        for (int i = 0; i < layouts.Count; i++)
-            for (int j = i + 1; j < layouts.Count; j++)
-            {
-                var a = layouts[i].Bounds; var b = layouts[j].Bounds;
-                a.Inflate(-1f, -1f); b.Inflate(-1f, -1f);
-                Assert.False(a.IntersectsWith(b),
-                    $"{gameId}/{seats}p: {layouts[i].Zone.Id} {layouts[i].Bounds} overlaps {layouts[j].Zone.Id} {layouts[j].Bounds}.");
-            }
+            for (int i = 0; i < layouts.Count; i++)
+                for (int j = i + 1; j < layouts.Count; j++)
+                {
+                    var a = layouts[i].Bounds; var b = layouts[j].Bounds;
+                    a.Inflate(-1f, -1f); b.Inflate(-1f, -1f);
+                    Assert.False(a.IntersectsWith(b),
+                        $"{gameId}/{seats}p{where}: {layouts[i].Zone.Id} {layouts[i].Bounds} overlaps {layouts[j].Zone.Id} {layouts[j].Bounds}.");
+                }
+        }
     }
+
+    /// <summary>A phone held upright: 390 CSS pixels wide at a 1.5 cap, above the footer.</summary>
+    public static readonly SKImageInfo Phone = new(585, 1080);
 
     /// <summary>
     /// The deal animation flies each card to where the table will draw it. It only knew
@@ -268,7 +362,8 @@ public sealed class TableRoomTests
         // Measured against what the zone asked for: a zone declaring card_scale 0.6 means
         // to be small, and holding it to the same floor as a hand would call its own
         // wish a bug. What is never intentional is a zone squeezed towards nothing.
-        foreach (var l in ZoneLayoutEngine.Compute(Table(gameId, seats), Canvas))
+        foreach (var l in ZoneLayoutEngine.Compute(Table(gameId, seats), Canvas)
+                    .Concat(ZoneLayoutEngine.Compute(Table(gameId, seats), DeclaredLayoutTests.Phone)))
         {
             float scale = l.Zone.Definition?.CardScale ?? 1f;
             Assert.True(l.CardWidth >= 20f * scale && l.CardHeight >= 28f * scale,

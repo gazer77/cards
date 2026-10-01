@@ -14,8 +14,10 @@
   },
   "zones": [
     { "id": "deck",    "type": "deck", "visibility": "none" },
-    { "id": "hand",    "type": "hand", "owner": "each_player", "visibility": "all", "layout": { "region": "seat" } },
-    { "id": "split",   "type": "hand", "owner": "each_player", "visibility": "all", "layout": { "region": "seat-front" },
+    { "id": "hand",    "type": "hand", "owner": "each_player", "visibility": "all", "layout": { "region": "seat",
+      "portrait": { "place": { "x": "38%", "y": "93%", "anchor": "center", "width": "52%", "height": "12%" } } } },
+    { "id": "split",   "type": "hand", "owner": "each_player", "visibility": "all", "layout": { "region": "seat-front",
+      "portrait": { "place": { "x": "82%", "y": "93%", "anchor": "center", "width": "26%", "height": "12%" } } },
       "label": { "text": "" } },
     { "id": "discard", "type": "pile", "visibility": "none" }
   ],

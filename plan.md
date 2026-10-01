@@ -327,14 +327,15 @@ See `docs/shared-tables.md`.
       `Cards.Hosting`, so a phone host can keep its tables too. On the home server,
       systemd's `StateDirectory=cards` gives it `/var/lib/cards` — the unit file must be
       copied once more (deploy/README.md). The web client retries for five minutes.
-- [ ] **Backlog: small-screen layouts** — a definition may give its zones a second
-      layout for a phone, the way it gives one for the table today: a place or region
-      per zone, used when the screen is small (narrow, or held upright). A phone is tall
-      and narrow where a desktop is wide, so the same spots squeeze everything into the
-      middle and leave the top and bottom empty. Hand and Foot's meld strip is the clear
-      case: thirteen slots across a phone make each one tiny, where seven to a row, or
-      the strip moved to the long axis, would not. For now a phone only doubles the small
-      labels (`CardTableRenderer.LabelScale`), and the meld strip's by half.
+- [x] **Small-screen layouts** — a table taller than wide (a phone held upright) seats
+      every opponent across the top in cells, one row each or two or three to a row,
+      whichever gives their cards the most room; another team's melds and the dealer get
+      full-width rows; tricks keep a compass round the middle. A zone may give a
+      `layout.portrait` region or place of its own: Hand and Foot's meld strip runs the
+      full width in two rows of slots, Pinochle's melds, Golf's drawn card, Blackjack's
+      split and Poker's community cards each have one. The layout test checks every game
+      upright; `TABLE_SHEET=1` renders phone tables too. Phones still double the small
+      labels (`LabelScale`).
 - [ ] **Backlog: deal for the first dealer** — choose the first dealer the way a table
       does: deal cards face up round the table until one turns up the card the game
       names. Poker commonly deals to the first ace (or the first black ace); Euchre to

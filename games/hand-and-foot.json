@@ -48,7 +48,8 @@
       "label":  { "text": "" } },
     { "id": "meld",      "type": "spread", "owner": "each_team",   "visibility": "all",
       "card_scale":   1.4,
-      "layout":       { "place": { "x": "50%", "y": "75%", "anchor": "center", "width": "72%", "height": "20%" } },
+      "layout":       { "place": { "x": "50%", "y": "75%", "anchor": "center", "width": "72%", "height": "20%" },
+                        "portrait": { "place": { "x": "50%", "y": "71%", "anchor": "center", "width": "96%", "height": "28%" } } },
       "arrangement":  "stack",
       "group_layout": "slots",
       "slots": [

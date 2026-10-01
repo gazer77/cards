@@ -25,7 +25,23 @@ public static class DeclaredLayoutEngine
 
     /// <summary>Which edge a player sits at, and how their content is turned to face them.</summary>
     /// <param name="Slot">Which share of the edge, of <paramref name="Slots"/>, when several seats sit along it.</param>
-    private sealed record Seat(int Index, string Side, float Rotation, int Slot = 0, int Slots = 1);
+    /// <param name="Cell">
+    /// On a phone held upright, the part of the table an opponent's seat is drawn into, in
+    /// table fractions. Null at a desktop table, and for the person at this screen.
+    /// </param>
+    /// <param name="Compass">
+    /// Where this seat would sit at a desktop table — where its tricks are played to,
+    /// around the middle, whatever its cell.
+    /// </param>
+    private sealed record Seat(int Index, string Side, float Rotation, int Slot = 0, int Slots = 1,
+                               SKRect? Cell = null, Seat? Compass = null);
+
+    /// <summary>
+    /// A table taller than it is wide — a phone held upright. Laid out as a desktop, its
+    /// side seats came out as slivers down the edges and everything else crowded the
+    /// middle of a screen whose height went unused.
+    /// </summary>
+    public static bool IsPortrait(SKImageInfo info) => info.Height > info.Width * 1.15f;
 
     public static IReadOnlyList<ZoneLayout> Compute(GameState state, SKImageInfo info)
     {
@@ -33,16 +49,24 @@ public static class DeclaredLayoutEngine
         var table = new SKRect(0, 0, W, H);
 
         float baseCardW = MathF.Min(W * 0.11f, 96f) * state.Definition.CardScale;
-        var   seats     = SeatMap(state.Players.Count);
+        bool  portrait  = IsPortrait(info);
+        var (seats, teamSeats) = portrait
+            ? PortraitSeatMap(state, W, H, baseCardW)
+            : (SeatMap(state.Players.Count), new Dictionary<string, Seat>());
 
         // Every zone gets a spot: declared, or the default for its kind.
         var spots = new List<Spot>();
         foreach (var zone in state.Zones.Values)
         {
-            var seat = zone.OwnerId is { } owner ? SeatOf(state, seats, owner) : null;
-            var (place, region) = ResolvePlace(zone, seat is not null);
+            var seat = zone.OwnerId is { } owner
+                ? teamSeats.GetValueOrDefault(owner) ?? SeatOf(state, seats, owner)
+                : null;
+            var (place, region) = ResolvePlace(zone, seat is not null, portrait);
             spots.Add(new Spot(zone, place, seat ?? seats[0], region));
         }
+
+        // What each opponent's cell must hold: the run of its seat its zones use.
+        var extents = CellExtents(spots);
 
         // Zones sharing a region (and, for owned ones, a seat) divide it between them.
         var placed = new List<(Spot Spot, SKRect Bounds)>();
@@ -52,7 +76,14 @@ public static class DeclaredLayoutEngine
             for (int i = 0; i < members.Count; i++)
             {
                 var spot   = members[i];
-                var seatPx = ToSeatSpace(spot.Place, spot.Seat);
+                var seatPx = spot.Seat.Cell is { } cell && !PlayedToTheMiddle(spot)
+                    ? ToCellSpace(spot.Place, cell, extents[spot.Seat.Index])
+                    : ToSeatSpace(spot.Place, spot.Seat.Compass ?? spot.Seat);
+
+                // Upright, the compass of trick spots closes in on the middle, giving the
+                // opponents' rows above it the height a tall screen has to spare.
+                if (portrait && spot.Zone.OwnerId is not null && PlayedToTheMiddle(spot))
+                    seatPx = PullTowardMiddle(seatPx, 0.7f);
                 var bounds = ResolveTable(seatPx, table);
 
                 // Sharing: split the region along its longer axis, in declaration order.
@@ -214,6 +245,184 @@ public static class DeclaredLayoutEngine
         return seats;
     }
 
+    /// <summary>
+    /// A phone held upright: the person at this screen at the bottom as ever, and every
+    /// opponent across the top in a cell of their own — one full-width row each for up
+    /// to three, two to a row beyond that. The sides of a portrait screen are too narrow
+    /// to seat anyone; its height is what there is to spare.
+    ///
+    /// The cells stop short of the middle: of the centre band (40% down) where nothing is
+    /// played to it, and of the compass of trick spots around it (24% down) where
+    /// something is. One opponent is the desktop table already — across, at the top —
+    /// and is left as it is.
+    /// </summary>
+    private static (List<Seat> Seats, Dictionary<string, Seat> Teams) PortraitSeatMap(
+        GameState state, float W, float H, float baseCardW)
+    {
+        int players = state.Players.Count;
+        var desk    = SeatMap(players);
+        if (players <= 2) return (desk, []);
+
+        bool tricks = state.Zones.Values.Any(z => z.OwnerId is not null && PlayedToTheMiddle(z, z.Definition?.Layout?.Region));
+        float depth = tricks ? 0.29f : 0.38f;
+
+        // Who goes where, by seat round the table from the person at this screen. A seat
+        // with a role — Blackjack's dealer — is who everyone plays against, and gets a
+        // row of its own nearest the middle rather than a corner cell.
+        int viewer = Math.Max(0, state.Players.FindIndex(p => p.Id == state.Viewer));
+        var people = new List<int>();
+        var roles  = new List<int>();
+        for (int k = 1; k < players; k++)
+            (state.Players[(viewer + k) % players].Role is null ? people : roles).Add(k);
+
+        // A team's zones — Hand and Foot's melds — are the whole team's, and a strip of
+        // thirteen slots squeezed into one player's cell is unreadable. Each other team
+        // gets a row across the full width, between the players and the middle.
+        var myTeam = state.Teams.FirstOrDefault(t => t.PlayerIds.Contains(state.Viewer));
+        // Only a team that lays something out to be read: a team's pile of won tricks sits
+        // beside its first player as it does at a desktop.
+        var teams  = state.Teams
+            .Where(t => t != myTeam && state.Zones.Values.Any(z => z.OwnerId == t.Id && z.Type is "spread" or "grid"))
+            .ToList();
+        // Rows are shared out by weight: the dealer is what everyone plays against and gets
+        // twice a player's height; another team's melds, which are read, get two and a
+        // half — a player's own row is mostly a hand of backs.
+        const float RoleWeight = 2f, TeamWeight = 2.5f;
+        float fullRows = teams.Count * TeamWeight + roles.Count * RoleWeight;
+
+        // As many columns as give the players' cards the most room. Full-width rows suit
+        // a seat that is only a hand; a hand with a meld strip under it is squashed flat
+        // in a row, and two to a row gives it the height back.
+        var places = state.Zones.Values
+            .Where(z => z.OwnerId is { } o && teams.All(t => t.Id != o) && !PlayedToTheMiddle(z, z.Definition?.Layout?.Region))
+            .DistinctBy(z => z.Id.Split(':')[0])
+            .Select(z => ResolvePlace(z, owned: true, portrait: true).Place)
+            .ToList();
+        float RowsFor(int c) => (people.Count + c - 1) / c + fullRows;
+        int cols = people.Count == 0 ? 1 : Enumerable.Range(1, Math.Min(3, people.Count))
+            .Select(c => (Cols: c, Card: SmallestCard(places, c, RowsFor(c), depth, W, H, baseCardW)))
+            .Aggregate((best, next) => next.Card > best.Card + 2f ? next : best)
+            .Cols;
+        float rowH = depth / RowsFor(cols);
+
+        static SKRect Padded(SKRect cell)
+        {
+            // A margin inside each cell, so neighbours' cards and name plates do not touch.
+            cell.Inflate(-cell.Width * 0.02f, -cell.Height * 0.07f);
+            return cell;
+        }
+
+        var seats = new Seat[players];
+        seats[0] = desk[0];
+        for (int i = 0; i < people.Count; i++)
+        {
+            int r = i / cols, c = i % cols;
+            // A short last row is centred rather than left-aligned.
+            int inRow   = Math.Min(cols, people.Count - r * cols);
+            float width = 1f / cols;
+            float left  = (1f - inRow * width) / 2f + c * width;
+            int k       = people[i];
+            seats[k] = new Seat(k, "top", 180f, Cell: Padded(new SKRect(left, r * rowH, left + width, (r + 1) * rowH)),
+                                Compass: desk[k]);
+        }
+
+        float y = (people.Count + cols - 1) / cols * rowH;
+        var teamSeats = new Dictionary<string, Seat>();
+        foreach (var team in teams)
+        {
+            teamSeats[team.Id] = new Seat(players + teamSeats.Count, "top", 180f,
+                                          Cell: Padded(new SKRect(0f, y, 1f, y + rowH * TeamWeight)));
+            y += rowH * TeamWeight;
+        }
+        foreach (int k in roles)
+        {
+            seats[k] = new Seat(k, "top", 180f, Cell: Padded(new SKRect(0f, y, 1f, y + rowH * RoleWeight)),
+                                Compass: desk[k]);
+            y += rowH * RoleWeight;
+        }
+
+        return ([.. seats], teamSeats);
+    }
+
+    /// <summary>
+    /// The width of the smallest card an opponent's zones would draw, seated in cells of
+    /// <paramref name="cols"/> by <paramref name="rows"/> — what choosing the columns weighs.
+    /// </summary>
+    private static float SmallestCard(List<PlaceDefinition> places, int cols, float rows, float depth,
+                                      float W, float H, float baseCardW)
+    {
+        if (places.Count == 0) return baseCardW;
+        var unit  = new SKRect(0, 0, 1, 1);
+        var rects = places.Select(p => ResolveTable(ToSeatSpace(p, new Seat(0, "top", 180f)), unit)).ToList();
+        float top = MathF.Max(0f, rects.Min(r => r.Top)), bottom = rects.Max(r => r.Bottom);
+        float k   = (depth / rows) * 0.86f / MathF.Max(0.01f, bottom - top);
+        float cellW = 0.96f / cols;
+
+        return rects.Min(r => MathF.Min(baseCardW, MathF.Min(r.Width * cellW * W, r.Height * k * H / 1.4f)));
+    }
+
+    /// <summary>
+    /// A zone a seat plays into the middle of the table — a trick — rather than one it
+    /// keeps in front of itself. On a phone it stays in the compass around the centre,
+    /// where the cards meet, rather than going up into its owner's cell.
+    /// </summary>
+    private static bool PlayedToTheMiddle(Zone zone, string? region)
+        => zone.Type == "trick" || region == "seat-play";
+
+    private static bool PlayedToTheMiddle(Spot spot) => PlayedToTheMiddle(spot.Zone, spot.Region);
+
+    /// <summary>
+    /// For each opponent's cell, the run of the top edge's depth (0 at the edge) that its
+    /// zones cover, as they would sit at a desktop table. The cell holds exactly that run,
+    /// scaled to fit: a Hearts seat that is only a hand fills its row with the hand, where
+    /// mapping the whole seat band in would leave two thirds of the row empty.
+    /// </summary>
+    private static Dictionary<int, (float Top, float Bottom)> CellExtents(List<Spot> spots)
+    {
+        var extents = new Dictionary<int, (float, float)>();
+        foreach (var spot in spots)
+        {
+            if (spot.Seat.Cell is null || PlayedToTheMiddle(spot)) continue;
+
+            // Turned to the top edge: y from the edge is (1 − y) of the bottom-seat place.
+            var r = ResolveTable(ToSeatSpace(spot.Place, spot.Seat with { Slots = 1 }), new SKRect(0, 0, 1, 1));
+            var (top, bottom) = extents.GetValueOrDefault(spot.Seat.Index, (float.MaxValue, float.MinValue));
+            extents[spot.Seat.Index] = (MathF.Min(top, r.Top), MathF.Max(bottom, r.Bottom));
+        }
+        foreach (var (seat, (top, bottom)) in extents.ToList())
+            extents[seat] = (MathF.Max(0f, top), MathF.Max(MathF.Max(0f, top) + 0.01f, bottom));
+        return extents;
+    }
+
+    /// <summary>
+    /// A bottom-seat place fitted into an opponent's cell: the seat's used run
+    /// (<paramref name="extent"/>) spans the cell's height, and the table's width the
+    /// cell's width. Turned end over end — the hand at the cell's outer edge, as a seat
+    /// across the table has it — but not mirrored: a cell reads left to right like the
+    /// person's own seat, so a split hand sits to the right of the hand in every cell.
+    /// </summary>
+    private static PlaceDefinition ToCellSpace(PlaceDefinition p, SKRect cell, (float Top, float Bottom) extent)
+    {
+        float x = Pct(p.X, 0.5f), y = 1f - Pct(p.Y, 0.5f);
+        var (ax, ay) = AnchorFractions(p.Anchor);
+        float k = cell.Height / (extent.Bottom - extent.Top);
+
+        return new PlaceDefinition
+        {
+            X = Fmt(cell.Left + x * cell.Width),
+            Y = Fmt(cell.Top + (y - extent.Top) * k),
+            Anchor = AnchorName(ax, 1f - ay),
+            Width  = p.Width  is { } w ? Fmt(Pct(w, 0.2f) * cell.Width) : null,
+            Height = p.Height is { } h ? Fmt(Pct(h, 0.2f) * k) : null,
+        };
+    }
+
+    private static PlaceDefinition PullTowardMiddle(PlaceDefinition p, float k) => new()
+    {
+        X = p.X, Y = Fmt(0.5f + (Pct(p.Y, 0.5f) - 0.5f) * k),
+        Anchor = p.Anchor, Width = p.Width, Height = p.Height,
+    };
+
     private static Seat SeatOf(GameState state, List<Seat> seats, string ownerId)
     {
         int idx = state.Players.FindIndex(p => p.Id == ownerId);
@@ -266,16 +475,31 @@ public static class DeclaredLayoutEngine
         ["seat-play"]     = P("50%", "70%", "center", "12%", "12%"),
     };
 
+    /// <summary>Regions that differ on a phone held upright; the rest are as above.</summary>
+    private static readonly Dictionary<string, PlaceDefinition> PortraitRegions = new()
+    {
+        ["center"]       = P("50%", "50%", "center", "26%", "13%"),
+        ["center-left"]  = P("21%", "50%", "center", "14%", "13%"),
+        ["center-right"] = P("79%", "50%", "center", "14%", "13%"),
+    };
+
     private static PlaceDefinition P(string x, string y, string anchor, string w, string h)
         => new() { X = x, Y = y, Anchor = anchor, Width = w, Height = h };
 
-    private static (PlaceDefinition Place, string? Region) ResolvePlace(Zone zone, bool owned)
+    private static (PlaceDefinition Place, string? Region) ResolvePlace(Zone zone, bool owned, bool portrait)
     {
         var layout = zone.Definition?.Layout;
+
+        // A phone held upright takes the definition's portrait layout where it gives one.
+        if (portrait && layout?.Portrait is { } tall) layout = tall;
 
         if (layout?.Place is { } exact) return (exact, null);
 
         string region = layout?.Region ?? DefaultRegion(zone, owned);
+
+        // Upright, the centre band is shorter — still a card's height and more — so the
+        // compass of trick spots can close in around it.
+        if (portrait && PortraitRegions.TryGetValue(region, out var upright)) return (upright, region);
         return (Regions.TryGetValue(region, out var p) ? p : Regions["center"], region);
     }
 

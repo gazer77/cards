@@ -64,12 +64,14 @@ public static class DefinitionValidator
             if (zone.Layout is { } layout)
             {
                 bool owned = zone.Owner is "each_player" or "each_team";
-                if (layout.Region is { } region && !KnownRegion(region, owned))
-                    problems.Add($"zone '{zone.Id}'.layout: region '{region}' is not a region "
-                               + (owned ? "an owned zone can use." : "a shared zone can use."));
-                if (layout.Region is null && layout.Place is null)
-                    problems.Add($"zone '{zone.Id}'.layout: give a region or a place.");
-                ValidatePlace($"zone '{zone.Id}'.layout", layout.Place, problems);
+                ValidateLayout($"zone '{zone.Id}'.layout", layout, owned, problems);
+
+                if (layout.Portrait is { } portrait)
+                {
+                    ValidateLayout($"zone '{zone.Id}'.layout.portrait", portrait, owned, problems);
+                    if (portrait.Portrait is not null)
+                        problems.Add($"zone '{zone.Id}'.layout.portrait: a portrait layout has no portrait of its own.");
+                }
             }
         }
 
@@ -258,6 +260,16 @@ public static class DefinitionValidator
 
         if (m.Suit is { } suit && !Enum.TryParse<Suit>(suit, ignoreCase: true, out _))
             problems.Add($"{where}: suit '{suit}' is not a suit.");
+    }
+
+    private static void ValidateLayout(string where, ZoneLayoutDefinition layout, bool owned, List<string> problems)
+    {
+        if (layout.Region is { } region && !KnownRegion(region, owned))
+            problems.Add($"{where}: region '{region}' is not a region "
+                       + (owned ? "an owned zone can use." : "a shared zone can use."));
+        if (layout.Region is null && layout.Place is null)
+            problems.Add($"{where}: give a region or a place.");
+        ValidatePlace(where, layout.Place, problems);
     }
 
     private static void ValidatePlace(string where, PlaceDefinition? place, List<string> problems)

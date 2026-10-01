@@ -435,6 +435,46 @@ in the front band stops at the bottom seat's melds. A test lays out every shippe
 every seat count it advertises and fails if any zone is off the table or two overlap; a
 `TABLE_SHEET=1` test run renders every table to PNG for looking at.
 
+#### Upright: a phone held in portrait
+
+A table taller than it is wide — a phone held upright — is seated differently. Laid out
+like a desktop, its side seats came out as slivers down the edges and the height of the
+screen went unused. Upright:
+
+- **You** keep the bottom edge, exactly as written.
+- **Every other player** sits across the top, in a **cell** of their own: one full-width
+  row each, or two or three to a row — whichever gives their cards the most room. A
+  cell holds what that seat's zones use, turned end over end (the hand at the outer
+  edge, as across a table) but not mirrored, and scaled to fill it: a Hearts seat that is
+  only a hand fills its row with the hand.
+- **Another team's** spread or grid — Hand and Foot's melds — gets a full-width row of its
+  own, below the players and above the middle, two and a half times a player's row. A
+  team that owns only piles keeps them beside its first player.
+- **A seat with a role** — Blackjack's dealer — gets a full-width row nearest the middle,
+  twice a player's.
+- **Tricks** (`type: "trick"`, or region `seat-play`) stay in the compass around the
+  middle, drawn in towards it; the `center` regions are shorter (13% of the height) to
+  make room for them.
+
+Where a zone should go somewhere else upright, its `layout` says so with `portrait` — a
+region or place of its own, in the same bottom-seat terms, used only on an upright table:
+
+```json
+{ "id": "meld", "type": "spread", "owner": "each_team",
+  "layout": { "place": { "x": "50%", "y": "75%", "anchor": "center", "width": "72%", "height": "20%" },
+              "portrait": { "place": { "x": "50%", "y": "71%", "anchor": "center", "width": "96%", "height": "28%" } } } }
+```
+
+A strip that is narrow on a phone wraps its slots into more rows when it is given the
+height. What the shipped games use it for: Hand and Foot's melds (the full width, two rows
+of slots), Pinochle's melds (a strip in front of the hand rather than a fifth of the
+width), Golf's drawn card (beside the grid, so a cell is only a grid tall), Blackjack's
+split hand (beside the hand), Poker's community cards (the width between deck and pot).
+A `portrait` is checked like the layout it sits in, and has no `portrait` of its own.
+
+A test lays out every game at every seat count upright as well as on a desktop, and the
+`TABLE_SHEET=1` run renders both.
+
 Defaults when a zone says nothing: shared zones go to `center`; hands to `seat`; a foot to
 `seat-corner`; melds, tables and grids to `seat-front`; tricks and play spots to
 `seat-play`; anything else owned to `seat-side`. An unknown region, a region of the wrong kind (a shared zone asking for

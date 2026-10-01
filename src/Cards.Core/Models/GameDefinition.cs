@@ -817,6 +817,14 @@ public class ZoneLayoutDefinition
 
     [JsonPropertyName("place")]
     public PlaceDefinition? Place { get; set; }
+
+    /// <summary>
+    /// Where the zone goes instead when the table is taller than it is wide — a phone held
+    /// upright — as a region or a place of its own. Omitted, the zone keeps its place and
+    /// the table seats everyone for the shape by itself.
+    /// </summary>
+    [JsonPropertyName("portrait")]
+    public ZoneLayoutDefinition? Portrait { get; set; }
 }
 
 /// <summary>
