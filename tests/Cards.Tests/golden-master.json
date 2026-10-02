@@ -67,5 +67,8 @@
   "spades/4p/seed20260827": "DA47FEA45F9CB8B5368A4442EE1ED386 steps=1277 over=True phase=game_over",
   "war/2p/seed1": "C5E5202B928F78E84D7EB5F9FF8E9AB9 steps=1409 over=True phase=game_over",
   "war/2p/seed12648430": "B06284264D431D26D2881D9BA1EE2449 steps=1423 over=True phase=game_over",
-  "war/2p/seed20260827": "6848F03E9E9222B18978DF80D141D140 steps=257 over=True phase=game_over"
+  "war/2p/seed20260827": "6848F03E9E9222B18978DF80D141D140 steps=257 over=True phase=game_over",
+  "whist/4p/seed1": "7BC4B712605ADD74ECCE137251983664 steps=468 over=True phase=game_over",
+  "whist/4p/seed12648430": "EC0DB903BC83EDE007E8547B005C57B2 steps=468 over=True phase=game_over",
+  "whist/4p/seed20260827": "F50595BD09885950EF97CA0D127488B2 steps=267 over=True phase=game_over"
 }

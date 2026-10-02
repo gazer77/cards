@@ -77,7 +77,7 @@ public static class DefinitionAudit
     public static readonly string[] ScoringKeys =
     [
         "accumulate", "bag_penalty", "bid_set_penalty", "blind_nil", "bonus_cards", "book_size",
-        "card_values", "count_by", "count_from", "euchred", "evaluator", "face_down_penalty",
+        "book", "card_values", "count_by", "count_from", "euchred", "evaluator", "face_down_penalty",
         "gin_bonus", "go_out_bonus", "grid", "knock_bonus", "last_trick_bonus", "loner_win",
         "makers_win", "matching_columns", "natural_canasta_bonus", "nil", "per_bid_trick",
         "red_three_penalty", "shoot_the_moon", "special", "trick_points", "undercut_bonus",

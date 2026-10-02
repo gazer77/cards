@@ -636,7 +636,9 @@ Core trick-taking loop. Runs until all hands are empty (or a configured limit).
 }
 ```
 
-`trump`: `null` | `"spades"` | `"bid_result"` | `"turn_up"` | `"bidder_choice"`
+`trump`: `null` | `"spades"` | `"bid_result"` | `"turn_up"` | `"bidder_choice"` | `"last_dealt"`
+
+`"last_dealt"` (Whist): the suit of the last card dealt is trumps. The card stays in the hand it was dealt to, and that player says it at the table ("Mae turned up the 7 of Hearts — Hearts are trumps.", message key `trump_turned`) when the first trick of each deal begins.
 
 `winner`: `"highest"` | `"highest_trump_then_lead"`
 
@@ -1348,6 +1350,7 @@ All types are dispatched by `ScoringEngine.Apply(state)`, called from the `score
 | `grid_values` | Implemented | Golf |
 | `blackjack` | Implemented | Blackjack |
 | `euchre` | Implemented | Euchre |
+| `tricks_over_book` | Implemented | Whist |
 | `deadwood` | Implemented | Gin Rummy |
 | `meld_points` | Implemented | Hand and Foot |
 | `pinochle` | Implemented | Pinochle |
@@ -1397,6 +1400,12 @@ Score based on tricks bid vs. tricks won.
   "accumulate": true,
   "count_by": "team"
 }
+```
+
+### `tricks_over_book`
+Whist. The first `book` tricks a side takes (default 6) score nothing; each trick over the book scores one.
+```json
+"scoring": { "type": "tricks_over_book", "book": 6, "count_by": "team", "accumulate": true }
 ```
 
 ### `hand_rank`

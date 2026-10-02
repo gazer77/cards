@@ -7,7 +7,7 @@ namespace Cards.Engine;
 /// Phase handler for trick-taking games (Hearts, Spades, Euchre, Pinochle).
 ///
 /// Phase definition parameters:
-///   trump              — "spades" | "hearts" | null | "bid_result"
+///   trump              — "spades" | "hearts" | null | "bid_result" | "last_dealt" (Whist)
 ///                        "bid_result" reads state.Metadata["bid_trump"]
 ///   lead               — "left_of_dealer" (default) | "current_player" (honour preceding phase's active player, e.g. Pinochle bid winner)
 ///   follow_suit        — true (default) | false
@@ -375,8 +375,31 @@ public sealed class TrickTakingHandler : IPhaseHandler
             null or "null" or "none" => "",
             "bid_result" or "turn_up" or "bidder_choice"
                 => state.Metadata.GetValueOrDefault("bid_trump", ""),
+            // Whist: the last card dealt is turned up, and its suit is trumps.
+            "last_dealt" => LastDealtCard(state)?.Suit.ToString().ToLowerInvariant() ?? "",
             var suit => suit,
         };
+    }
+
+    private static Card? LastDealtCard(GameState state)
+        => state.Metadata.GetValueOrDefault("deal_last_card") is { } id
+            ? state.Zones.Values.SelectMany(z => z.Cards).FirstOrDefault(c => c.Id == id)
+            : null;
+
+    /// <summary>
+    /// Says, once a deal, which card turned up trumps and who it was dealt to — the table
+    /// saw it turned over, and the log should say so before anyone plays to it.
+    /// </summary>
+    private void AnnounceTurnedTrump(GameState state)
+    {
+        if (_trumpConfig?.ToLower() != "last_dealt") return;
+        string round = state.RoundNumber.ToString();
+        if (state.Metadata.GetValueOrDefault("trump_turned_round") == round) return;
+        if (LastDealtCard(state) is not { } card || state.Metadata.GetValueOrDefault("deal_last_player") is not { } to) return;
+
+        state.Metadata["trump_turned_round"] = round;
+        GameText.Announce(state, to, "trump_turned", "{player} turned up the {card} — {suit} are trumps.",
+                          ("card", GameText.CardName(card)), ("suit", card.Suit.ToString()));
     }
 
     // ── First-leader determination ────────────────────────────────────────────
@@ -547,6 +570,7 @@ public sealed class TrickTakingHandler : IPhaseHandler
 
     private void UpdateStatus(GameState state)
     {
+        AnnounceTurnedTrump(state);
         string trump   = ResolveTrump(state);
         state.Metadata["status"] = string.IsNullOrEmpty(trump)
             ? GameText.Message(state, "turn", "{player}'s turn", state.CurrentPlayer.Id)

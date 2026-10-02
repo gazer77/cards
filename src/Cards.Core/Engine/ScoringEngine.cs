@@ -51,6 +51,10 @@ public static class ScoringEngine
                 ApplyEuchre(state, scoring);
                 break;
 
+            case "tricks_over_book":
+                ApplyTricksOverBook(state, scoring);
+                break;
+
             case "deadwood":
                 ApplyDeadwood(state, scoring);
                 break;
@@ -483,6 +487,42 @@ public static class ScoringEngine
         {
             WriteSummary(state, roundScores);
         }
+    }
+
+    // ── tricks_over_book ──────────────────────────────────────────────────────
+    // Whist: the first six tricks a side takes are its "book" and score nothing; each
+    // trick over the book — an "odd trick" — scores one.
+
+    private static void ApplyTricksOverBook(GameState state, ScoringDefinition scoring)
+    {
+        int  book   = GetInt(scoring, "book") ?? 6;
+        bool byTeam = string.Equals(GetString(scoring, "count_by"), "team", StringComparison.OrdinalIgnoreCase)
+                      && state.Teams.Count > 0;
+
+        var sides = byTeam
+            ? state.Teams.Select(t => (Key: t.Id, Name: t.Name, Players: t.PlayerIds.ToList())).ToList()
+            : state.Players.Select(p => (Key: p.Id, Name: p.Name, Players: new List<string> { p.Id })).ToList();
+
+        var round  = new Dictionary<string, int>();
+        var tricks = new Dictionary<string, int>();
+        foreach (var side in sides)
+        {
+            int taken = side.Players.Sum(pid => GetTricksTaken(state, pid));
+            int odd   = Math.Max(0, taken - book);
+            tricks[side.Key] = taken;
+            round[side.Key]  = odd;
+            if (odd > 0) state.AddScore(side.Key, odd);
+        }
+
+        string summary = GameText.PerViewer(state, viewer => string.Join("  |  ", sides.Select(side =>
+        {
+            string name = viewer is not null && side.Players.Contains(viewer)
+                ? (byTeam ? "Your team" : "You") : side.Name;
+            return $"{name}: {tricks[side.Key]} tricks, +{round[side.Key]} = {state.GetScore(side.Key)}";
+        })));
+        state.Metadata["status"]        = summary;
+        state.Metadata["score_summary"] = summary;
+        state.ScoreHistory.Add(new ScoreRound(state.RoundNumber, round));
     }
 
     private static int GetTricksTaken(GameState state, string playerId)

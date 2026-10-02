@@ -83,6 +83,18 @@ public sealed class StandardDealEngine : IDealStrategy
                 DealClockwise(state, playerCount, cardsPerPlayer, def?.Face, deckZone, steps, byPlayer);
         }
 
+        // The last card dealt, and to whom: Whist turns it up for trumps. Kept only for a
+        // game that reads it, so no other game's state carries it.
+        bool turnsUpLast = state.Definition.Phases.Any(p =>
+            p.Extra?.TryGetValue("trump", out var t) == true && t.ValueKind == System.Text.Json.JsonValueKind.String
+            && t.GetString() == "last_dealt");
+        if (turnsUpLast && steps.Count > 0 && byPlayer[steps[^1].PlayerIndex] is { Count: > 0 } lastHand
+            && state.Zones.Values.SelectMany(z => z.Cards).FirstOrDefault(c => c.Uid == lastHand[^1]) is { } last)
+        {
+            state.Metadata["deal_last_card"]   = last.Id;
+            state.Metadata["deal_last_player"] = state.Players[steps[^1].PlayerIndex].Id;
+        }
+
         // Move undealt cards out of the deck if requested.
         if (def?.RemainderTo is { Length: > 0 } remTo && remTo != "deck")
         {

@@ -78,7 +78,7 @@ when they require a phase type that doesn't exist yet.
 - [x] High Card *(not in the original plan; simple flip-compare game)*
 - [x] Free Play *(not in the original plan; sandbox table with no rules enforcement)*
 - [ ] Cribbage — rules text exists at `games/help/cribbage.md`, no game definition
-- [ ] Whist — rules text exists at `games/help/whist.md`, no game definition
+- [x] Whist — partnerships, the last card dealt turned up for trumps (`trump: "last_dealt"`), a point a trick over six (`tricks_over_book`), first dealer by low card, to 7 (Short Whist house rule: 5). Honours are not counted.
 
 > Note: `cribbage.md` and `whist.md` were produced as a side effect of `tools/ExtractHoyle`,
 > which scrapes the Gutenberg Hoyle text into `games/help/`. They are not evidence of
@@ -349,6 +349,15 @@ See `docs/shared-tables.md`.
       (`GameState.BotNames`), so the engine's own seeded runs stay "Bot 1", "Bot 2". Saves
       keep everyone's names, so a resumed game's log still matches its table. Plain
       names for now — bot-flavoured ones ("Robo Rita", "Deal-E") would be a list change.
+- [ ] **Backlog: sign in with Google and Facebook** — deferred until the server has a public
+      domain: providers only redirect to registered HTTPS URLs (localhost aside), and
+      cards.local is neither. Each needs an app registration (Google OAuth client;
+      Facebook app with a privacy policy and data-deletion page), the secrets kept on the
+      server (`EnvironmentFile=`), and the server doing the sign-in so no client holds a
+      key — cookie for the web app, `WebAuthenticator` and a server-issued token for the
+      phone app. Guests stay as they are. Unlocks bans that stick, seats that follow a
+      person between devices, and reopening a table with the same people. An iOS app
+      offering it must offer Sign in with Apple too.
 - [ ] **Backlog: kicking and banning** — the host removes someone from the table: in the
       lobby the seat opens again; during play it goes to the computer, as when someone
       leaves, and the seat's token is revoked so they cannot rejoin it. Banning keeps them

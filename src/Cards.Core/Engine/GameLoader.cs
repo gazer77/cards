@@ -21,6 +21,7 @@ public class GameLoader
         "blackjack",
         "hearts",
         "spades",
+        "whist",
         "gin-rummy",
         "golf",
         "poker",
