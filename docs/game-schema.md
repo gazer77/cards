@@ -146,7 +146,29 @@ appears on the score card, and is never ranked by the win condition. `count` (de
 
 `dealer`: `"rotates_left"` (default) | `"rotates_right"` | `"winner"` | `"loser"` | `"alternates"`
 
-`first_dealer`: `"random"` (default) | `"high_card"` (not yet implemented — falls back to random)
+`first_dealer`: who deals the first hand. A word, or a rule:
+
+| Value | The table |
+|---|---|
+| `"random"` (default) | picks a seat |
+| `"high_card"` | deals everyone a card face up from the first seat round; the highest deals (aces high), and the tied draw again |
+| `"low_card"` | the same, lowest deals (aces low) |
+| `{ "deal_until": { card } }` | deals face up round the table from the first seat until a card matches; whoever gets it deals |
+
+The card is a [card match](#on_receive--rules-that-fire-as-cards-arrive) — `rank`, `color`,
+`suit`, `wild`:
+
+```json
+"first_dealer": { "deal_until": { "rank": "J" } }                     // Euchre: the first jack
+"first_dealer": { "deal_until": { "rank": "A", "color": "black" } }   // the first black ace
+```
+
+The cards come from a fresh shuffle of the game's own deck and go back before the deal.
+Every card dealt is in the log ("Mae drew the 7 of Hearts"), and the dealer says so at
+the table ("Mae drew the Jack of Clubs and deals first."), under the message keys
+`log_dealt_for_deal` and `first_dealer`. A role seat (Blackjack's dealer) is the house and
+is not dealt to. An unknown word, or a `deal_until` naming no card, fails the definition.
+Euchre deals to the first jack and Poker to the first ace; the rest pick at random.
 
 ### How multi-round games work
 

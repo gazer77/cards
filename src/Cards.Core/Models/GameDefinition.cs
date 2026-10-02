@@ -674,11 +674,63 @@ public class RoundsDefinition
     public string Dealer { get; set; } = "rotates_left";
 
     /// <summary>
-    /// How the initial dealer is chosen.
-    /// <c>"random"</c> (default) | <c>"high_card"</c>
+    /// How the initial dealer is chosen: a word — <c>"random"</c> (default),
+    /// <c>"high_card"</c>, <c>"low_card"</c> — or a rule,
+    /// <c>{ "deal_until": { "rank": "J" } }</c>.
     /// </summary>
     [JsonPropertyName("first_dealer")]
-    public string FirstDealer { get; set; } = "random";
+    public FirstDealerDefinition FirstDealer { get; set; } = new();
+}
+
+/// <summary>
+/// How the table settles who deals first. <c>random</c> picks a seat. The others deal
+/// for it, the way a table does, face up and one at a time from the first seat round:
+/// <c>high_card</c> and <c>low_card</c> give everyone a card and the highest (aces high)
+/// or lowest (aces low) deals, ties dealing again; <c>deal_until</c> deals round until a
+/// card matches — the first jack in Euchre, the first black ace — and whoever gets it deals.
+///
+/// Written as a word for the first three, or as <c>{ "deal_until": { card } }</c>.
+/// </summary>
+[JsonConverter(typeof(FirstDealerConverter))]
+public class FirstDealerDefinition
+{
+    /// <summary><c>random</c>, <c>high_card</c>, <c>low_card</c> or <c>deal_until</c>.</summary>
+    public string Mode { get; set; } = "random";
+
+    /// <summary>The card that makes its receiver the dealer, for <c>deal_until</c>.</summary>
+    [JsonPropertyName("deal_until")]
+    public CardMatch? DealUntil { get; set; }
+}
+
+/// <summary>Reads <c>first_dealer</c> as a word or as a rule.</summary>
+public sealed class FirstDealerConverter : JsonConverter<FirstDealerDefinition>
+{
+    public override FirstDealerDefinition Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+            return new FirstDealerDefinition { Mode = reader.GetString() ?? "random" };
+
+        using var doc = JsonDocument.ParseValue(ref reader);
+        var rule = new FirstDealerDefinition { Mode = "" };
+        foreach (var p in doc.RootElement.EnumerateObject())
+        {
+            if (p.Name == "deal_until")
+            {
+                rule.Mode      = "deal_until";
+                rule.DealUntil = p.Value.Deserialize<CardMatch>(options);
+            }
+        }
+        return rule;
+    }
+
+    public override void Write(Utf8JsonWriter writer, FirstDealerDefinition value, JsonSerializerOptions options)
+    {
+        if (value.Mode != "deal_until") { writer.WriteStringValue(value.Mode); return; }
+        writer.WriteStartObject();
+        writer.WritePropertyName("deal_until");
+        JsonSerializer.Serialize(writer, value.DealUntil, options);
+        writer.WriteEndObject();
+    }
 }
 
 /// <summary>

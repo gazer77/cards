@@ -8,7 +8,8 @@
   "teams": false,
   "rounds": {
     "repeat_until": "win_condition",
-    "dealer": "rotates_left"
+    "dealer": "rotates_left",
+    "first_dealer": { "deal_until": { "rank": "A" } }
   },
   "blinds": {
     "small": { "position": "left_of_dealer",       "amount": 1 },

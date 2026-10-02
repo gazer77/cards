@@ -491,6 +491,7 @@ public sealed class TrickLogTests
 
         string bidder = state.CurrentPlayer.Id;
         var turned = state.Zones["kitty"].TopCard!;
+        state.Announcements.Clear();   // the deal for the deal is said at the start; this is about the bid
         logic.Apply(state, new GameAction("bid_accept"));
 
         string suit = turned.Suit.ToString();

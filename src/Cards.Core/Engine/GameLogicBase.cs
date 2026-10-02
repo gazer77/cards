@@ -1,3 +1,5 @@
+using Cards.Models;
+
 namespace Cards.Engine;
 
 /// <summary>
@@ -176,17 +178,83 @@ public abstract class GameLogicBase : IGameLogic
     // ── Dealer helpers ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Assigns the initial dealer from the game definition's
-    /// <c>rounds.first_dealer</c> setting.  Falls back to player 0.
+    /// Assigns the initial dealer from the game definition's <c>rounds.first_dealer</c>:
+    /// a random seat, or a deal for the deal (<see cref="DealForTheDeal"/>).
     /// </summary>
     protected static void AssignInitialDealer(GameState state)
     {
         if (state.Players.Count == 0) return;
-        var firstDealer = state.Definition.Rounds?.FirstDealer ?? "random";
-        int idx = firstDealer == "random"
-            ? state.Rng.Next(state.Players.Count)
-            : 0;
-        state.DealerId = state.Players[idx].Id;
+        var rule = state.Definition.Rounds?.FirstDealer ?? new FirstDealerDefinition();
+
+        var dealer = rule.Mode == "random"
+            ? state.Players[state.Rng.Next(state.Players.Count)]
+            : DealForTheDeal(state, rule);
+        state.DealerId = dealer.Id;
+    }
+
+    /// <summary>
+    /// Deals for the deal, as a table does: a fresh shuffled deck of the game's cards,
+    /// one card face up to each player in turn from the first seat. <c>high_card</c> and
+    /// <c>low_card</c> give everyone one and the highest (aces high) or lowest (aces low)
+    /// deals, the tied dealing again; <c>deal_until</c> goes round until a card matches.
+    ///
+    /// Every card is written to the log, so the table can see how the dealer was chosen,
+    /// and the dealer says so. The cards go back: the game's own deal is shuffled fresh.
+    /// A role seat — Blackjack's dealer — is the house and takes no part.
+    /// </summary>
+    private static Player DealForTheDeal(GameState state, FirstDealerDefinition rule)
+    {
+        var seated = state.Players.Where(p => p.Role is null).ToList();
+        if (seated.Count == 0) return state.Players[0];
+
+        var deck = DeckBuilder.Build(state.Definition, seated.Count);
+        DeckBuilder.Shuffle(deck, state.Rng);
+        var wilds = MeldRules.WildRanks(state.Definition);
+        int next  = 0;
+
+        Card? Deal(Player p)
+        {
+            if (next >= deck.Count) return null;
+            var card = deck[next++];
+            GameText.Log(state, "log_dealt_for_deal", "{player} drew the {card}", p.Id,
+                         ("card", GameText.CardName(card)));
+            return card;
+        }
+
+        Player Chosen(Player p, Card card)
+        {
+            GameText.Announce(state, p.Id, "first_dealer", "{player} drew the {card} and deals first.",
+                              ("card", GameText.CardName(card)));
+            return p;
+        }
+
+        if (rule.Mode == "deal_until" && rule.DealUntil is { } match)
+        {
+            // Round and round until the card turns up. A deck with none of it — a match
+            // that cannot be met — ends with the deck, and the first seat deals.
+            for (int i = 0; next < deck.Count; i++)
+            {
+                var p = seated[i % seated.Count];
+                if (Deal(p) is { } card && ZoneIntake.Matches(match, card, wilds)) return Chosen(p, card);
+            }
+            return seated[0];
+        }
+
+        // High or low card: everyone draws, and the tied draw again until one stands out.
+        bool high = rule.Mode != "low_card";
+        int Value(Card c) => c.Rank == Rank.Ace && !high ? 1 : (int)c.Rank;
+
+        var drawing = seated;
+        while (true)
+        {
+            var drawn = drawing.Select(p => (Player: p, Card: Deal(p))).ToList();
+            if (drawn.Any(d => d.Card is null)) return drawing[0];   // out of cards: the first of them
+
+            int best = high ? drawn.Max(d => Value(d.Card!)) : drawn.Min(d => Value(d.Card!));
+            var tied = drawn.Where(d => Value(d.Card!) == best).ToList();
+            if (tied.Count == 1) return Chosen(tied[0].Player, tied[0].Card!);
+            drawing = tied.Select(d => d.Player).ToList();
+        }
     }
 
     /// <summary>

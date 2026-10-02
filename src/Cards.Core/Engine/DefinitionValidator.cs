@@ -75,6 +75,15 @@ public static class DefinitionValidator
             }
         }
 
+        if (definition.Rounds?.FirstDealer is { } first)
+        {
+            if (first.Mode is not ("random" or "high_card" or "low_card" or "deal_until"))
+                problems.Add($"rounds.first_dealer: '{first.Mode}' is not random, high_card, low_card or a deal_until rule.");
+            else if (first.Mode == "deal_until"
+                     && first.DealUntil is not { Rank: not null } and not { Color: not null } and not { Suit: not null } and not { Wild: not null })
+                problems.Add("rounds.first_dealer: deal_until names no card — give a rank, color, suit or wild.");
+        }
+
         foreach (var phase in definition.Phases)
             ValidatePhase(phase, problems);
 

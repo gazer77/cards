@@ -228,6 +228,8 @@ public sealed class RoomService(
                                                            ^ (ulong)RandomNumberGenerator.GetInt32(int.MaxValue)),
                 // People are named from the first line the table writes.
                 SeatNames = room.Seats.Select(s => s.IsComputer ? null : s.Name).ToList(),
+                // And the computer's seats too, never with a name someone is sitting under.
+                BotNames  = BotNames.Pick(room.PlayerCount, room.Seats.Where(s => !s.IsComputer).Select(s => s.Name), new Random()),
             };
             var logic = LogicRegistry.Create(room.Definition);
             logic.Initialize(state, room.PlayerCount, room.Rules);

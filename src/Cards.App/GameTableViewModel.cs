@@ -359,6 +359,10 @@ public sealed class GameTableViewModel
         if (!restored)
         {
             if (PlayerName is { Length: > 0 } me) state.SeatNames = [me];
+
+            // The computer's seats get names, never yours; a seeded game names them the same each time.
+            state.BotNames = BotNames.Pick(playerCount, [PlayerName],
+                                           seed is { } s ? new Random(unchecked((int)s)) : new Random());
             logic.Initialize(state, playerCount, _enabledRules);
             SlotId = null;   // a fresh game gets its own slot on first save
         }

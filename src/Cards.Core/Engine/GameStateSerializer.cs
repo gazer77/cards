@@ -29,6 +29,7 @@ public static class GameStateSerializer
                 .Select(r => new SavedScoreRound { Round = r.Round, Scores = new(r.Scores) })
                 .ToList(),
             GameLog      = [.. state.GameLog],
+            PlayerNames  = state.Players.Select(p => p.Name).ToList(),
             Zones        = state.Zones.Values.Select(z => new SavedZone
             {
                 Id         = z.Id,
@@ -88,6 +89,11 @@ public static class GameStateSerializer
         state.ConfigurationName = dto.Configuration;
 
         logic.Initialize(state, playerCount, enabledRules);
+
+        // The names the game was played under, which its log already uses.
+        if (dto.PlayerNames.Count == state.Players.Count)
+            for (int i = 0; i < state.Players.Count; i++)
+                state.Players[i].Name = dto.PlayerNames[i];
 
         var initZones = new Dictionary<string, Zone>(state.Zones);
 

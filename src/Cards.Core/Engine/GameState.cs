@@ -108,6 +108,15 @@ public class GameState
     public IReadOnlyList<string?>? SeatNames { get; set; }
 
     /// <summary>
+    /// Names for the computer's seats, in seat order, set before the deal by whoever
+    /// hosts the table (see <see cref="Cards.Engine.BotNames"/>). Null leaves them
+    /// "Bot 1", "Bot 2" — which is what the engine's own runs and tests use, so a name
+    /// never changes what a seeded game does.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<string>? BotNames { get; set; }
+
+    /// <summary>
     /// Whose eyes the table is drawn for. Null means seat 0 — the person at a
     /// single-player screen. A view built for one seat of a shared game sets it, and
     /// everything that means "you" (the bottom of the table, which hand is face up,

@@ -110,7 +110,7 @@ public static class ZoneIntake
         return state.FindZone(baseId);
     }
 
-    private static bool Matches(CardMatch? match, Card card, HashSet<Rank> wilds)
+    internal static bool Matches(CardMatch? match, Card card, HashSet<Rank> wilds)
     {
         if (match is null) return false;
 

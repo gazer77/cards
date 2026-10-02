@@ -24,6 +24,13 @@ public sealed class SavedGameState
     public List<SavedScoreRound>      ScoreHistory { get; set; } = [];
     public List<string>   GameLog  { get; set; } = [];
     public List<SavedZone> Zones   { get; set; } = [];
+
+    /// <summary>
+    /// Everyone's name, by seat. The log already says "Mae drew a card"; a game resumed
+    /// with the computer renamed would have Mae in the log and Ezra at the table. Empty
+    /// on saves written before names were kept, which keep the names they are dealt.
+    /// </summary>
+    public List<string>   PlayerNames { get; set; } = [];
 }
 
 public sealed class SavedZone

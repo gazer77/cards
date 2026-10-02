@@ -336,21 +336,19 @@ See `docs/shared-tables.md`.
       split and Poker's community cards each have one. The layout test checks every game
       upright; `TABLE_SHEET=1` renders phone tables too. Phones still double the small
       labels (`LabelScale`).
-- [ ] **Backlog: deal for the first dealer** — choose the first dealer the way a table
-      does: deal cards face up round the table until one turns up the card the game
-      names. Poker commonly deals to the first ace (or the first black ace); Euchre to
-      the first jack (often the first black jack). Declared in the definition — say
-      `rounds.first_dealer: { "deal_until": { "rank": "J", "color": "black" } }` — beside
-      today's `random` and `high_card`, using the card matches definitions already use.
-      The deal should be shown (cards flying out one seat at a time until the one that
-      decides it), logged ("Ana deals — first black jack"), and then gathered back before
-      the real shuffle.
-- [ ] **Backlog: bot names** — computer seats are "Bot 1", "Bot 2"… today. A list of names
-      to draw from instead, bot-flavoured where it is fun ("Botticelli", "Robo Rita",
-      "Chip", "Deal-E", "Ace-9000") and plain elsewhere, never repeating at one table and
-      never taking a seated person's name. Worth deciding: one list for every game or a
-      game-specific flavour in the definition (`players.bot_names`), and whether bots
-      keep their names across a session.
+- [x] **Deal for the first dealer** — `rounds.first_dealer` is `random`, `high_card`,
+      `low_card`, or `{ "deal_until": { card } }`: a fresh shuffle dealt face up round the
+      table from the first seat until the card turns up (ties redeal for high and low).
+      Every card is in the log and the dealer says so at the table. Euchre deals to the
+      first jack, Poker to the first ace.
+- [ ] **Backlog: show the deal for the deal** — the cards are logged and the dealer
+      announced, but not dealt on the table: they should fly out one seat at a time until
+      the one that decides it, then be gathered back before the real shuffle.
+- [x] **Bot names** — computer seats draw from a pool of short names (`BotNames`),
+      never repeating at a table and never a seated person's name; the host picks them
+      (`GameState.BotNames`), so the engine's own seeded runs stay "Bot 1", "Bot 2". Saves
+      keep everyone's names, so a resumed game's log still matches its table. Plain
+      names for now — bot-flavoured ones ("Robo Rita", "Deal-E") would be a list change.
 - [ ] **Backlog: kicking and banning** — the host removes someone from the table: in the
       lobby the seat opens again; during play it goes to the computer, as when someone
       leaves, and the seat's token is revoked so they cannot rejoin it. Banning keeps them

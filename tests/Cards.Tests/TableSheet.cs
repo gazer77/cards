@@ -24,13 +24,13 @@ public sealed class TableSheet
     /// drawn at the web client's 1.5 pixel cap, with its labels doubled as a phone has them.
     /// The footer floats over the bottom 4.4rem; the table is laid out above it.
     /// </summary>
-    public static readonly (int W, int H, float BottomInset, float LabelScale, string Suffix)[] Screens =
+    internal static readonly (int W, int H, float BottomInset, float LabelScale, string Suffix)[] Screens =
     [
         (1400, 900,  70f, 1f, ""),
         (585,  1185, 106f, 2f, "-phone"),
     ];
 
-    public static void Paint(GameState state, (int W, int H, float BottomInset, float LabelScale, string Suffix) screen, string path)
+    internal static void Paint(GameState state, (int W, int H, float BottomInset, float LabelScale, string Suffix) screen, string path)
     {
         var renderer = new CardTableRenderer(new StubDriver())
         {
