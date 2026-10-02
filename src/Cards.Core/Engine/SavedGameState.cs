@@ -31,6 +31,9 @@ public sealed class SavedGameState
     /// on saves written before names were kept, which keep the names they are dealt.
     /// </summary>
     public List<string>   PlayerNames { get; set; } = [];
+
+    /// <summary>How well the computer plays; normal on saves from before levels existed.</summary>
+    public string?        Difficulty  { get; set; }
 }
 
 public sealed class SavedZone

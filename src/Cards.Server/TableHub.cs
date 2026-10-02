@@ -12,8 +12,8 @@ namespace Cards.Server;
 /// </summary>
 public sealed class TableHub(RoomService rooms) : Hub
 {
-    public Task<SeatTicket> CreateRoom(string gameId, int playerCount, List<string> rules, string? configuration, string name, int dropTimeoutSeconds)
-        => rooms.CreateAsync(Context.ConnectionId, gameId, playerCount, rules ?? [], configuration, name, dropTimeoutSeconds);
+    public Task<SeatTicket> CreateRoom(string gameId, int playerCount, List<string> rules, string? configuration, string name, int dropTimeoutSeconds, string? difficulty)
+        => rooms.CreateAsync(Context.ConnectionId, gameId, playerCount, rules ?? [], configuration, name, dropTimeoutSeconds, difficulty);
 
     public Task<SeatTicket> JoinRoom(string code, string name)
         => rooms.JoinAsync(Context.ConnectionId, code, name);

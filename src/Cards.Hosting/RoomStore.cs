@@ -70,6 +70,7 @@ public sealed class SavedRoom
     public Dictionary<string, List<string>> Ballots { get; set; } = [];
     public Dictionary<string, bool> Forced { get; set; } = [];
     public int DropTimeoutSeconds { get; set; }
+    public string? Difficulty { get; set; }
     public List<SavedSeat> Seats { get; set; } = [];
 
     public DateTime LastActivity { get; set; }

@@ -39,12 +39,12 @@ public sealed class TableConnection(Uri hubUrl, ISettingsStore store) : IAsyncDi
 
     public async Task<SeatTicket> CreateAsync(
         string gameId, int players, IReadOnlyList<string> rules, string? configuration, string name,
-        int dropTimeoutSeconds = 60)
+        int dropTimeoutSeconds = 60, string? difficulty = null)
     {
         var hub = await HubAsync();
         Reset();
         Ticket = await hub.InvokeAsync<SeatTicket>(TableHubContract.CreateRoom,
-            gameId, players, rules.ToList(), configuration, name, dropTimeoutSeconds);
+            gameId, players, rules.ToList(), configuration, name, dropTimeoutSeconds, difficulty);
         Remember(Ticket);
         return Ticket;
     }

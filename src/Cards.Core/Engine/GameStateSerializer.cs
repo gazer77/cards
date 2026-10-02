@@ -30,6 +30,7 @@ public static class GameStateSerializer
                 .ToList(),
             GameLog      = [.. state.GameLog],
             PlayerNames  = state.Players.Select(p => p.Name).ToList(),
+            Difficulty   = state.Difficulty,
             Zones        = state.Zones.Values.Select(z => new SavedZone
             {
                 Id         = z.Id,
@@ -87,6 +88,9 @@ public static class GameStateSerializer
         // The shape first: Initialize resolves the definition down to it, so a saved
         // Stud game must say so before the table is built, or it is built as Hold'em.
         state.ConfigurationName = dto.Configuration;
+
+        // The level too, before Initialize seats the computer at it.
+        state.Difficulty = Difficulty.Of(dto.Difficulty);
 
         logic.Initialize(state, playerCount, enabledRules);
 

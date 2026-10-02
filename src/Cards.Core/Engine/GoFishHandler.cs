@@ -45,7 +45,7 @@ public sealed class GoFishHandler : IPhaseHandler
         // Computer seats ask the way a Go Fish player does, not the way a trick-taker
         // plays. A seat the engine gave a general agent gets this one instead.
         foreach (var id in state.PlayerAgents.Keys.ToList())
-            state.PlayerAgents[id] = new GoFishAiAgent(id);
+            state.PlayerAgents[id] = ComputerPlayers.Wrap(state, new GoFishAiAgent(id));
 
         foreach (var p in state.Players)
             CheckBooks(state, p.Id);

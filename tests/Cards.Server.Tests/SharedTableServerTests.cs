@@ -83,7 +83,7 @@ public sealed class SharedTableServerTests : IClassFixture<SharedTableServerTest
     private async Task<(Person Ana, Person Bo)> TwoAt(string gameId, int seats, int dropTimeout = 60)
     {
         var ana = await Connect();
-        ana.Ticket = await ana.Hub.InvokeAsync<SeatTicket>(TableHubContract.CreateRoom, gameId, seats, new List<string>(), (string?)null, "Ana", dropTimeout);
+        ana.Ticket = await ana.Hub.InvokeAsync<SeatTicket>(TableHubContract.CreateRoom, gameId, seats, new List<string>(), (string?)null, "Ana", dropTimeout, (string?)null);
 
         var bo = await Connect();
         bo.Ticket = await bo.Hub.InvokeAsync<SeatTicket>(TableHubContract.JoinRoom, ana.Ticket.Code, "Bo");
@@ -100,7 +100,7 @@ public sealed class SharedTableServerTests : IClassFixture<SharedTableServerTest
     public async Task People_take_seats_in_the_order_they_arrive()
     {
         var ana = await Connect();
-        ana.Ticket = await ana.Hub.InvokeAsync<SeatTicket>(TableHubContract.CreateRoom, "hearts", 4, new List<string>(), (string?)null, "Ana", 60);
+        ana.Ticket = await ana.Hub.InvokeAsync<SeatTicket>(TableHubContract.CreateRoom, "hearts", 4, new List<string>(), (string?)null, "Ana", 60, (string?)null);
         var bo = await Connect();
         bo.Ticket = await bo.Hub.InvokeAsync<SeatTicket>(TableHubContract.JoinRoom, ana.Ticket.Code.ToLowerInvariant(), "Bo");
 
@@ -119,7 +119,7 @@ public sealed class SharedTableServerTests : IClassFixture<SharedTableServerTest
     {
         var ana = await Connect();
         var ex = await Assert.ThrowsAsync<HubException>(() =>
-            ana.Hub.InvokeAsync<SeatTicket>(TableHubContract.CreateRoom, "go-fish", 9, new List<string>(), (string?)null, "Ana", 60));
+            ana.Hub.InvokeAsync<SeatTicket>(TableHubContract.CreateRoom, "go-fish", 9, new List<string>(), (string?)null, "Ana", 60, (string?)null));
         Assert.Contains("2 to 6", ex.Message);
         await ana.DisposeAsync();
     }
@@ -376,7 +376,7 @@ public sealed class SharedTableServerTests : IClassFixture<SharedTableServerTest
     {
         var host = await Connect();
         host.Ticket = await host.Hub.InvokeAsync<SeatTicket>(TableHubContract.CreateRoom,
-            gameId, seats, rules.ToList(), (string?)null, "Ana", 60);
+            gameId, seats, rules.ToList(), (string?)null, "Ana", 60, (string?)null);
         return host;
     }
 

@@ -34,7 +34,7 @@ public sealed class RoomService(
 
     public async Task<SeatTicket> CreateAsync(
         string connectionId, string gameId, int playerCount, IReadOnlyList<string> rules,
-        string? configuration, string name, int dropTimeoutSeconds = 60)
+        string? configuration, string name, int dropTimeoutSeconds = 60, string? difficulty = null)
     {
         var definition = await loader.LoadAsync(gameId)
             ?? throw new TableRefusal($"There is no game called \"{gameId}\".");
@@ -62,6 +62,7 @@ public sealed class RoomService(
             Offered       = GameConfiguration.Resolve(definition, playerCount, configuration).HouseRules,
             Seats         = Enumerable.Range(0, playerCount).Select(i => new RoomSeat { Id = $"player{i}" }).ToList(),
             DropTimeout   = TimeSpan.FromSeconds(Math.Clamp(dropTimeoutSeconds, 0, 3600)),
+            Difficulty    = Difficulty.Of(difficulty),
         };
         _rooms[room.Code] = room;
 
@@ -158,7 +159,7 @@ public sealed class RoomService(
             {
                 if (room.Vote?.SeatId == seat.Id) room.Vote = null;
                 seat.Token = null; seat.ConnectionId = null; seat.IsComputer = true; seat.StandIn = false;
-                room.State.PlayerAgents[seat.Id] = new SmartDefaultAiAgent(seat.Id, room.State.Rng);
+                room.State.PlayerAgents[seat.Id] = ComputerPlayers.For(room.State, seat.Id);
             }
             room.Dirty = true;
 
@@ -224,6 +225,7 @@ public sealed class RoomService(
                 GameId            = room.Definition.Id,
                 Definition        = room.Definition,
                 ConfigurationName = room.Configuration,
+                Difficulty        = room.Difficulty,
                 Rng               = new SeededRandomSource((ulong)RandomNumberGenerator.GetInt32(int.MaxValue) << 16
                                                            ^ (ulong)RandomNumberGenerator.GetInt32(int.MaxValue)),
                 // People are named from the first line the table writes.
@@ -239,7 +241,7 @@ public sealed class RoomService(
             foreach (var seat in room.Seats)
             {
                 if (seat.IsComputer)
-                    state.PlayerAgents.TryAdd(seat.Id, new SmartDefaultAiAgent(seat.Id, state.Rng));
+                    state.PlayerAgents.TryAdd(seat.Id, ComputerPlayers.For(state, seat.Id));
                 else
                     state.PlayerAgents.Remove(seat.Id);
             }
@@ -356,7 +358,7 @@ public sealed class RoomService(
             {
                 away.IsComputer = true;
                 away.StandIn    = true;
-                state.PlayerAgents[away.Id] = new SmartDefaultAiAgent(away.Id, state.Rng);
+                state.PlayerAgents[away.Id] = ComputerPlayers.For(state, away.Id);
                 room.Vote = null;
                 room.Version++;
                 room.Dirty = true;
@@ -643,6 +645,7 @@ public sealed class RoomService(
             Ballots            = room.Ballots.ToDictionary(b => b.Key, b => b.Value.ToList()),
             Forced             = new(room.Forced),
             DropTimeoutSeconds = (int)room.DropTimeout.TotalSeconds,
+            Difficulty         = room.Difficulty,
             Seats              = room.Seats.Select(s => new SavedSeat
             {
                 Id = s.Id, Name = s.Name, Token = s.Token, IsComputer = s.IsComputer, StandIn = s.StandIn,
@@ -693,6 +696,7 @@ public sealed class RoomService(
                 DisconnectedAt = s.Token is not null && !s.IsComputer ? DateTime.UtcNow : null,
             }).ToList(),
             DropTimeout   = TimeSpan.FromSeconds(saved.DropTimeoutSeconds),
+            Difficulty    = Difficulty.Of(saved.Difficulty),
             LastActivity  = saved.LastActivity,
             Version       = saved.Version,
             ViewSequence  = saved.ViewSequence + ViewSequenceMargin,
@@ -727,7 +731,7 @@ public sealed class RoomService(
             foreach (var seat in room.Seats)
             {
                 if (seat.IsComputer)
-                    state.PlayerAgents[seat.Id] = new SmartDefaultAiAgent(seat.Id, state.Rng);
+                    state.PlayerAgents[seat.Id] = ComputerPlayers.For(state, seat.Id);
                 else
                     state.PlayerAgents.Remove(seat.Id);
             }

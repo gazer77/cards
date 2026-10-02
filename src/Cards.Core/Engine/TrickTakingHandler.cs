@@ -322,8 +322,12 @@ public sealed class TrickTakingHandler : IPhaseHandler
         int trickNum = int.TryParse(state.Metadata.GetValueOrDefault("trick_number", "1"), out int tn) ? tn : 1;
         state.Metadata["trick_number"] = (trickNum + 1).ToString();
 
-        // Check if hands are empty — move to next phase
-        bool handsEmpty = state.Players.All(p => PlayerHand(state, p.Id)?.IsEmpty ?? true);
+        // Check if hands are empty — move to next phase. A loner's partner sits the hand
+        // out with their cards still in it; waiting for theirs to empty too stalled every
+        // hand played alone after its last trick, with nobody able to play.
+        string? sittingOut = GetLonerPartnerId(state);
+        bool handsEmpty = state.Players.Where(p => p.Id != sittingOut)
+                                       .All(p => PlayerHand(state, p.Id)?.IsEmpty ?? true);
         if (handsEmpty)
         {
             // Record who won the last trick for last-trick-bonus scoring.

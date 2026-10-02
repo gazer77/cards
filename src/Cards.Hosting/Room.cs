@@ -47,6 +47,9 @@ public sealed class Room
     /// <summary>How long a dropped player may hold the table before the others are asked; zero for never.</summary>
     public TimeSpan DropTimeout { get; init; }
 
+    /// <summary>How well the computer plays at this table, chosen by the host.</summary>
+    public string Difficulty { get; init; } = Cards.Engine.Difficulty.Normal;
+
     /// <summary>The question open at this table, if any.</summary>
     public RoomVote? Vote { get; set; }
 

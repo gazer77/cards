@@ -19,6 +19,12 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
 
     public string PlayerId { get; }
 
+    /// <summary>
+    /// Plays at <see cref="Difficulty.Hard"/>: the sharper choices below that normal leaves
+    /// out. Off, the agent plays exactly as it always has.
+    /// </summary>
+    public bool Hard { get; init; }
+
     public SmartDefaultAiAgent(string playerId, IRandomSource rng)
     {
         PlayerId = playerId;
@@ -380,8 +386,11 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         if (myCards.Count == 0) return plays[_rng.Next(plays.Count)];
 
         Suit? trump    = GetTrump(state);
-        bool isHearts  = state.Metadata.ContainsKey("trick_hearts_broken")
-                         || state.GameId == "hearts";
+        // Avoiding points is Hearts' game: points taken in cards. Every trick game marks
+        // hearts broken when one is played, and reading that as "this is Hearts" turned
+        // Spades, Whist and Euchre into games of losing tricks after the first heart.
+        bool isHearts  = state.Definition?.Scoring?.Type == "card_points" || state.GameId == "hearts";
+        if (Hard) return ChooseTrickCardHard(state, plays, myCards, trump, isHearts);
         var trickCards = GetTrickCards(state);
         bool leading   = trickCards.Count == 0;
 
@@ -390,6 +399,157 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
             : ChooseFollowCard(myCards, trickCards, trump, isHearts);
 
         return plays.First(a => a.CardId == chosen.Id);
+    }
+
+    // ── Hard: trick-taking ────────────────────────────────────────────────────
+
+    /// <summary>Cards this player has seen played this deal, by suit and rank.</summary>
+    private readonly HashSet<(Suit, Rank)> _seen = [];
+    private int _seenRound = -1, _seenHand = int.MaxValue;
+
+    /// <summary>
+    /// Notes what is on the table. A new deal — a new round, or a hand that has grown —
+    /// starts the memory afresh. It sees what is in the trick when it is asked to play,
+    /// so it misses the cards played after it to a trick; it treats those as unseen, and
+    /// so errs towards thinking a high card is still out.
+    /// </summary>
+    private void Remember(GameState state, List<Card> hand)
+    {
+        if (state.RoundNumber != _seenRound || hand.Count > _seenHand)
+        {
+            _seen.Clear();
+            _seenRound = state.RoundNumber;
+        }
+        _seenHand = hand.Count;
+        foreach (var (_, c) in TrickPlays(state)) _seen.Add((c.Suit, c.Rank));
+    }
+
+    /// <summary>No card of its suit that could beat it is still out: every higher one is seen or ours.</summary>
+    private bool IsMaster(Card card, List<Card> hand)
+        => Enum.GetValues<Rank>().Where(r => r > card.Rank && r != Rank.Joker)
+            .All(r => _seen.Contains((card.Suit, r)) || hand.Any(h => h.Suit == card.Suit && h.Rank == r));
+
+    private GameAction ChooseTrickCardHard(GameState state, List<GameAction> plays, List<Card> legal, Suit? trump, bool hearts)
+    {
+        var hand  = state.FindZone($"hand:{PlayerId}")?.Cards.ToList() ?? legal;
+        Remember(state, hand);
+
+        var trick = TrickPlays(state);
+        Card chosen = hearts
+            ? ChooseHeartsCardHard(state, legal, hand, trick)
+            : ChoosePartnershipCardHard(state, legal, hand, trick, trump);
+        return plays.First(a => a.CardId == chosen.Id);
+    }
+
+    /// <summary>
+    /// Spades, Euchre, Whist, Pinochle. Leads a card nothing still out can beat, or low from
+    /// its longest side suit. Following: lets a partner's winning card stand; second to
+    /// play, ducks unless it holds a sure winner; last, wins as cheaply as it can; void,
+    /// trumps an opponent's trick with its smallest trump that wins and otherwise throws
+    /// its least useful card.
+    /// </summary>
+    private Card ChoosePartnershipCardHard(GameState state, List<Card> legal, List<Card> hand,
+                                           List<(string Owner, Card Card)> trick, Suit? trump)
+    {
+        int players     = state.Players.Count(p => p.Role is null);
+        bool last       = trick.Count == players - 1;
+        string? partner = state.GetPlayerTeam(PlayerId)?.PlayerIds.FirstOrDefault(id => id != PlayerId);
+
+        // The least useful card: lowest, and not a trump while there is anything else.
+        Card Cheapest(IEnumerable<Card> cards)
+            => cards.OrderBy(c => c.Suit == trump ? 1 : 0).ThenBy(c => (int)c.Rank).First();
+
+        if (trick.Count == 0)
+        {
+            var sure = legal.Where(c => c.Suit != trump && IsMaster(c, hand)).ToList();
+            if (sure.Count > 0)
+                return sure.OrderByDescending(c => hand.Count(h => h.Suit == c.Suit)).First();
+
+            var side = legal.Where(c => c.Suit != trump).ToList();
+            return side.Count > 0 ? side.OrderByDescending(c => (int)c.Rank).First() : Cheapest(legal);
+        }
+
+        var winner  = FindTrickWinner(trick.Select(t => t.Card).ToList(), trump)!;
+        var owner   = trick.First(t => ReferenceEquals(t.Card, winner)).Owner;
+        bool ours   = partner is not null && owner == partner;
+        var beaters = legal.Where(c => CanBeat(c, winner, trump))
+                           .OrderBy(c => c.Suit == trump ? 1 : 0).ThenBy(c => (int)c.Rank).ToList();
+
+        // Partner has it: leave it, unless they could still be beaten and we can make sure.
+        if (ours && (last || IsMaster(winner, hand) || beaters.Count == 0))
+            return Cheapest(legal);
+
+        if (beaters.Count == 0) return Cheapest(legal);
+        if (last) return beaters[0];
+
+        var sureBeater = beaters.FirstOrDefault(c => IsMaster(c, hand) || (c.Suit == trump && winner.Suit != trump));
+        if (sureBeater is not null) return sureBeater;
+
+        return beaters[0];
+    }
+
+    /// <summary>
+    /// Hearts. Leads low from a short suit, and spades while the queen is out and it holds
+    /// nothing she would catch. Following, gets rid of its highest card that still loses;
+    /// void, sheds the queen of spades, then the high spades she would catch, then hearts,
+    /// highest first.
+    /// </summary>
+    private Card ChooseHeartsCardHard(GameState state, List<Card> legal, List<Card> hand,
+                                      List<(string Owner, Card Card)> trick)
+    {
+        bool queenOut = !_seen.Contains((Suit.Spades, Rank.Queen)) && !hand.Any(IsQueenOfSpades);
+        bool safeSpades = !hand.Any(c => c.Suit == Suit.Spades && c.Rank >= Rank.Queen);
+
+        if (trick.Count == 0)
+        {
+            if (queenOut && safeSpades && legal.Any(c => c.Suit == Suit.Spades))
+                return legal.Where(c => c.Suit == Suit.Spades).OrderBy(c => (int)c.Rank).First();
+
+            return legal.OrderBy(c => c.Suit == Suit.Hearts ? 1 : 0)
+                        .ThenBy(c => hand.Count(h => h.Suit == c.Suit))
+                        .ThenBy(c => (int)c.Rank).First();
+        }
+
+        var led    = trick[0].Card.Suit;
+        var winner = FindTrickWinner(trick.Select(t => t.Card).ToList(), null)!;
+
+        if (legal.Any(c => c.Suit == led))
+        {
+            var losers = legal.Where(c => !CanBeat(c, winner, null)).ToList();
+            if (losers.Count > 0) return losers.OrderByDescending(c => (int)c.Rank).First();
+
+            // It will win whatever it plays: last to play, take it with the highest; with
+            // others still to come, the lowest, hoping someone goes over.
+            bool last = trick.Count == state.Players.Count - 1;
+            var pick = last ? legal.OrderByDescending(c => (int)c.Rank).First() : legal.OrderBy(c => (int)c.Rank).First();
+            return IsQueenOfSpades(pick) && legal.Count > 1 ? legal.Where(c => !IsQueenOfSpades(c)).OrderBy(c => (int)c.Rank).First() : pick;
+        }
+
+        // Void: shed what hurts most.
+        return legal.OrderByDescending(c => IsQueenOfSpades(c) ? 3
+                                          : c.Suit == Suit.Spades && c.Rank > Rank.Queen && queenOut ? 2
+                                          : c.Suit == Suit.Hearts ? 1 : 0)
+                    .ThenByDescending(c => (int)c.Rank).First();
+    }
+
+    private static bool IsQueenOfSpades(Card c) => c.Suit == Suit.Spades && c.Rank == Rank.Queen;
+
+    /// <summary>
+    /// Hearts, passing at hard: the queen of spades and the ace and king that catch her —
+    /// unless enough low spades guard them — high hearts, and the cards of a short side
+    /// suit, to go void in it and shed points there later.
+    /// </summary>
+    private static int HardPassScore(Card card, List<Card> hand)
+    {
+        int spades    = hand.Count(c => c.Suit == Suit.Spades);
+        bool guarded  = hand.Count(c => c.Suit == Suit.Spades && c.Rank < Rank.Queen) >= 3;
+        int  length   = hand.Count(c => c.Suit == card.Suit);
+
+        if (IsQueenOfSpades(card)) return guarded && spades >= 5 ? 50 : 1300;
+        if (card.Suit == Suit.Spades && card.Rank > Rank.Queen) return guarded ? 40 : 1100;
+        if (card.Suit == Suit.Hearts) return 200 + (int)card.Rank * 10;
+        if (card.Suit != Suit.Spades && length <= 2) return 500 + (int)card.Rank;   // void a short suit
+        return (int)card.Rank * 10;
     }
 
     private Card ChooseLeadCard(List<Card> hand, Suit? trump, bool avoidPoints)
@@ -696,21 +856,31 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
 
         bool myCrib = state.DealerId == PlayerId;
         IReadOnlyList<Card>? best = null;
-        int bestScore = int.MinValue;
+        double bestScore = double.MinValue;
+
+        // Hard weighs every starter that could still turn up, not only the four in hand.
+        var starters = Hard ? AllCards().Where(s => !hand.Any(h => h.Suit == s.Suit && h.Rank == s.Rank)).ToList() : null;
 
         foreach (var keep in Combinations(hand, 4))
         {
             var away  = hand.Except(keep).ToList();
-            int kept  = CribbageScore.Show(keep, null, crib: false).Total;
+            double kept = starters is null
+                ? CribbageScore.Show(keep, null, crib: false).Total
+                : starters.Average(s => CribbageScore.Show(keep, s, crib: false).Total);
             int crib  = CribbageScore.Show(away, null, crib: true).Total
                       + away.Count(c => c.Rank == Rank.Five) * 2;   // fives make fifteens with the tens to come
-            int score = kept * 2 + (myCrib ? crib : -crib);
+            double score = kept * 2 + (myCrib ? crib : -crib);
             if (score > bestScore) { bestScore = score; best = away; }
         }
 
         var next = best?.FirstOrDefault(c => !picked.Contains(c.Uid));
         return plays.FirstOrDefault(a => a.CardId == next?.Id) ?? plays[0];
     }
+
+    private static IEnumerable<Card> AllCards()
+        => from s in new[] { Suit.Clubs, Suit.Diamonds, Suit.Hearts, Suit.Spades }
+           from r in Enum.GetValues<Rank>().Where(r => r != Rank.Joker)
+           select new Card(s, r);
 
     private static IEnumerable<List<Card>> Combinations(List<Card> cards, int k)
     {
@@ -785,7 +955,8 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
             if (card is null) continue;
 
             int score;
-            if (card.Rank == Rank.Queen && card.Suit == Suit.Spades) score = 1300;
+            if (Hard && hand is not null) score = HardPassScore(card, hand.Cards.ToList());
+            else if (card.Rank == Rank.Queen && card.Suit == Suit.Spades) score = 1300;
             else if (card.Suit == Suit.Hearts) score = 100 + (int)card.Rank;
             else score = (int)card.Rank;  // pass highest non-heart off-suit cards
 
@@ -886,8 +1057,23 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
 
     // ── Trick analysis helpers ────────────────────────────────────────────────
 
+    /// <summary>
+    /// The cards in the trick, the leader's first, so the led suit is the first card's. A
+    /// trick is kept seat by seat; reading only the first trick zone saw seat 0's card alone,
+    /// and the computer played every trick seat 0 had not yet played to as if leading it.
+    /// </summary>
     private static List<Card> GetTrickCards(GameState state)
-        => state.Zones.Values.FirstOrDefault(z => z.Type == "trick")?.Cards.ToList() ?? [];
+        => TrickPlays(state).Select(p => p.Card).ToList();
+
+    /// <summary>Who has played what to the trick, the leader first.</summary>
+    private static List<(string Owner, Card Card)> TrickPlays(GameState state)
+    {
+        var zones  = state.Zones.Values.Where(z => z.Type == "trick").ToList();
+        var leader = state.Metadata.GetValueOrDefault("trick_leader");
+        return zones.OrderBy(z => z.OwnerId == leader ? 0 : 1)
+            .SelectMany(z => z.Cards.Select(c => (z.OwnerId ?? "", c)))
+            .ToList();
+    }
 
     /// <summary>Returns the currently-winning card in the trick, or null if trick is empty.</summary>
     private static Card? FindTrickWinner(List<Card> trickCards, Suit? trump)

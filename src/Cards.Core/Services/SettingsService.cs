@@ -108,6 +108,13 @@ public class SettingsService
     public void SetHandSort(string gameId, string mode)
         => _store.Set($"sort:{gameId}", mode);
 
+    /// <summary>How well the computer plays this game, as last chosen; normal until then.</summary>
+    public string GetDifficulty(string gameId)
+        => Cards.Engine.Difficulty.Of(_store.Get($"difficulty:{gameId}", Cards.Engine.Difficulty.Normal));
+
+    public void SetDifficulty(string gameId, string level)
+        => _store.Set($"difficulty:{gameId}", Cards.Engine.Difficulty.Of(level));
+
     /// <summary>
     /// Shows the frame-timing overlay on the table. Off by default.
     ///

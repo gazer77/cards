@@ -97,12 +97,23 @@ when they require a phase type that doesn't exist yet.
 Only one AI exists: `SmartDefaultAiAgent`, a heuristic agent auto-assigned to every non-human
 seat. It has trick-taking lead/trump awareness, Hearts point-avoidance, draw-vs-discard
 heuristics, and conservative poker betting; everything else falls through to random.
-**There is no difficulty setting anywhere in the app.**
+Chosen per game on the setup screen; a shared table's host chooses it for the room. See
+"Difficulty" in docs/game-schema.md.
 
 - [x] Baseline heuristic AI (`SmartDefaultAiAgent`) + per-game override hook (`GoFishAiAgent`)
-- [ ] Easy — erratic, makes frequent mistakes (`DefaultAiAgent` exists but is unreachable)
-- [ ] Normal — plays valid moves, low chance of error
-- [ ] Hard — optimal valid play, no mistakes, no strategy
+- [x] Easy — careless: picks at random at 45% of its real decisions (`EasyPlayer`)
+- [x] Normal — the baseline. Two blind spots fixed on the way: it read only seat 0's card
+      in a trick, and took any game where a heart had been played for Hearts and played
+      to lose tricks
+- [x] Hard — card memory, master leads, partner play, cheap ruffs; Hearts pass and void
+      play; Cribbage discards over every starter. Measured: Hearts 28 points a game to
+      normal's 76, Euchre 20/40 to 16, Cribbage 22/40 to 18; Spades and Whist level
+- [ ] Hard at Spades and Whist — level with normal today. A sharper bid (counting sure
+      tricks) measured worse against these opponents; needs a look at bags and sets
+- [ ] Hard for Golf, Gin Rummy, Hand and Foot, Poker, Blackjack, Go Fish — these play
+      as normal at hard
+- [ ] Pinochle with computer players runs long — they bid high and are set, so games
+      can take a hundred deals. Bidding against the meld they hold would fix it
 - [ ] Insane — no mistakes and uses game-specific strategy
 
 ### Customization
@@ -251,13 +262,13 @@ heuristics, and conservative poker betting; everything else falls through to ran
 - [x] Spades
 - [x] Gin Rummy
 
-### Phase 3 — AI System — **mostly not started**
+### Phase 3 — AI System — **easy, normal and hard**
 - [x] Design AI player interface/framework (`IPlayerAgent`, per-seat override in `GameState.PlayerAgents`)
-- [ ] Easy AI (random valid moves, frequent errors)
-- [ ] Normal AI (best valid move, low error rate)
-- [ ] Hard AI (optimal play, no errors, no strategy)
+- [x] Easy AI (`EasyPlayer`: careless at decisions)
+- [x] Normal AI (`SmartDefaultAiAgent`)
+- [x] Hard AI (`SmartDefaultAiAgent.Hard`: trick games and Cribbage)
 - [ ] Insane AI (per-game strategy engines)
-- [ ] Difficulty selection in setup UI and `SettingsService`
+- [x] Difficulty selection in setup UI and `SettingsService`, and for a shared room by its host
 
 ### Phase 4 — Complex Games — **mostly done**
 - [x] Poker hand evaluator — in `ShowdownHandler`: best-of-N, wild substitution,

@@ -153,6 +153,26 @@ public sealed class HostingWithoutTheServerTests
     }
 
     [Fact]
+    public async Task The_host_chooses_how_well_the_computer_plays_and_a_restart_keeps_it()
+    {
+        var store = new MemoryStore();
+        var rooms = Host(new Recorder(), store);
+
+        var ana = await rooms.CreateAsync("ana", "hearts", 4, [], null, "Ana", difficulty: Difficulty.Hard);
+        await rooms.StartAsync(ana.Code, ana.Token);
+
+        var room = rooms.Find(ana.Code)!;
+        Assert.All(room.State!.Players.Skip(1), p => Assert.True(Assert.IsType<SmartDefaultAiAgent>(room.State.PlayerAgents[p.Id]).Hard));
+
+        await rooms.SaveChangedAsync();
+        var again = Host(new Recorder(), store);
+        await again.RestoreAsync();
+        var restored = again.Find(ana.Code)!;
+        Assert.Equal(Difficulty.Hard, restored.Difficulty);
+        Assert.True(Assert.IsType<SmartDefaultAiAgent>(restored.State!.PlayerAgents["player1"]).Hard);
+    }
+
+    [Fact]
     public async Task A_closed_table_leaves_nothing_behind()
     {
         var store = new MemoryStore();

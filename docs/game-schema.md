@@ -1767,7 +1767,18 @@ The engine calls `IGameLogic.GetAutoAction(state)` during auto-advance ticks. Wh
 2. Otherwise → filters valid actions to meaningful types (excludes `"tap"`, `"ai_step"`), lets the agent choose.
 3. Falls back to the first valid action for scripted/automated phases.
 
-Game-specific agents (e.g., `GoFishAiAgent`) are registered in the phase handler's `OnGameStart` via `state.PlayerAgents[playerId] = new MyAgent(playerId)`.
+Game-specific agents (e.g., `GoFishAiAgent`) are registered in the phase handler's `OnGameStart` via `state.PlayerAgents[playerId] = ComputerPlayers.Wrap(state, new MyAgent(playerId))`.
+
+### Difficulty
+
+`GameState.Difficulty` is `easy`, `normal` (default) or `hard`, set before the deal by whoever hosts the table — the setup screen remembers a level per game, and a shared table's host chooses it when opening the room. Saves and saved rooms keep it. Every computer seat is made by `ComputerPlayers.For(state, id)`:
+
+- **normal** — `SmartDefaultAiAgent` as it is.
+- **hard** — the same agent with `Hard` set: trick play that remembers the cards it has seen this deal, leads cards nothing still out can beat, lets a partner's winning card stand and trumps cheaply; Hearts passing and play that sheds the queen of spades and high hearts; Cribbage discards weighed over every starter that could turn up.
+- **easy** — `EasyPlayer` around the normal agent: at a real decision (which card, bid, hit or stand, call or fold) it picks at random 45% of the time. Bookkeeping steps (picking up cards to meld, confirming) go to the agent it wraps, so a careless turn still ends.
+
+`DifficultyTests` plays each level against normal opponents over seeded games and holds the ladder: hard takes far fewer points at Hearts and wins more at Euchre and Cribbage, and is no worse at Spades and Whist; easy wins less at every partnership game and at Cribbage.
+
 
 ---
 

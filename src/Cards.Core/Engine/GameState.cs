@@ -117,6 +117,13 @@ public class GameState
     public IReadOnlyList<string>? BotNames { get; set; }
 
     /// <summary>
+    /// How well the computer plays at this table — <see cref="Cards.Engine.Difficulty"/>. Set
+    /// before the deal, since the deal is when the computer's seats are filled; a save
+    /// keeps it.
+    /// </summary>
+    public string Difficulty { get; set; } = Cards.Engine.Difficulty.Normal;
+
+    /// <summary>
     /// Whose eyes the table is drawn for. Null means seat 0 — the person at a
     /// single-player screen. A view built for one seat of a shared game sets it, and
     /// everything that means "you" (the bottom of the table, which hand is face up,

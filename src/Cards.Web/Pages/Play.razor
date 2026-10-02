@@ -385,6 +385,7 @@
         // Seat 0 of a table of your own is you, by the name you gave. "Player" is only
         // the setting's default, not a name anyone chose.
         Vm.PlayerName = Settings.PlayerName is { Length: > 0 } name && name != "Player" ? name : null;
+        Vm.Difficulty = Settings.GetDifficulty(GameId);
 
         PushToCanvas();
 

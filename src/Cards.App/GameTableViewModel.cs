@@ -67,6 +67,9 @@ public sealed class GameTableViewModel
     /// </summary>
     public string? PlayerName { get; set; }
 
+    /// <summary>How well the computer plays a new game. A resumed one keeps the level it was saved at.</summary>
+    public string Difficulty { get; set; } = Cards.Engine.Difficulty.Normal;
+
     /// <summary>
     /// Floor for an automatic turn's pause, so a step the engine considers instant is
     /// still visible when it changes the table.
@@ -359,6 +362,7 @@ public sealed class GameTableViewModel
         if (!restored)
         {
             if (PlayerName is { Length: > 0 } me) state.SeatNames = [me];
+            state.Difficulty = Cards.Engine.Difficulty.Of(Difficulty);
 
             // The computer's seats get names, never yours; a seeded game names them the same each time.
             state.BotNames = BotNames.Pick(playerCount, [PlayerName],

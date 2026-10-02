@@ -81,6 +81,23 @@ else
             </section>
         }
 
+        @if (_game.MaxPlayers > 1)
+        {
+            @* Remembered per game: a player who likes Hearts hard and Golf easy says so once. *@
+            <section class="setup-block">
+                <h2>Computer players</h2>
+                <div class="choices">
+                    @foreach (var level in Cards.Engine.Difficulty.All)
+                    {
+                        var captured = level;
+                        <button class="choice @(_difficulty == captured ? "chosen" : "")"
+                                @onclick="() => ChooseDifficulty(captured)">@DifficultyName(captured)</button>
+                    }
+                </div>
+                <p class="muted">@DifficultyBlurb(_difficulty)</p>
+            </section>
+        }
+
         @if (_rules.Count > 0)
         {
             <section class="setup-block">
@@ -151,7 +168,8 @@ else
         await Saves.EnsureLoadedAsync();
         _saved = Saves.SavesFor(GameId).ToList();
 
-        _players = _game.MinPlayers;
+        _players    = _game.MinPlayers;
+        _difficulty = Settings.GetDifficulty(GameId);
 
         // Which shapes this seat count offers, and the rules of the one in hand. A rule
         // marked default-on in the definition starts checked, as on mobile.
@@ -215,6 +233,28 @@ else
         _saved = Saves.SavesFor(GameId).ToList();
     }
 
+    private string _difficulty = Cards.Engine.Difficulty.Normal;
+
+    private void ChooseDifficulty(string level)
+    {
+        _difficulty = level;
+        Settings.SetDifficulty(GameId, level);
+    }
+
+    private static string DifficultyName(string level) => level switch
+    {
+        Cards.Engine.Difficulty.Easy => "Easy",
+        Cards.Engine.Difficulty.Hard => "Hard",
+        _                            => "Normal",
+    };
+
+    private static string DifficultyBlurb(string level) => level switch
+    {
+        Cards.Engine.Difficulty.Easy => "Careless: often plays whatever comes to hand.",
+        Cards.Engine.Difficulty.Hard => "Keeps track of the cards, plays to its partner, and wastes nothing.",
+        _                            => "Plays sensibly, without looking far ahead.",
+    };
+
     private bool    _opening;
     private string? _onlineError;
     private int     _dropTimeout = 60;
@@ -242,7 +282,7 @@ else
 
             // Remembered, so the next table — and the join screen — starts with it.
             Settings.PlayerName = _hostName.Trim();
-            var ticket = await Table.CreateAsync(GameId, _players, enabled, variant, _hostName.Trim(), _dropTimeout);
+            var ticket = await Table.CreateAsync(GameId, _players, enabled, variant, _hostName.Trim(), _dropTimeout, _difficulty);
             Nav.NavigateTo($"/room/{ticket.Code}");
         }
         catch (Exception ex)
