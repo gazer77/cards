@@ -21,6 +21,14 @@ public interface IPhaseHandler
     /// </summary>
     TimeSpan? GetAutoAdvanceDelay(GameState state) => null;
 
+    /// <summary>
+    /// The next step finishes the move just made rather than starting another — Golf's
+    /// card turned after a discard. A table plays it after the handler's own short delay,
+    /// not stretched to the pause it leaves between turns: paced like a turn of its own,
+    /// it read as the computer finishing and then, a second later, changing its mind.
+    /// </summary>
+    bool ContinuesMove(GameState state) => false;
+
     /// <summary>Card IDs the player may tap or drag in this phase.</summary>
     IReadOnlyList<string> GetSelectableCardIds(GameState state) => [];
 

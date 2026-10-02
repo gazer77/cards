@@ -32,6 +32,9 @@ public interface IGameLogic
     /// </summary>
     TimeSpan? GetAutoAdvanceDelay(GameState state) => null;
 
+    /// <summary>The next step finishes the move just made — see <see cref="IPhaseHandler.ContinuesMove"/>.</summary>
+    bool ContinuesMove(GameState state) => false;
+
     /// <summary>
     /// Card IDs the current player may tap or drag.  Shown with a selection highlight.
     /// Return an empty list when card selection is not applicable.

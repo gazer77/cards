@@ -106,6 +106,32 @@ public sealed class GolfTurnTests
         Assert.NotEqual(me, state.CurrentPlayer.Id);
     }
 
+    /// <summary>
+    /// The flip owed after discarding the draw is the end of that discard. The computer
+    /// turned it after a full turn's pause, so it looked done and then, a second later,
+    /// a card flipped; it is now marked as finishing the move, and comes a beat after.
+    /// A person's flip has no auto step at all: they choose the card.
+    /// </summary>
+    [Fact]
+    public void The_flip_after_a_discard_finishes_the_move_rather_than_waiting_a_turn()
+    {
+        var (state, logic, _) = InPlay();
+        var me = state.CurrentPlayer.Id;
+        logic.Apply(state, new GameAction("draw_from_deck"));
+        var drawn = state.Zones[$"hand:{me}"].Cards.Single();
+        logic.Apply(state, new GameAction("select_card", CardId: drawn.Id, CardUid: drawn.Uid));
+        logic.Apply(state, new GameAction("discard_drawn"));
+
+        Assert.True(logic.ContinuesMove(state));
+        Assert.Null(logic.GetAutoAdvanceDelay(state));   // a person picks their own card
+
+        state.PlayerAgents[me] = new SmartDefaultAiAgent(me, state.Rng);
+        Assert.Equal(TimeSpan.FromMilliseconds(350), logic.GetAutoAdvanceDelay(state));
+
+        logic.Apply(state, logic.GetAutoAction(state));   // the flip
+        Assert.False(logic.ContinuesMove(state));         // and the next is a move of its own
+    }
+
     [Fact]
     public void Discarding_the_draw_unplayed_owes_a_flip_of_a_face_down_card()
     {

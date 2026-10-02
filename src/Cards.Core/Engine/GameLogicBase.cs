@@ -105,6 +105,9 @@ public abstract class GameLogicBase : IGameLogic
     /// when the current player has a registered AI agent (giving the agent time to
     /// "think" before its action fires).
     /// </summary>
+    public bool ContinuesMove(GameState state)
+        => _handlers.TryGetValue(state.CurrentPhaseId, out var h) && h.ContinuesMove(state);
+
     public TimeSpan? GetAutoAdvanceDelay(GameState state)
     {
         EnterPhaseIfNeeded(state);

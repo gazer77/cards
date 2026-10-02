@@ -130,6 +130,18 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     /// <summary>The turn sub-state is settled on entry, before anything is asked.</summary>
     public void OnPhaseEnter(GameState state) => EnsureInitialized(state);
 
+    /// <summary>
+    /// A card turned because the draw was discarded is the end of the discard, not a move
+    /// of its own: the computer turns it a beat after the discard lands.
+    /// </summary>
+    public bool ContinuesMove(GameState state)
+        => state.Metadata.GetValueOrDefault("dd_must_flip") == "true";
+
+    public TimeSpan? GetAutoAdvanceDelay(GameState state)
+        => ContinuesMove(state) && state.PlayerAgents.ContainsKey(state.CurrentPlayer.Id)
+            ? TimeSpan.FromMilliseconds(350)
+            : null;
+
     public IReadOnlyList<GameAction> GetValidActions(GameState state)
     {
         EnsureInitialized(state);

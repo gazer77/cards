@@ -786,7 +786,9 @@ public sealed class GameTableViewModel
                 var delay = _logic.GetAutoAdvanceDelay(_state);
                 if (delay is null) break;
 
-                await Task.Delay(Pace(delay.Value));
+                // The second half of a move follows the first at the engine's own beat;
+                // only the pause between moves is stretched to the player's pace.
+                await Task.Delay(_logic.ContinuesMove(_state) ? delay.Value : Pace(delay.Value));
 
                 var actions = _logic.GetValidActions(_state);
                 var cards   = _logic.GetSelectableCardIds(_state);

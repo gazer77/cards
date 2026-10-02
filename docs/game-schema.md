@@ -786,7 +786,7 @@ One draw + one discard per player turn. Repeats until a special action ends the 
 
 `target_zone`: `"hand"` | `"grid"` — Grid mode (Golf): drawn card is held in a temporary hand slot; player then taps a grid card to swap it in (drawn card replaces grid card face-up; grid card goes to discard). Player may also `discard_drawn` to skip the swap.
 
-`flip_after_discard`: `true` — Grid mode only. A player who discards the drawn card without swapping must then tap one of their own face-down cards to turn it up (Golf). While a flip is owed only face-down cards are selectable and the turn does not end until one is turned; no flip is owed once every card is already up.
+`flip_after_discard`: `true` — Grid mode only. A player who discards the drawn card without swapping must then tap one of their own face-down cards to turn it up (Golf). While a flip is owed only face-down cards are selectable and the turn does not end until one is turned; no flip is owed once every card is already up. The flip finishes the discard rather than being a move of its own (`IPhaseHandler.ContinuesMove`): a computer player turns its card a beat (350 ms) after the discard, not after the full pause a table leaves between turns.
 
 `confirm`: `true` — grid mode only. A tap proposes and a button commits: tapping the drawn
 card picks it out and a **Discard Drawn** button discards it, and the card owed to
