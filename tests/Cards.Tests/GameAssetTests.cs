@@ -17,7 +17,7 @@ public sealed class GameAssetTests
 
         // Thirteen entries for sixteen games: Euchre is one entry with a shape per seat
         // count, poker one with three named shapes. That is the point of configurations.
-        Assert.Equal(14, games.Count);
+        Assert.Equal(15, games.Count);
         Assert.All(games, g => Assert.False(string.IsNullOrWhiteSpace(g.Id)));
     }
 

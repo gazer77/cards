@@ -598,6 +598,52 @@ All phase types are registered in `PhaseHandlerRegistry`.
 | `flip_compare_result` | Implemented | High Card (internal) |
 | `deal` | Implemented | Texas Hold'em, Stud, Euchre (initial deal phase) |
 | `name_trump` | Implemented | Pinochle |
+| `crib_discard` | Implemented | Cribbage |
+| `cut` | Implemented | Cribbage |
+| `pegging` | Implemented | Cribbage |
+| `show` | Implemented | Cribbage |
+
+### Cribbage: `crib_discard`, `cut`, `pegging`, `show`
+
+Four phases a cribbage game strings together. Points are pegged the moment they are
+made, and the game ends the moment a side reaches the `win_condition` score — mid-play
+if it comes to that. Every point value is the definition's, under `points`, defaulting
+to the standard ones shown.
+
+```json
+{ "id": "discard", "type": "crib_discard", "keep": 4, "to": "crib", "crib_size": 4, "next": "cut" },
+{ "id": "cut",     "type": "cut", "to": "starter", "points": { "his_heels": 2 }, "next": "play" },
+{ "id": "play",    "type": "pegging", "limit": 31, "played": "played",
+  "points": { "fifteen": 2, "thirty_one": 2, "pair": 2, "pair_royal": 6, "double_pair_royal": 12,
+              "run_card": 1, "go": 1, "last_card": 1 }, "next": "show" },
+{ "id": "show",    "type": "show", "played": "played", "crib": "crib", "starter": "starter",
+  "points": { "fifteen": 2, "pair": 2, "run_card": 1, "flush_card": 1, "nobs": 1 } }
+```
+
+- **`crib_discard`** — from the dealer's left, each player picks cards and lays them
+  away (button `lay_away`, "To the crib") until `keep` are left in hand. They go face down
+  to the `to` zone as each player confirms, so no one else sees them; then the crib is
+  made up to `crib_size` from the deck (three players lay away one each, the deck gives
+  the fourth).
+- **`cut`** — the starter is cut from the deck and turned face up to `to`. A jack pegs
+  the dealer `his_heels`.
+- **`pegging`** — from the dealer's left, each plays a card face up to their `played`
+  zone, the count rising to no more than `limit`. Pegs fifteen, thirty-one, pairs (two,
+  three and four of a kind) and runs of three or more in any order among the last cards.
+  A player with nothing that fits says go (button `go`); the others play on while they
+  can, and the last to play pegs `go` — or thirty-one, which is its own reward. A player
+  who cannot play when everyone else has already said go takes the go without being
+  asked. The count then starts again from the next seat. The last card of all pegs
+  `last_card`.
+- **`show`** — one count per step: each hand (the cards in its `played` zone) with the
+  starter, from the dealer's left round to the dealer, then the crib, turned face up, for
+  the dealer. Fifteens, pairs, runs (a double run twice), a flush (a hand's four, or five
+  with the starter; a crib only with all five) and his nobs. The deal goes on the score
+  card as one line.
+
+The arithmetic is `CribbageScore`, tested against hands whose counts every player knows.
+The computer lays away the cards that leave the best four (counting the crib for or against
+it), and pegs for points while not leaving the count on five or twenty-one.
 
 ### `pass_cards`
 All players simultaneously choose cards to pass.

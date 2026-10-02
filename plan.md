@@ -77,7 +77,7 @@ when they require a phase type that doesn't exist yet.
 - [x] Golf
 - [x] High Card *(not in the original plan; simple flip-compare game)*
 - [x] Free Play *(not in the original plan; sandbox table with no rules enforcement)*
-- [ ] Cribbage — rules text exists at `games/help/cribbage.md`, no game definition
+- [x] Cribbage — two or three players, to 121 (house rule: 61): laying away to the crib, the cut and his heels, pegging to 31 with goes and the last card, and the show with the crib for the dealer. Four new phase types (`crib_discard`, `cut`, `pegging`, `show`) with every point value in the definition; the counting in `CribbageScore`. The game ends the moment someone pegs out. Not yet: four-player partnerships, and a drawn cribbage board (the score card shows the pegs).
 - [x] Whist — partnerships, the last card dealt turned up for trumps (`trump: "last_dealt"`), a point a trick over six (`tricks_over_book`), first dealer by low card, to 7 (Short Whist house rule: 5). Honours are not counted.
 
 > Note: `cribbage.md` and `whist.md` were produced as a side effect of `tools/ExtractHoyle`,
@@ -341,6 +341,10 @@ See `docs/shared-tables.md`.
       table from the first seat until the card turns up (ties redeal for high and low).
       Every card is in the log and the dealer says so at the table. Euchre deals to the
       first jack, Poker to the first ace.
+- [x] **Zone captions on every zone** — a declared `label` was drawn only on hands, so
+      Hand and Foot's DECK and DISCARD never showed; now every zone's does. Hand and Foot's
+      meld strip declared an `{owner}` caption that had never shown and landed on the hand
+      once it did; it is gone, the seat's name already says whose melds they are.
 - [ ] **Backlog: show the deal for the deal** — the cards are logged and the dealer
       announced, but not dealt on the table: they should fly out one seat at a time until
       the one that decides it, then be gathered back before the real shuffle.

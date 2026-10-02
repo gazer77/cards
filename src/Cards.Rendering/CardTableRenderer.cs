@@ -802,7 +802,9 @@ public sealed class CardTableRenderer
         else
             DrawFilledZone(canvas, layout);
 
-        if (layout.Label is not null) DrawLabel(canvas, layout);
+        // A seat's name, or whatever caption the definition gives the zone. Declared
+        // captions were only drawn on hands, so a pile's "DECK" or "Crib" never showed.
+        if (layout.Label is not null || layout.Zone.Label is not null) DrawLabel(canvas, layout);
 
         // Badges on a zone with no groups count the zone itself — the deck's cards
         // left, a pile's depth. They were drawn only per group, so a definition could

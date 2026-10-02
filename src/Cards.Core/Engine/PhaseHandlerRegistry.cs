@@ -37,6 +37,10 @@ public static class PhaseHandlerRegistry
             ["name_trump"]          = (def, next) => new NameTrumpHandler(def, next),
             ["dealer_discard"]      = (def, next) => new DealerDiscardHandler(def, next),
             ["reveal"]              = (def, next) => new RevealHandler(def, next),
+            ["crib_discard"]        = (def, next) => new CribDiscardHandler(def, next),
+            ["cut"]                 = (def, next) => new CutHandler(def, next),
+            ["pegging"]             = (def, next) => new PeggingHandler(def, next),
+            ["show"]                = (def, next) => new ShowHandler(def, next),
         };
 
     /// <summary>

@@ -22,6 +22,7 @@ public class GameLoader
         "hearts",
         "spades",
         "whist",
+        "cribbage",
         "gin-rummy",
         "golf",
         "poker",

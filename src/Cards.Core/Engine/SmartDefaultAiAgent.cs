@@ -50,6 +50,12 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
             if (state.Metadata.ContainsKey("pass_direction"))
                 return ChoosePassCard(state, plays);
 
+            // Cribbage: laying away to the crib, and the play.
+            if (state.Metadata.ContainsKey("crib_laying"))
+                return ChooseCribDiscard(state, plays);
+            if (state.Metadata.ContainsKey("peg_count"))
+                return ChoosePeg(state, plays);
+
             // Golf grid-swap: drawn card is one of the play_card options
             string? drawnCardId = state.Metadata.GetValueOrDefault("dd_drawn_card");
             if (drawnCardId is not null && plays.Any(a => a.CardId == drawnCardId))
@@ -670,6 +676,81 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
             .FirstOrDefault();
 
         return bestAction ?? validActions[_rng.Next(validActions.Count)];
+    }
+
+    // ── Cribbage ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Lays away the cards that leave the best four: every way of keeping four is
+    /// counted as a hand would be (without knowing the starter), and what goes to the
+    /// crib counts for us in our own crib and against us in theirs. Picks one card of
+    /// the best discard at a time, as the phase asks for them.
+    /// </summary>
+    private GameAction ChooseCribDiscard(GameState state, IReadOnlyList<GameAction> plays)
+    {
+        var hand = state.FindZone($"hand:{PlayerId}")?.Cards.ToList() ?? [];
+        var picked = (state.Metadata.GetValueOrDefault("selected_card") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToHashSet();
+        int owed = hand.Count - 4;
+        if (owed <= 0 || hand.Count > 8) return plays[0];
+
+        bool myCrib = state.DealerId == PlayerId;
+        IReadOnlyList<Card>? best = null;
+        int bestScore = int.MinValue;
+
+        foreach (var keep in Combinations(hand, 4))
+        {
+            var away  = hand.Except(keep).ToList();
+            int kept  = CribbageScore.Show(keep, null, crib: false).Total;
+            int crib  = CribbageScore.Show(away, null, crib: true).Total
+                      + away.Count(c => c.Rank == Rank.Five) * 2;   // fives make fifteens with the tens to come
+            int score = kept * 2 + (myCrib ? crib : -crib);
+            if (score > bestScore) { bestScore = score; best = away; }
+        }
+
+        var next = best?.FirstOrDefault(c => !picked.Contains(c.Uid));
+        return plays.FirstOrDefault(a => a.CardId == next?.Id) ?? plays[0];
+    }
+
+    private static IEnumerable<List<Card>> Combinations(List<Card> cards, int k)
+    {
+        if (k == 0) { yield return []; yield break; }
+        for (int i = 0; i <= cards.Count - k; i++)
+            foreach (var rest in Combinations(cards.Skip(i + 1).ToList(), k - 1))
+                yield return [cards[i], .. rest];
+    }
+
+    /// <summary>
+    /// Plays for the most points now, and otherwise avoids giving them away: not leaving
+    /// the count on five or twenty-one (a ten makes fifteen or thirty-one), and not
+    /// leading a five. Among equal choices, holds on to low cards for the end of a count.
+    /// </summary>
+    private GameAction ChoosePeg(GameState state, IReadOnlyList<GameAction> plays)
+    {
+        var hand  = state.FindZone($"hand:{PlayerId}")?.Cards.ToList() ?? [];
+        int count = int.TryParse(state.Metadata.GetValueOrDefault("peg_count"), out int c) ? c : 0;
+        var all   = state.Zones.Values.SelectMany(z => z.Cards).ToList();
+        var run   = (state.Metadata.GetValueOrDefault("peg_run") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(u => all.FirstOrDefault(x => x.Uid == int.Parse(u)))
+            .Where(x => x is not null).Select(x => x!).ToList();
+
+        GameAction? best = null;
+        int bestScore = int.MinValue;
+        foreach (var play in plays)
+        {
+            var card = hand.FirstOrDefault(x => x.Id == play.CardId);
+            if (card is null) continue;
+
+            int next  = count + CribbageScore.Value(card);
+            int score = CribbageScore.Peg([.. run, card]).Total * 10;
+            if (next is 5 or 21) score -= 6;
+            if (count == 0 && card.Rank == Rank.Five) score -= 4;
+            score += CribbageScore.Value(card);   // spend the high cards, keep the low ones
+
+            if (score > bestScore) { bestScore = score; best = play; }
+        }
+        return best ?? plays[0];
     }
 
     // ── Pass-cards strategy (Hearts) ─────────────────────────────────────────

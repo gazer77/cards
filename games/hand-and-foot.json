@@ -67,7 +67,6 @@
         { "match": { "rank": "A" },  "label": "A" },
         { "match": { "wild": true }, "label": "W" }
       ],
-      "label":        { "text": "{owner}", "placement": "bottom" },
       "group_badges": [
         { "shows": "loose", "color": "#A5D66F", "text_color": "#1B4D1B", "zero": "–" },
         { "shows": "books", "color": "#F28C28", "text_color": "#FFFFFF" }
