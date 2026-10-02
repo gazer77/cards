@@ -79,6 +79,15 @@ public class GameState
     public DealResult? LastDealResult { get; set; }
 
     /// <summary>
+    /// The cards dealt face up to choose the first dealer (<c>rounds.first_dealer</c>), in
+    /// the order dealt — the last one decided it. For the animation layer to show the
+    /// table how the dealer was chosen; null when the dealer was picked at random. Not
+    /// part of the game: never saved, never sent.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<(string PlayerId, Card Card)>? FirstDealerDraw { get; set; }
+
+    /// <summary>
     /// Which phase has had its handler set itself up — see IPhaseHandler.OnPhaseEnter.
     /// Kept on the state rather than in the logic so a fresh deal onto a fresh state is
     /// never mistaken for a phase already entered, and not saved: a restored game enters

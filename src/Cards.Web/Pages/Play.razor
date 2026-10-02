@@ -8,6 +8,7 @@
 @inject Cards.Services.HelpService Help
 @inject IConfiguration Config
 @inject IJSRuntime JS
+@inject Cards.Web.Platform.BrowserTableSounds Sounds
 @implements IDisposable
 
 <PageTitle>@(_title)</PageTitle>
@@ -356,7 +357,10 @@
 
         if (_canvas?.Renderer is not null)
         {
-            Vm.Animator = new RendererTableAnimator(_canvas.Renderer);
+            // Sounds: the opening's from the animator, every move's from the table.
+            await Sounds.LoadAsync();
+            Vm.Sounds   = Sounds;
+            Vm.Animator = new RendererTableAnimator(_canvas.Renderer) { Sounds = Sounds };
 
             _diagnostics = Settings.ShowDiagnostics;
             _canvas.Renderer.ShowDiagnostics = _diagnostics;

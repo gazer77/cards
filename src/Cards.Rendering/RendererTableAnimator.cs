@@ -37,6 +37,9 @@ public sealed class RendererTableAnimator : ITableAnimator
 
     public RendererTableAnimator(CardTableRenderer renderer) => _renderer = renderer;
 
+    /// <summary>The opening's sounds — the shuffle, the deal — played as each happens on screen.</summary>
+    public ITableSounds Sounds { get; set; } = NullTableSounds.Instance;
+
     // ── Mid-game moves ────────────────────────────────────────────────────────
 
     public void CaptureBeforeMove(GameState state)
@@ -155,6 +158,11 @@ public sealed class RendererTableAnimator : ITableAnimator
             deckCenter = _renderer.GetZoneCenter("deck");
         }
 
+        // Dealing for the deal first, where the game chooses its dealer that way.
+        if (deckCenter.HasValue && state.FirstDealerDraw is { Count: > 0 } draw)
+            await PlayDealForDealerAsync(preDeal, draw, deckCenter.Value);
+
+        Sounds.Play(TableCue.Shuffle);
         await Task.WhenAny(_renderer.TriggerShuffleAnimationAsync("deck"), Task.Delay(1600));
 
         _renderer.GameState = state;
@@ -165,8 +173,70 @@ public sealed class RendererTableAnimator : ITableAnimator
         var entries = BuildDealEntries(deal, deckCenter.Value, state);
         if (entries.Count == 0) return;
 
+        Sounds.Play(TableCue.Deal);
         _renderer.QueueFlyIns(entries, delayBetweenMs: deal.AnimDelayMs);
         await Task.WhenAny(_renderer.WaitForFlyInsAsync(), Task.Delay(6000));
+    }
+
+    /// <summary>How long the cards dealt for the deal lie on the table before they are gathered.</summary>
+    public int DealForDealerHoldMs { get; set; } = 1600;
+
+    /// <summary>
+    /// The deal for the deal, as the table saw it: cards dealt face up one at a time
+    /// round the table until the one that decides it, a moment to read them, and then
+    /// gathered back into the pack before the real shuffle.
+    ///
+    /// The cards are stand-ins, numbered apart from the game's own, on a table of their
+    /// own: they are not the game's cards and must never be mistaken for them.
+    /// </summary>
+    private async Task PlayDealForDealerAsync(GameState preDeal, IReadOnlyList<(string PlayerId, Card Card)> draw, SKPoint deckCenter)
+    {
+        const int FirstUid = -2_000_000;
+
+        GameState Table(bool dealt)
+        {
+            var table = new GameState { GameId = preDeal.GameId, Definition = preDeal.Definition, CurrentPhaseId = preDeal.CurrentPhaseId };
+            foreach (var p in preDeal.Players) table.Players.Add(p);
+            foreach (var (id, z) in preDeal.Zones)
+            {
+                var copy = new Zone(id, z.Type, z.OwnerId, z.Visibility);
+                copy.AddRange(z.Cards);
+                table.Zones[id] = copy;
+            }
+
+            var deck = table.Zones.Values.First(z => z.Type == "deck");
+            for (int i = 0; i < draw.Count; i++)
+            {
+                var (owner, card) = draw[i];
+                var standIn = new Card(card.Suit, card.Rank, isFaceUp: dealt) { Uid = FirstUid - i };
+                var hand = dealt ? table.Zones.Values.FirstOrDefault(z => z.Type == "hand" && z.OwnerId == owner) : null;
+                (hand ?? deck).Add(standIn);
+            }
+            return table;
+        }
+
+        var uids = Enumerable.Range(0, draw.Count).Select(i => FirstUid - i).ToList();
+
+        // Out, one at a time.
+        var dealt = Table(dealt: true);
+        _renderer.GameState = dealt;
+        await Task.WhenAny(_renderer.WaitForNextPaintAsync(), Task.Delay(300));
+        var slots = _renderer.ComputeHandSlotCenters(dealt, uids);
+        var outward = uids.Where(slots.ContainsKey).Select(u => (u, deckCenter, slots[u])).ToList();
+        if (outward.Count == 0) return;
+
+        Sounds.Play(TableCue.Deal);
+        _renderer.QueueFlyIns(outward, delayBetweenMs: 260);
+        await Task.WhenAny(_renderer.WaitForFlyInsAsync(), Task.Delay(260 * outward.Count + 2000));
+        await Task.Delay(DealForDealerHoldMs);
+
+        // And back.
+        Sounds.Play(TableCue.Gather);
+        _renderer.GameState = Table(dealt: false);
+        _renderer.QueueFlyIns(outward.Select(e => (e.u, e.Item3, deckCenter)).ToList());
+        await Task.WhenAny(_renderer.WaitForFlyInsAsync(), Task.Delay(1500));
+
+        _renderer.GameState = preDeal;
     }
 
     /// <summary>

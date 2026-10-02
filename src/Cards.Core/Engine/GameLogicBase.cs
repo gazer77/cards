@@ -211,11 +211,14 @@ public abstract class GameLogicBase : IGameLogic
         DeckBuilder.Shuffle(deck, state.Rng);
         var wilds = MeldRules.WildRanks(state.Definition);
         int next  = 0;
+        var record = new List<(string, Card)>();
+        state.FirstDealerDraw = record;
 
         Card? Deal(Player p)
         {
             if (next >= deck.Count) return null;
             var card = deck[next++];
+            record.Add((p.Id, card));
             GameText.Log(state, "log_dealt_for_deal", "{player} drew the {card}", p.Id,
                          ("card", GameText.CardName(card)));
             return card;

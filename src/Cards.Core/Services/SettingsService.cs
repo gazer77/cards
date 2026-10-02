@@ -65,6 +65,21 @@ public class SettingsService
     /// resolves faster than a person can follow. How fast is followable depends on the
     /// game and the player, which is why it is a setting rather than a constant.
     /// </summary>
+    /// <summary>The table's sounds — cards, the bell for your turn, a win. On unless turned off.</summary>
+    public bool SoundOn
+    {
+        get => _store.Get("sound_on", true);
+        set => _store.Set("sound_on", value);
+    }
+
+    /// <summary>How loud, from 0 to 1.</summary>
+    public double SoundVolume
+    {
+        get => double.TryParse(_store.Get("sound_volume", ""), NumberStyles.Float, CultureInfo.InvariantCulture, out var v)
+            ? Math.Clamp(v, 0, 1) : 0.6;
+        set => _store.Set("sound_volume", Math.Clamp(value, 0, 1).ToString(CultureInfo.InvariantCulture));
+    }
+
     public double TurnPace
     {
         get => double.TryParse(_store.Get(KeyTurnPace, ""), NumberStyles.Float,

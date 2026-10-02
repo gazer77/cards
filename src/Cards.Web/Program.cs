@@ -27,6 +27,7 @@ builder.Services.AddSingleton<ISaveStore>(sp => sp.GetRequiredService<BrowserSav
 builder.Services.AddSingleton<SettingsService>();
 builder.Services.AddSingleton<GameSaveService>();
 builder.Services.AddSingleton<HelpService>();
+builder.Services.AddSingleton<Cards.Web.Platform.BrowserTableSounds>();
 builder.Services.AddTransient<GameTableViewModel>();
 
 // Shared tables. The table server also serves this app, so its hub is at the address the

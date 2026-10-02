@@ -356,9 +356,11 @@ See `docs/shared-tables.md`.
       Hand and Foot's DECK and DISCARD never showed; now every zone's does. Hand and Foot's
       meld strip declared an `{owner}` caption that had never shown and landed on the hand
       once it did; it is gone, the seat's name already says whose melds they are.
-- [ ] **Backlog: show the deal for the deal** — the cards are logged and the dealer
-      announced, but not dealt on the table: they should fly out one seat at a time until
-      the one that decides it, then be gathered back before the real shuffle.
+- [x] **Show the deal for the deal** — before the shuffle, the cards dealt to choose the
+      dealer fly out face up one seat at a time to the one that decides it, lie a moment,
+      and are gathered back (`GameState.FirstDealerDraw`, never saved or sent; played by
+      `RendererTableAnimator`). Single-player tables only: a shared table's players see
+      the log line and the dealer's bubble.
 - [x] **Bot names** — computer seats draw from a pool of short names (`BotNames`),
       never repeating at a table and never a seated person's name; the host picks them
       (`GameState.BotNames`), so the engine's own seeded runs stay "Bot 1", "Bot 2". Saves
@@ -393,8 +395,11 @@ See `docs/shared-tables.md`.
 ### Phase 6 — Polish & Release
 - [x] Custom house rules (per-game rule toggles)
 - [x] Card animations — deal slide, flip, receive bump, fly-in, riffle shuffle
-- [ ] Sound effects — `SoundService`/`SoundGenerator` play four procedural cues
-      (deal, flip, win, lose); no real sound assets, no per-event coverage
+- [x] Sound effects in the web client — shuffle, deal, card played, drawn, turned,
+      trick gathered, points scored, a bell on your turn, win and lose. Synthesised
+      (`SoundGenerator`), heard from what each move changed (`TableSounds`), played through
+      Web Audio (`js/sounds.js`); on/off and volume in Settings. The MAUI app still plays
+      its original four. Real recorded samples would be a swap of the generator's output
 - [ ] Accessibility (colorblind mode, font size options) — **nothing implemented**
 - [ ] Android release prep (Play Store listing, signing, testing)
 - [ ] *Future:* iOS build when Mac access is available

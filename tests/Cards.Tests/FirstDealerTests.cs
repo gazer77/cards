@@ -105,6 +105,28 @@ public sealed class FirstDealerTests
         var state = Start("hearts", 4, 5UL);
         Assert.NotNull(state.DealerId);
         Assert.Empty(Dealt(state));
+        Assert.Null(state.FirstDealerDraw);   // nothing for the table to show
+    }
+
+    /// <summary>
+    /// The cards dealt for the deal are kept, in order, for the table to deal out on screen
+    /// before the real shuffle: the same cards the log names, ending with the one that
+    /// decided it, in the hand of the player who now deals.
+    /// </summary>
+    [Fact]
+    public void The_draw_is_kept_for_the_table_to_show()
+    {
+        var state = Start("euchre", 4, 7UL);
+        var draw  = state.FirstDealerDraw!;
+
+        Assert.Equal(Dealt(state).Count, draw.Count);
+        Assert.Equal(Dealt(state).Select(d => d.Card), draw.Select(d => GameText.CardName(d.Card)));
+        Assert.Equal(Rank.Jack, draw[^1].Card.Rank);
+        Assert.Equal(state.DealerId, draw[^1].PlayerId);
+
+        // Round the table from the first seat, one card each.
+        for (int i = 0; i < draw.Count; i++)
+            Assert.Equal(state.Players[i % state.Players.Count].Id, draw[i].PlayerId);
     }
 
     [Theory]

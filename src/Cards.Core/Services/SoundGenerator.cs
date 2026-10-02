@@ -46,7 +46,89 @@ public static class SoundGenerator
         return ToWav(Concat(hi, Silence(0.03), lo));
     }
 
+    /// <summary>A riffle: a run of tiny card clicks, quick and uneven, as a pack is shuffled.</summary>
+    public static byte[] Shuffle()
+    {
+        var rng = new Random(11);
+        var parts = new List<short[]>();
+        for (int i = 0; i < 22; i++)
+        {
+            parts.Add(Noise(0.006 + rng.NextDouble() * 0.004, 0.22, rng, smooth: 2));
+            parts.Add(Silence(0.012 + rng.NextDouble() * 0.018));
+        }
+        return ToWav(Concat([.. parts]));
+    }
+
+    /// <summary>A card laid down: a short soft snap with a low knock under it.</summary>
+    public static byte[] Play()
+    {
+        var rng   = new Random(3);
+        var snap  = Noise(0.035, 0.32, rng, smooth: 3);
+        var knock = Sine(170, 0.035, 0.25);
+        return ToWav(Mix(snap, knock));
+    }
+
+    /// <summary>A card drawn: a slide that swells and fades.</summary>
+    public static byte[] Draw()
+        => ToWav(Swell(Noise(0.11, 0.22, new Random(5), smooth: 6)));
+
+    /// <summary>A trick gathered in: two quick swishes.</summary>
+    public static byte[] Gather()
+    {
+        var rng = new Random(7);
+        return ToWav(Concat(Swell(Noise(0.07, 0.2, rng, smooth: 5)), Silence(0.03),
+                            Swell(Noise(0.07, 0.17, rng, smooth: 5))));
+    }
+
+    /// <summary>Points scored: a light rising pair of notes.</summary>
+    public static byte[] Score()
+        => ToWav(Concat(Sine(659.25, 0.07, 0.22), Sine(880, 0.11, 0.24)));
+
+    /// <summary>Your turn: one soft bell, so it is heard without being startling.</summary>
+    public static byte[] YourTurn()
+        => ToWav(Mix(Sine(880, 0.28, 0.16), Sine(1760, 0.18, 0.05)));
+
     // ── Synthesis helpers ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// White noise, softened by averaging <paramref name="smooth"/> samples (a crude low
+    /// pass — more is duller), fading out as it plays. Seeded, so a sound is the same
+    /// every time.
+    /// </summary>
+    private static short[] Noise(double durationSec, double volume, Random rng, int smooth)
+    {
+        int n = (int)(SampleRate * durationSec);
+        var raw = new double[n];
+        for (int i = 0; i < n; i++) raw[i] = rng.NextDouble() * 2 - 1;
+
+        var buf = new short[n];
+        for (int i = 0; i < n; i++)
+        {
+            double sum = 0; int k = 0;
+            for (int j = Math.Max(0, i - smooth + 1); j <= i; j++) { sum += raw[j]; k++; }
+            double env = Math.Pow(Math.Max(0, 1.0 - i / (double)n), 2);
+            buf[i] = (short)(sum / k * 32767 * volume * env);
+        }
+        return buf;
+    }
+
+    /// <summary>Shapes a sound to rise to its middle and fall away, like a slide.</summary>
+    private static short[] Swell(short[] sound)
+    {
+        var buf = new short[sound.Length];
+        for (int i = 0; i < sound.Length; i++)
+            buf[i] = (short)Math.Clamp(sound[i] * Math.Sin(Math.PI * i / Math.Max(1, sound.Length - 1)) * 1.6, short.MinValue, short.MaxValue);
+        return buf;
+    }
+
+    /// <summary>Two sounds at once, the length of the longer.</summary>
+    private static short[] Mix(short[] a, short[] b)
+    {
+        var buf = new short[Math.Max(a.Length, b.Length)];
+        for (int i = 0; i < buf.Length; i++)
+            buf[i] = (short)Math.Clamp((i < a.Length ? a[i] : 0) + (i < b.Length ? b[i] : 0), short.MinValue, short.MaxValue);
+        return buf;
+    }
 
     /// <summary>Single sine-wave tone with a linear fade-out envelope.</summary>
     private static short[] Sine(double freqHz, double durationSec, double volume)

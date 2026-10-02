@@ -81,6 +81,24 @@
     </section>
 
     <section class="setup-block">
+        <h2>Sound</h2>
+        <label class="rule">
+            <input type="checkbox" checked="@_soundOn" @onchange="SetSoundOn" />
+            <span>
+                <span class="rule-name">Sounds</span>
+                <span class="rule-desc">
+                    The shuffle and the deal, cards played and drawn, tricks gathered, points
+                    scored, a bell when it is your turn, and the end of the game.
+                </span>
+            </span>
+        </label>
+        <input type="range" min="0" max="1" step="0.05" disabled="@(!_soundOn)"
+               value="@_volume.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+               @onchange="SetVolume" />
+        <p class="muted">Volume @((int)Math.Round(_volume * 100))%</p>
+    </section>
+
+    <section class="setup-block">
         <h2>Table</h2>
         <label class="rule">
             <input type="checkbox" checked="@_cardValues" @onchange="SetCardValues" />
@@ -150,6 +168,25 @@
         Prefs.ShowCardValues = _cardValues;
     }
 
+    private bool   _soundOn = true;
+    private double _volume  = 0.6;
+
+    private void SetSoundOn(ChangeEventArgs e)
+    {
+        _soundOn = e.Value is true;
+        Prefs.SoundOn = _soundOn;
+    }
+
+    private void SetVolume(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out var v))
+        {
+            _volume = v;
+            Prefs.SoundVolume = v;
+        }
+    }
+
     private bool    _cardValues;
     private string  _skin     = "simple";
     private double  _pace     = 1.8;
@@ -163,6 +200,8 @@
         _sort     = Prefs.DefaultHandSort;
         _messages = Prefs.ShowGameMessages;
         _cardValues = Prefs.ShowCardValues;
+        _soundOn    = Prefs.SoundOn;
+        _volume     = Prefs.SoundVolume;
     }
 
     /// <summary>

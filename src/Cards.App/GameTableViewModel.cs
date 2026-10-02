@@ -67,6 +67,17 @@ public sealed class GameTableViewModel
     /// </summary>
     public string? PlayerName { get; set; }
 
+    /// <summary>Where the table's sounds go. Silent until a client gives it a way to make them.</summary>
+    public ITableSounds Sounds { get; set; } = NullTableSounds.Instance;
+
+    /// <summary>Plays what the move just made sounded like, from the table as it was before it.</summary>
+    private void Hear(TableSounds.Moment before)
+    {
+        if (_state is null) return;
+        foreach (var cue in TableSounds.Between(before, _state, IsGameOver, _state.Viewer))
+            Sounds.Play(cue);
+    }
+
     /// <summary>How well the computer plays a new game. A resumed one keeps the level it was saved at.</summary>
     public string Difficulty { get; set; } = Cards.Engine.Difficulty.Normal;
 
@@ -427,6 +438,7 @@ public sealed class GameTableViewModel
 
             var previous = IsShared ? _state : null;
             string? acting = previous is { Players.Count: > 0 } ? previous.CurrentPlayer.Id : null;
+            var heard = previous is not null ? TableSounds.Capture(previous, IsGameOver) : null;
 
             var state = TableProjection.ToState(view, definition);
             if (previous is not null)
@@ -448,6 +460,7 @@ public sealed class GameTableViewModel
 
             MaintainSort();
             CaptureStatusChange(acting);
+            if (heard is not null) Hear(heard);
             Changed?.Invoke();
 
             if (previous is not null) await _animator.PlayMoveAsync(state);
@@ -740,7 +753,9 @@ public sealed class GameTableViewModel
         string? actingPlayerId = _state!.Players.Count > 0 ? _state.CurrentPlayer.Id : null;
 
         _animator.CaptureBeforeMove(_state);
+        var heard = TableSounds.Capture(_state, IsGameOver);
         _logic!.Apply(_state, action);
+        Hear(heard);
 
         // Sort before the view is told, so a newly won card is animated into the slot
         // it will actually occupy rather than flying to the end of the hand and then
