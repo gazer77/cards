@@ -2154,6 +2154,7 @@ public sealed class CardTableRenderer
 
         float w    = font.MeasureText(name);
         float pip  = active ? size * 0.7f : 0f;
+        float icon = size * 1.05f;   // a person or a bot, before the name
         float padX = size * 0.55f, padY = size * 0.3f;
 
         var   cards = ZoneCardsRect(layout);
@@ -2163,7 +2164,7 @@ public sealed class CardTableRenderer
             ? cards.Bottom + size * 0.35f     // under the cards
             : cards.Bottom - boxH * 0.85f;    // over their bottom edge
 
-        float boxW = w + pip + padX * 2;
+        float boxW = w + pip + icon + padX * 2;
         float left = Math.Clamp(cards.MidX - boxW / 2f, 4f, MathF.Max(4f, _lastInfo.Width - boxW - 4f));
         top = Math.Clamp(top, 2f, MathF.Max(2f, _lastInfo.Height - boxH - 2f));
         var box = new SKRect(left, top, left + boxW, top + boxH);
@@ -2181,9 +2182,57 @@ public sealed class CardTableRenderer
             using var pipPaint = new SKPaint { Color = TurnGold, IsAntialias = true };
             canvas.DrawCircle(box.Left + padX + size * 0.22f, box.MidY, size * 0.22f, pipPaint);
         }
+
+        var glyph = new SKRect(x, box.MidY - size * 0.42f, x + size * 0.8f, box.MidY + size * 0.42f);
+        using (var iconPaint = new SKPaint { Color = paint.Color.WithAlpha(0xD0), IsAntialias = true })
+        {
+            if (IsComputerSeat(layout.Zone.OwnerId)) DrawBotGlyph(canvas, glyph, iconPaint);
+            else DrawPersonGlyph(canvas, glyph, iconPaint);
+        }
+        x += icon;
+
         canvas.DrawText(name, x, baseline, font, paint);
 
         DrawDealerMark(canvas, layout, box.Right + size * 0.45f, baseline, size);
+    }
+
+    /// <summary>
+    /// Whether the computer plays this seat: one with a computer player, or a seat with a
+    /// role — Blackjack's dealer is the house. At a shared table the room says which seats
+    /// those are, people taken over by the computer included.
+    /// </summary>
+    private bool IsComputerSeat(string? playerId)
+        => _state is not null && playerId is not null
+        && (_state.PlayerAgents.ContainsKey(playerId) || _state.Players.Any(p => p.Id == playerId && p.Role is not null));
+
+    /// <summary>A head and shoulders: a person sits here.</summary>
+    private static void DrawPersonGlyph(SKCanvas canvas, SKRect r, SKPaint paint)
+    {
+        float w = r.Width, h = r.Height;
+        canvas.DrawCircle(r.MidX, r.Top + h * 0.27f, w * 0.24f, paint);
+        using var shoulders = new SKPath();
+        shoulders.MoveTo(r.Left + w * 0.08f, r.Bottom);
+        shoulders.CubicTo(r.Left + w * 0.08f, r.Top + h * 0.52f, r.Right - w * 0.08f, r.Top + h * 0.52f, r.Right - w * 0.08f, r.Bottom);
+        shoulders.Close();
+        canvas.DrawPath(shoulders, paint);
+    }
+
+    /// <summary>A robot's head — square, two eyes, an aerial: the computer plays this seat.</summary>
+    private static void DrawBotGlyph(SKCanvas canvas, SKRect r, SKPaint paint)
+    {
+        float w = r.Width, h = r.Height;
+        var head = new SKRect(r.Left + w * 0.06f, r.Top + h * 0.3f, r.Right - w * 0.06f, r.Bottom);
+        canvas.DrawRoundRect(head, w * 0.16f, w * 0.16f, paint);
+
+        using var stroke = new SKPaint { Color = paint.Color, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = MathF.Max(1f, w * 0.09f) };
+        canvas.DrawLine(r.MidX, head.Top, r.MidX, r.Top + h * 0.1f, stroke);
+        canvas.DrawCircle(r.MidX, r.Top + h * 0.08f, w * 0.09f, paint);
+
+        // Eyes in the plate's own dark, so they read on any plate.
+        using var dark = new SKPaint { Color = new SKColor(0x08, 0x14, 0x0E, 0xE0), IsAntialias = true };
+        float ey = head.Top + head.Height * 0.45f;
+        canvas.DrawCircle(head.Left + head.Width * 0.3f, ey, w * 0.1f, dark);
+        canvas.DrawCircle(head.Right - head.Width * 0.3f, ey, w * 0.1f, dark);
     }
 
     /// <summary>

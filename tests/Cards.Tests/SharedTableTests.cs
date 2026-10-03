@@ -157,6 +157,24 @@ public sealed class SharedTableTests
         Assert.All(view.State.Zones.Single(z => z.Id == "deck").Cards, c => Assert.True(c.IsHidden));
     }
 
+    /// <summary>
+    /// The client knows which seats the computer plays from the room, not from rebuilding
+    /// the game as one of its own — which gave every seat but the first a computer player,
+    /// and would have put a robot on the name plate of a person sitting at seat 2.
+    /// </summary>
+    [Fact]
+    public void A_client_knows_who_the_computer_plays_from_the_room()
+    {
+        var (state, logic) = Table("hearts", 4);
+        var seats = state.Players.Select(p => new SeatView { Id = p.Id, Name = p.Name, IsComputer = p.Id is "player1" or "player3" }).ToList();
+        var view  = TableProjection.For(state, logic, "player2", 4, [], seats, uid => -1000 - uid * 7 % 991,
+                                        version: 1, busy: false, announcements: []);
+
+        var rebuilt = TableProjection.ToState(view, TestGames.Load(new GameLoader(new EmbeddedGameAssetSource()), "hearts")!);
+
+        Assert.Equal(["player1", "player3"], rebuilt.PlayerAgents.Keys.Order());
+    }
+
     [Fact]
     public void A_client_rebuilds_the_table_from_its_view()
     {

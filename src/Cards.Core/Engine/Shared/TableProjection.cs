@@ -188,6 +188,15 @@ public static class TableProjection
             if (state.Players.FirstOrDefault(p => p.Id == seat.Id) is { } player)
                 player.Name = seat.Name;
 
+        // Who the computer plays, as the server says. Rebuilt as a game of one's own, every
+        // seat but the first had a computer player, people included; the table marks bots
+        // by this, so it must be the room's truth. Never played here — the server plays them.
+        foreach (var seat in view.Seats)
+        {
+            if (seat.IsComputer) state.PlayerAgents.TryAdd(seat.Id, new DefaultAiAgent(seat.Id, state.Rng));
+            else state.PlayerAgents.Remove(seat.Id);
+        }
+
         state.ViewerId = view.ViewerId;
         foreach (var a in view.Announcements)
             state.Announcements.Add((a.PlayerId, a.Text));
