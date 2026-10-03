@@ -15,9 +15,11 @@ public sealed class GameAssetTests
         var loader = new GameLoader(new EmbeddedGameAssetSource());
         var games  = await loader.LoadAllAsync();
 
-        // Thirteen entries for sixteen games: Euchre is one entry with a shape per seat
-        // count, poker one with three named shapes. That is the point of configurations.
-        Assert.Equal(15, games.Count);
+        // Every definition in the games repository loads — counted from the files, not
+        // written down, since games arrive there without a change here.
+        int files = Directory.GetFiles(Path.Combine(FileSystemGameAssetSource.FindRepoRoot(), "games"), "*.json").Length;
+        Assert.Equal(files, games.Count);
+        Assert.Empty(loader.LoadErrors);
         Assert.All(games, g => Assert.False(string.IsNullOrWhiteSpace(g.Id)));
     }
 

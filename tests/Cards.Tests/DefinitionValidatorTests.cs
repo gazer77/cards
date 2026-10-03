@@ -137,6 +137,8 @@ public sealed class DefinitionValidatorTests
     /// <summary>Serves one deliberately broken definition.</summary>
     private sealed class BrokenRuleAssetSource : IGameAssetSource
     {
+        public IReadOnlyList<string> GameIds() => ["broken"];
+
         public Task<Stream> OpenAsync(string logicalPath)
         {
             const string json = """

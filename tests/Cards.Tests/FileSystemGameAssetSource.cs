@@ -20,6 +20,9 @@ public sealed class FileSystemGameAssetSource : IGameAssetSource
         return Task.FromResult<Stream>(File.OpenRead(full));
     }
 
+    public IReadOnlyList<string> GameIds()
+        => Directory.GetFiles(Path.Combine(_root, "games"), "*.json").Select(Path.GetFileNameWithoutExtension).ToList()!;
+
     /// <summary>
     /// Walks up from the test binary until it finds the directory holding <c>games/</c>.
     /// Avoids hard-coding a relative depth that breaks when the build output path changes.

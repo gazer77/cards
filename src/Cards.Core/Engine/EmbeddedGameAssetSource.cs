@@ -24,6 +24,9 @@ public sealed class EmbeddedGameAssetSource : IGameAssetSource
         return Task.FromResult(stream);
     }
 
+    public IReadOnlyList<string> GameIds()
+        => GameDefinitionPaths().Select(p => p["games/".Length..^".json".Length]).ToList();
+
     /// <summary>Logical paths of every embedded game definition, e.g. "games/war.json".</summary>
     public static IEnumerable<string> GameDefinitionPaths()
         => Owner.GetManifestResourceNames()

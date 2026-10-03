@@ -15,4 +15,11 @@ public interface IGameAssetSource
     /// Throws when the asset does not exist.
     /// </summary>
     Task<Stream> OpenAsync(string logicalPath);
+
+    /// <summary>
+    /// The ids of every game definition this source holds — "war" for <c>games/war.json</c>.
+    /// Games are found, not listed by hand: the definitions live in their own repository,
+    /// and a game added there must appear without a change to the engine.
+    /// </summary>
+    IReadOnlyList<string> GameIds();
 }

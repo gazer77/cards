@@ -10,26 +10,6 @@ public class GameLoader
 
     public GameLoader(IGameAssetSource assets) => _assets = assets;
 
-    // Games listed here correspond to JSON files bundled as raw assets under games/.
-    // When a new game JSON is added, add its id here.
-    private static readonly string[] GameIds =
-    [
-        "free-play",
-        "high-card",
-        "war",
-        "go-fish",
-        "blackjack",
-        "hearts",
-        "spades",
-        "whist",
-        "cribbage",
-        "gin-rummy",
-        "golf",
-        "poker",
-        "euchre",
-        "pinochle",
-        "hand-and-foot",
-    ];
 
     /// <summary>
     /// How definitions are read. Public so a validator or a test parses them exactly as
@@ -59,16 +39,20 @@ public class GameLoader
     /// </summary>
     public ConcurrentDictionary<string, string> LoadWarnings { get; } = new();
 
+    /// <summary>
+    /// Every game the asset source holds, by name. Found rather than listed: a definition
+    /// added to the games repository appears with no change here.
+    /// </summary>
     public async Task<List<GameDefinition>> LoadAllAsync()
     {
         var games = new List<GameDefinition>();
-        foreach (var id in GameIds)
+        foreach (var id in _assets.GameIds())
         {
             var game = await LoadAsync(id);
             if (game is not null)
                 games.Add(game);
         }
-        return games;
+        return games.OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
     }
 
     public async Task<GameDefinition?> LoadAsync(string gameId)
