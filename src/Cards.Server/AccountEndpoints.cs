@@ -28,9 +28,60 @@ public static class AccountEndpoints
                 ? Results.Ok(new AccountData
                 {
                     Version = account.Version, Storage = account.Storage,
-                    Role = account.Role, AdminNeeded = store.AdminNeeded,
+                    Role = account.Role, AdminNeeded = store.AdminNeeded, Username = account.Username,
                 })
                 : Results.NotFound();
+        }).RequireRateLimiting("account");
+
+        // ── A username and password, for those who want one ───────────────────
+
+        var options = app.Services.GetRequiredService<ServerOptions>();
+
+        app.MapGet(AccountContract.OptionsPath, () => Results.Ok(options.Current));
+
+        app.MapPut(AccountContract.OptionsPath, (HttpRequest request, ServerOptionsView change) =>
+        {
+            if (store is null) return Off();
+            if (Require(store, request, AccountRoles.Admin) is { } refused) return refused;
+            options.Set(change);
+            return Results.Ok(options.Current);
+        }).RequireRateLimiting("account");
+
+        app.MapPut(AccountContract.LoginPath, (HttpRequest request, LoginDetails login) =>
+        {
+            if (store is null) return Off();
+            if (!options.Current.UsernamesOffered) return NotOffered();
+            if (Open(store, request) is not { } account) return Results.NotFound();
+            return store.SetLogin(account, login.Username.Trim(), login.Password) is { } why
+                ? (why.Contains("taken") ? Results.Conflict(why) : Results.BadRequest(why))
+                : Results.Ok(new SignedIn { Username = account.Username! });
+        }).RequireRateLimiting("account");
+
+        app.MapDelete(AccountContract.LoginPath, (HttpRequest request) =>
+        {
+            if (store is null) return Off();
+            if (Open(store, request) is not { } account) return Results.NotFound();
+            store.RemoveLogin(account);
+            return Results.NoContent();
+        }).RequireRateLimiting("account");
+
+        app.MapPost(AccountContract.SignInPath, (LoginDetails login) =>
+        {
+            if (store is null) return Off();
+            if (!options.Current.UsernamesOffered) return NotOffered();
+            var (account, key, why) = store.SignIn(login.Username.Trim(), login.Password);
+            return account is null
+                ? Results.Json(why, statusCode: StatusCodes.Status401Unauthorized)
+                : Results.Ok(new SignedIn { Key = key!, Username = account.Username! });
+        }).RequireRateLimiting("account");
+
+        app.MapDelete(AccountContract.AdminPath + "/{id}/login", (HttpRequest request, string id) =>
+        {
+            if (store is null) return Off();
+            if (Require(store, request, AccountRoles.Admin) is { } refused) return refused;
+            if (store.ById(id) is not { } account) return Results.NotFound();
+            store.RemoveLogin(account);
+            return Results.NoContent();
         }).RequireRateLimiting("account");
 
         // The first admin: whoever can read the server's log has the setup code.
@@ -51,7 +102,7 @@ public static class AccountEndpoints
             if (Require(store, request, AccountRoles.Admin) is { } refused) return refused;
             return Results.Ok(store.All.OrderBy(a => a.Created).Select(a => new AccountSummary
             {
-                Id = a.Id, Name = AccountStore.NameOf(a), Role = a.Role, Created = a.Created, Updated = a.Updated,
+                Id = a.Id, Name = AccountStore.NameOf(a), Role = a.Role, Username = a.Username, Created = a.Created, Updated = a.Updated,
                 SavedGames = a.Storage.Keys.Count(k => k.StartsWith("cards.save.") && k != "cards.save.save_index"),
             }).ToList());
         }).RequireRateLimiting("account");
@@ -114,6 +165,10 @@ public static class AccountEndpoints
         => Open(store, request) is not { } caller ? Results.NotFound()
          : !AccountRoles.AtLeast(caller.Role, role) ? Results.StatusCode(StatusCodes.Status403Forbidden)
          : null;
+
+    /// <summary>The admin has turned usernames and passwords off here.</summary>
+    private static IResult NotOffered()
+        => Results.Json("Usernames and passwords are not offered on this server.", statusCode: StatusCodes.Status403Forbidden);
 
     /// <summary>This server keeps no accounts — no folder for them. 501, so a client can tell it from a wrong code.</summary>
     private static IResult Off() => Results.StatusCode(StatusCodes.Status501NotImplemented);

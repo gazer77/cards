@@ -19,19 +19,33 @@
 
     <h1>Settings</h1>
 
-    @* The account: nothing to fill in, only a code to carry. *@
-    @if (Account.Available && Account.Code is { } accountCode)
+    @* The account: nothing to fill in, only a code to carry — and, for those who want
+       one, a username and password as well. *@
+    @if (Account.Available && Account.Key is not null)
     {
         <section class="setup-block">
-            <h2>Your code</h2>
-            <p class="account-code">@accountCode</p>
-            <p class="muted">
-                Your name, settings and saved games, kept on the table server. Type this code
-                on another phone or computer to bring them there. There is no password: keep it
-                to yourself, and make a new one if it gets out.
-            </p>
+            <h2>Your account</h2>
+            @if (Account.Code is { } accountCode)
+            {
+                <p class="account-code">@accountCode</p>
+                <p class="muted">
+                    Your name, settings and saved games, kept on the table server. Type this code
+                    on another phone or computer to bring them there@(Account.Username is null ? "" : ", or sign in there as " + Account.Username).
+                    Keep it to yourself, and make a new one if it gets out.
+                </p>
+            }
+            else
+            {
+                <p class="muted">
+                    Signed in as <strong>@Account.Username</strong>. Your name, settings and saved games
+                    are kept on the table server.
+                </p>
+            }
             <div class="choices">
-                <button class="choice" @onclick="CopyCode">@(_copied ? "Copied" : "Copy")</button>
+                @if (Account.Code is not null)
+                {
+                    <button class="choice" @onclick="CopyCode">@(_copied ? "Copied" : "Copy")</button>
+                }
                 @if (_confirmNew)
                 {
                     <button class="choice" @onclick="NewCode">Yes — the old code stops working</button>
@@ -58,6 +72,69 @@
                     @(_using ? "Fetching…" : "Use this code")
                 </button>
             }
+            @if (Account.UsernamesOffered)
+            {
+                <h2 class="subhead">Username and password</h2>
+                <p class="muted">
+                    Optional: a name and password to sign in with on another device, instead of the
+                    code. This server has no HTTPS yet, so the password crosses your network
+                    unencrypted — use one you do not use anywhere else.
+                </p>
+                @if (Account.Username is { } username && !_changingLogin)
+                {
+                    <p>You sign in as <strong>@username</strong>.</p>
+                    <div class="choices">
+                        <button class="choice" @onclick="() => { _changingLogin = true; _loginName = username; }">Change password</button>
+                        @if (_confirmRemoveLogin)
+                        {
+                            <button class="choice" @onclick="RemoveLogin">Yes — remove them</button>
+                            <button class="choice" @onclick="() => _confirmRemoveLogin = false">Keep them</button>
+                        }
+                        else
+                        {
+                            <button class="choice" @onclick="() => _confirmRemoveLogin = true">Remove username and password…</button>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <label class="host-name">
+                        Username
+                        <input maxlength="24" autocomplete="username" @bind="_loginName" @bind:event="oninput" />
+                    </label>
+                    <label class="host-name">
+                        Password
+                        <input type="password" autocomplete="new-password" @bind="_loginPassword" @bind:event="oninput" />
+                    </label>
+                    <label class="host-name">
+                        Password again
+                        <input type="password" autocomplete="new-password" @bind="_loginAgain" @bind:event="oninput" />
+                    </label>
+                    <button class="start secondary"
+                            disabled="@(_loginName.Trim().Length < 3 || _loginPassword.Length < 6 || _loginPassword != _loginAgain)"
+                            @onclick="SaveLogin">@(Account.Username is null ? "Add username and password" : "Save new password")</button>
+                    @if (_loginPassword.Length > 0 && _loginAgain.Length > 0 && _loginPassword != _loginAgain)
+                    {
+                        <p class="muted">The two passwords differ.</p>
+                    }
+                }
+
+                <h2 class="subhead">Sign in to another account</h2>
+                <label class="host-name">
+                    Username
+                    <input maxlength="24" autocomplete="username" @bind="_signInName" @bind:event="oninput" />
+                </label>
+                <label class="host-name">
+                    Password
+                    <input type="password" autocomplete="current-password" @bind="_signInPassword" @bind:event="oninput" />
+                </label>
+                @if (_signInName.Trim().Length > 0 && _signInPassword.Length > 0)
+                {
+                    <p class="muted">This device's settings and saved games will be replaced by that account's.</p>
+                    <button class="start secondary" disabled="@_using" @onclick="SignIn">@(_using ? "Signing in…" : "Sign in")</button>
+                }
+            }
+
             @if (_accountError is not null)
             {
                 <p class="error">@_accountError</p>
@@ -237,6 +314,40 @@
     private string  _typed = "";
     private bool    _using, _copied, _confirmNew;
     private string? _accountError;
+
+    private string _loginName = "", _loginPassword = "", _loginAgain = "";
+    private string _signInName = "", _signInPassword = "";
+    private bool   _changingLogin, _confirmRemoveLogin;
+
+    private async Task SaveLogin()
+    {
+        _accountError = await Account.SetLoginAsync(_loginName.Trim(), _loginPassword);
+        if (_accountError is null)
+        {
+            _changingLogin = false;
+            _loginPassword = _loginAgain = "";
+        }
+    }
+
+    private async Task RemoveLogin()
+    {
+        _confirmRemoveLogin = false;
+        _accountError = await Account.RemoveLoginAsync() ? null : "Could not reach the server.";
+    }
+
+    /// <summary>Signs this device in to the account by name and password, then reloads as that account.</summary>
+    private async Task SignIn()
+    {
+        _using = true;
+        _accountError = await Account.SignInAsync(_signInName.Trim(), _signInPassword);
+        if (_accountError is null)
+        {
+            Nav.NavigateTo("/settings", forceLoad: true);
+            return;
+        }
+        _signInPassword = "";
+        _using = false;
+    }
 
     private string _setup = "";
 

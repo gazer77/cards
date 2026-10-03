@@ -295,4 +295,100 @@ public sealed class AccountTests : IDisposable
         var again = new AccountStore(_directory);   // the server restarts
         Assert.Equal(account.Id, again.Find(code)!.Id);
     }
+
+    // ── Usernames and passwords, for those who want them ────────────────────
+
+    private static async Task<HttpResponseMessage> SignIn(HttpClient http, string username, string password)
+        => await http.PostAsJsonAsync(AccountContract.SignInPath, new LoginDetails { Username = username, Password = password });
+
+    [Fact]
+    public async Task A_username_and_password_sign_a_device_in_with_a_key_of_its_own()
+    {
+        var http = _server.CreateClient();
+        string code = await NewAccount(http);
+        await http.SendAsync(With(HttpMethod.Put, AccountContract.Path, code,
+                                  new AccountData { Storage = new() { ["cards.settings"] = "{\"player_name\":\"Ana\"}" } }));
+
+        var set = await http.SendAsync(With(HttpMethod.Put, AccountContract.LoginPath, code,
+                                            new LoginDetails { Username = "Ana", Password = "correct horse" }));
+        Assert.Equal(HttpStatusCode.OK, set.StatusCode);
+
+        var signed = await (await SignIn(http, "ana", "correct horse")).Content.ReadFromJsonAsync<SignedIn>();
+        Assert.StartsWith(AccountStore.DeviceKeyPrefix, signed!.Key);
+        Assert.Equal("Ana", signed.Username);
+
+        var held = await (await http.SendAsync(With(HttpMethod.Get, AccountContract.Path, signed.Key))).Content.ReadFromJsonAsync<AccountData>();
+        Assert.Equal("{\"player_name\":\"Ana\"}", held!.Storage["cards.settings"]);
+        Assert.Equal("Ana", held.Username);
+
+        // The code still works beside it.
+        Assert.Equal(HttpStatusCode.OK, (await http.SendAsync(With(HttpMethod.Get, AccountContract.Path, code))).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_wrong_password_and_an_unknown_name_get_the_same_answer_and_tries_run_out()
+    {
+        var http = _server.CreateClient();
+        string code = await NewAccount(http);
+        var tooShort = await http.SendAsync(With(HttpMethod.Put, AccountContract.LoginPath, code, new LoginDetails { Username = "bob", Password = "x" }));
+        Assert.Equal(HttpStatusCode.BadRequest, tooShort.StatusCode);
+        await http.SendAsync(With(HttpMethod.Put, AccountContract.LoginPath, code, new LoginDetails { Username = "bob", Password = "secret1" }));
+
+        var wrong   = await SignIn(http, "bob", "secret2");
+        var unknown = await SignIn(http, "nobody", "secret1");
+        Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
+        Assert.Equal(await wrong.Content.ReadAsStringAsync(), await unknown.Content.ReadAsStringAsync());
+
+        for (int i = 0; i < AccountStore.SignInTries; i++) await SignIn(http, "bob", "nope-nope");
+        var locked = await SignIn(http, "bob", "secret1");   // the right one, too late
+        Assert.Equal(HttpStatusCode.Unauthorized, locked.StatusCode);
+        Assert.Contains("wait", await locked.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task A_username_belongs_to_one_account()
+    {
+        var http = _server.CreateClient();
+        string first = await NewAccount(http), second = await NewAccount(http);
+        await http.SendAsync(With(HttpMethod.Put, AccountContract.LoginPath, first, new LoginDetails { Username = "Cara", Password = "secret1" }));
+        var taken = await http.SendAsync(With(HttpMethod.Put, AccountContract.LoginPath, second, new LoginDetails { Username = "CARA", Password = "secret2" }));
+        Assert.Equal(HttpStatusCode.Conflict, taken.StatusCode);
+    }
+
+    [Fact]
+    public async Task Removing_the_password_signs_out_every_device_that_used_it()
+    {
+        var http = _server.CreateClient();
+        string code = await NewAccount(http);
+        await http.SendAsync(With(HttpMethod.Put, AccountContract.LoginPath, code, new LoginDetails { Username = "dee", Password = "secret1" }));
+        var key = (await (await SignIn(http, "dee", "secret1")).Content.ReadFromJsonAsync<SignedIn>())!.Key;
+
+        await http.SendAsync(With(HttpMethod.Delete, AccountContract.LoginPath, code));
+        Assert.Equal(HttpStatusCode.NotFound, (await http.SendAsync(With(HttpMethod.Get, AccountContract.Path, key))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SignIn(http, "dee", "secret1")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await http.SendAsync(With(HttpMethod.Get, AccountContract.Path, code))).StatusCode);
+    }
+
+    [Fact]
+    public async Task An_admin_sees_usernames_clears_a_forgotten_password_and_can_turn_them_off()
+    {
+        var http = _server.CreateClient();
+        string admin = await Admin(http), code = await NewAccount(http);
+        await http.SendAsync(With(HttpMethod.Put, AccountContract.LoginPath, code, new LoginDetails { Username = "eve", Password = "secret1" }));
+
+        var people = await (await http.SendAsync(With(HttpMethod.Get, AccountContract.AdminPath, admin))).Content.ReadFromJsonAsync<List<AccountSummary>>();
+        var eve = people!.Single(p => p.Username == "eve");
+
+        // Only an admin clears it.
+        Assert.Equal(HttpStatusCode.Forbidden, (await http.SendAsync(With(HttpMethod.Delete, $"{AccountContract.AdminPath}/{eve.Id}/login", code))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await http.SendAsync(With(HttpMethod.Delete, $"{AccountContract.AdminPath}/{eve.Id}/login", admin))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SignIn(http, "eve", "secret1")).StatusCode);
+
+        // Off: nobody adds one or signs in with one, and a player cannot turn it back on.
+        Assert.Equal(HttpStatusCode.Forbidden, (await http.SendAsync(With(HttpMethod.Put, AccountContract.OptionsPath, code, new ServerOptionsView { UsernamesOffered = true }))).StatusCode);
+        await http.SendAsync(With(HttpMethod.Put, AccountContract.OptionsPath, admin, new ServerOptionsView { UsernamesOffered = false }));
+        Assert.False((await http.GetFromJsonAsync<ServerOptionsView>(AccountContract.OptionsPath))!.UsernamesOffered);
+        Assert.Equal(HttpStatusCode.Forbidden, (await http.SendAsync(With(HttpMethod.Put, AccountContract.LoginPath, code, new LoginDetails { Username = "eve", Password = "secret1" }))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SignIn(http, "eve", "secret1")).StatusCode);
+    }
 }

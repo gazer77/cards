@@ -109,6 +109,18 @@
     @if (Account.IsAdmin)
     {
         <h1>People</h1>
+        <section class="setup-block">
+            <h2>Usernames and passwords</h2>
+            <p class="muted">
+                Whether people may add a username and password to their account and sign in with
+                them. Off, everyone carries their six-word code; names already set are kept and
+                work again when this is turned back on.
+            </p>
+            <div class="choices">
+                <button class="choice @(Account.UsernamesOffered ? "chosen" : "")" @onclick="() => SetUsernamesOffered(true)">Offered</button>
+                <button class="choice @(Account.UsernamesOffered ? "" : "chosen")" @onclick="() => SetUsernamesOffered(false)">Not offered</button>
+            </div>
+        </section>
     }
 
     @if (Account.IsAdmin && _accounts is null)
@@ -127,6 +139,10 @@
             var account = a;
             <section class="setup-block person">
                 <h2>@(account.Name ?? "No name yet")</h2>
+                @if (account.Username is { } username)
+                {
+                    <p class="muted">Signs in as <strong>@username</strong></p>
+                }
                 <p class="muted">
                     Since @account.Created.ToLocalTime().ToString("d MMM yyyy") · last saved
                     @account.Updated.ToLocalTime().ToString("d MMM, HH:mm") ·
@@ -142,6 +158,10 @@
                 </div>
                 <div class="choices">
                     <button class="choice" @onclick="() => NewCode(account)">New code</button>
+                    @if (account.Username is not null)
+                    {
+                        <button class="choice" @onclick="() => ClearLogin(account)">Clear username and password</button>
+                    }
                     @if (_confirmDelete == account.Id)
                     {
                         <button class="choice" @onclick="() => Delete(account)">Yes — delete for good</button>
@@ -241,6 +261,16 @@
         _errors.Remove(account.Id);
         if (await Account.NewCodeForAsync(account.Id) is { } code) _newCodes[account.Id] = code;
         else _errors[account.Id] = "Could not make a new code.";
+    }
+
+    private async Task SetUsernamesOffered(bool offered) => await Account.SetUsernamesOfferedAsync(offered);
+
+    /// <summary>A person who forgot their password: clear it, and they add a new one with their code.</summary>
+    private async Task ClearLogin(Cards.Services.AccountSummary account)
+    {
+        _errors.Remove(account.Id);
+        if (await Account.ClearLoginForAsync(account.Id)) account.Username = null;
+        else _errors[account.Id] = "Could not clear it.";
     }
 
     private async Task Delete(Cards.Services.AccountSummary account)

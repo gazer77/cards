@@ -797,3 +797,9 @@ html, body {
     margin: 0.35rem 0;
 }
 .seat-line > span { flex: 1 1 8rem; }
+
+/* A second heading inside a settings block — the account's username and sign-in. */
+.setup-block h2.subhead {
+    margin-top: 1.4rem;
+    font-size: 1rem;
+}

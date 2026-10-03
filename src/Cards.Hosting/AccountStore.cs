@@ -31,24 +31,29 @@ public sealed class AccountStore
             try
             {
                 if (JsonSerializer.Deserialize<StoredAccount>(File.ReadAllText(path), Json) is { } account)
+                {
                     _byHash[account.CodeHash] = account;
+                    foreach (var device in account.DeviceKeyHashes) _byHash[device] = account;
+                    if (account.Username is { } name) _byUsername[name] = account;
+                }
             }
             catch (Exception) { /* a damaged file is one account lost, not every account */ }
         }
     }
 
-    public int Count => _byHash.Count;
+    public int Count => All.Count();
 
-    public IEnumerable<StoredAccount> All => _byHash.Values;
+    /// <summary>Every account once — the key index holds an account under its code and each signed-in device.</summary>
+    public IEnumerable<StoredAccount> All => _byHash.Values.Distinct();
 
-    public StoredAccount? ById(string id) => _byHash.Values.FirstOrDefault(a => a.Id == id);
+    public StoredAccount? ById(string id) => All.FirstOrDefault(a => a.Id == id);
 
     // ── Roles ─────────────────────────────────────────────────────────────────
 
     private string? _setupCode;
 
     /// <summary>Whether no account here is an admin — so nobody can give out roles yet.</summary>
-    public bool AdminNeeded => !_byHash.Values.Any(a => a.Role == AccountRoles.Admin);
+    public bool AdminNeeded => !All.Any(a => a.Role == AccountRoles.Admin);
 
     /// <summary>
     /// While there is no admin, a one-time code that makes one: the server writes it to its
@@ -78,7 +83,7 @@ public sealed class AccountStore
     {
         role = AccountRoles.Of(role);
         if (account.Role == AccountRoles.Admin && role != AccountRoles.Admin
-            && _byHash.Values.Count(a => a.Role == AccountRoles.Admin) == 1)
+            && All.Count(a => a.Role == AccountRoles.Admin) == 1)
             return false;
 
         lock (_write)
@@ -92,11 +97,13 @@ public sealed class AccountStore
     /// <summary>Removes an account for good, unless it is the last admin.</summary>
     public bool Delete(StoredAccount account)
     {
-        if (account.Role == AccountRoles.Admin && _byHash.Values.Count(a => a.Role == AccountRoles.Admin) == 1)
+        if (account.Role == AccountRoles.Admin && All.Count(a => a.Role == AccountRoles.Admin) == 1)
             return false;
         lock (_write)
         {
             _byHash.TryRemove(account.CodeHash, out _);
+            foreach (var device in account.DeviceKeyHashes) _byHash.TryRemove(device, out _);
+            if (account.Username is { } name) _byUsername.TryRemove(name, out _);
             File.Delete(Path.Combine(_directory, account.Id + ".json"));
         }
         return true;
@@ -134,10 +141,118 @@ public sealed class AccountStore
         return (code, account);
     }
 
-    /// <summary>The account a code opens, or null — for a code that is not one, or not anyone's.</summary>
+    /// <summary>
+    /// The account a code — or a device key from a password sign-in — opens, or null: for a
+    /// code that is not one, or not anyone's.
+    /// </summary>
     public StoredAccount? Find(string? typed)
-        => AccountCode.Normalize(typed) is { } code && _byHash.TryGetValue(AccountCode.Hash(code), out var account)
+    {
+        if (typed is not null && typed.StartsWith(DeviceKeyPrefix, StringComparison.Ordinal))
+            return _byHash.TryGetValue(DeviceKeyHash(typed), out var signedIn) ? signedIn : null;
+        return AccountCode.Normalize(typed) is { } code && _byHash.TryGetValue(AccountCode.Hash(code), out var account)
             ? account : null;
+    }
+
+    // ── Usernames and passwords ───────────────────────────────────────────────
+
+    public const string DeviceKeyPrefix = "dk_";
+    public const int MaxDevices = 20;
+    public const int SignInTries = 5;
+    public static readonly TimeSpan Lockout = TimeSpan.FromMinutes(1);
+
+    private readonly ConcurrentDictionary<string, StoredAccount> _byUsername = new(StringComparer.OrdinalIgnoreCase);
+
+    private static string DeviceKeyHash(string key)
+        => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("cards-device:" + key)));
+
+    /// <summary>Why a username will not do, or null: three to twenty-four letters, digits, dots, dashes or underscores, starting with a letter or digit.</summary>
+    public static string? CheckUsername(string? username)
+        => username is { Length: >= 3 and <= 24 } && System.Text.RegularExpressions.Regex.IsMatch(username, "^[A-Za-z0-9][A-Za-z0-9._-]*$")
+            ? null : "A username is 3 to 24 letters or digits, and may use . _ or -.";
+
+    public static string? CheckPassword(string? password)
+        => password is { Length: >= 6 and <= 128 } ? null : "A password is at least 6 characters.";
+
+    /// <summary>
+    /// Gives the account a username and password, or changes them. The reason when it
+    /// cannot: a name or password that will not do, or a name someone else has.
+    /// </summary>
+    public string? SetLogin(StoredAccount account, string username, string password)
+    {
+        if ((CheckUsername(username) ?? CheckPassword(password)) is { } why) return why;
+        lock (_write)
+        {
+            if (_byUsername.TryGetValue(username, out var holder) && holder.Id != account.Id)
+                return "That username is taken.";
+            if (account.Username is { } old) _byUsername.TryRemove(old, out _);
+
+            account.Username      = username;
+            account.PasswordHash  = Passwords.Hash(password);
+            account.FailedSignIns = 0;
+            account.LockedUntil   = null;
+            _byUsername[username] = account;
+            Write(account);
+        }
+        return null;
+    }
+
+    /// <summary>Takes the username and password off the account, and signs out every device that came in with them.</summary>
+    public void RemoveLogin(StoredAccount account)
+    {
+        lock (_write)
+        {
+            if (account.Username is { } name) _byUsername.TryRemove(name, out _);
+            foreach (var hash in account.DeviceKeyHashes) _byHash.TryRemove(hash, out _);
+            account.Username = null;
+            account.PasswordHash = null;
+            account.DeviceKeyHashes.Clear();
+            Write(account);
+        }
+    }
+
+    /// <summary>
+    /// Signs in with a username and password: a new key for this device, which opens the
+    /// account as its code does. A wrong name and a wrong password answer the same, so the
+    /// answer does not say which names exist; five wrong in a row lock the name a minute.
+    /// </summary>
+    public (StoredAccount? Account, string? DeviceKey, string? Why) SignIn(string? username, string? password)
+    {
+        const string Wrong = "That username and password do not match.";
+        if (username is null || password is null || !_byUsername.TryGetValue(username, out var account))
+            return (null, null, Wrong);
+
+        lock (_write)
+        {
+            if (account.LockedUntil is { } until && until > DateTime.UtcNow)
+                return (null, null, "Too many tries — wait a minute and try again.");
+
+            if (!Passwords.Matches(password, account.PasswordHash))
+            {
+                if (++account.FailedSignIns >= SignInTries)
+                {
+                    account.LockedUntil   = DateTime.UtcNow + Lockout;
+                    account.FailedSignIns = 0;
+                }
+                Write(account);
+                return (null, null, Wrong);
+            }
+
+            string key = DeviceKeyPrefix + Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24))
+                                                  .Replace('+', '-').Replace('/', '_');
+            string hash = DeviceKeyHash(key);
+            account.DeviceKeyHashes.Add(hash);
+            while (account.DeviceKeyHashes.Count > MaxDevices)
+            {
+                _byHash.TryRemove(account.DeviceKeyHashes[0], out _);
+                account.DeviceKeyHashes.RemoveAt(0);
+            }
+            account.FailedSignIns = 0;
+            account.LockedUntil   = null;
+            _byHash[hash] = account;
+            Write(account);
+            return (account, key, null);
+        }
+    }
 
     /// <summary>
     /// Replaces what the account holds, and returns the new version. Refused (null) when
@@ -201,4 +316,51 @@ public sealed class StoredAccount
 
     /// <summary>What the player's devices keep, as they keep it: storage key → value.</summary>
     public Dictionary<string, string> Storage { get; set; } = [];
+
+    // ── An optional username and password ─────────────────────────────────────
+
+    /// <summary>The name to sign in with, as typed when it was chosen; null for an account known by its code alone.</summary>
+    public string? Username { get; set; }
+
+    /// <summary>The password, salted and stretched (<see cref="Passwords"/>); never the password.</summary>
+    public string? PasswordHash { get; set; }
+
+    /// <summary>
+    /// Hashes of the keys handed to devices signed in with the password. The server
+    /// cannot give such a device the account's code — it keeps only the code's hash — so
+    /// each gets a key of its own instead, which opens the account as the code does.
+    /// </summary>
+    public List<string> DeviceKeyHashes { get; set; } = [];
+
+    /// <summary>Wrong passwords in a row, and until when the name is locked after too many.</summary>
+    public int FailedSignIns { get; set; }
+    public DateTime? LockedUntil { get; set; }
+}
+
+/// <summary>
+/// Passwords, kept as PBKDF2 (SHA-256, 100 000 rounds, a 16-byte salt each): slow to guess
+/// even from a stolen file, and compared in constant time.
+/// </summary>
+public static class Passwords
+{
+    private const int Rounds = 100_000;
+
+    public static string Hash(string password)
+    {
+        var salt = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
+        var hash = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(
+            password, salt, Rounds, System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
+        return $"pbkdf2${Rounds}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
+    }
+
+    public static bool Matches(string password, string? stored)
+    {
+        var parts = stored?.Split('$');
+        if (parts is not { Length: 4 } || parts[0] != "pbkdf2" || !int.TryParse(parts[1], out int rounds)) return false;
+        var salt     = Convert.FromBase64String(parts[2]);
+        var expected = Convert.FromBase64String(parts[3]);
+        var actual   = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(
+            password, salt, rounds, System.Security.Cryptography.HashAlgorithmName.SHA256, expected.Length);
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(actual, expected);
+    }
 }

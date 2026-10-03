@@ -380,10 +380,12 @@ See `docs/shared-tables.md`.
       moment after each change (`AccountSync`, `js/account.js`), keeping device-only
       settings (its id, seats at shared tables, sizes, diagnostics) to itself. No HTTPS
       yet: the code crosses the LAN in the clear, which is a game key, not a password.
-- [ ] **Backlog: password accounts** — a name and password on the same account, once the
-      server has HTTPS (DuckDNS + Caddy is the free route); ASP.NET Core Identity's API
-      endpoints with SQLite in the state folder. Seats tied to accounts, so bans stick and
-      a table can be reopened with the same people, belong with it.
+- [x] **Usernames and passwords, optional** — a username and password on the same account
+      (`AccountStore.SetLogin`/`SignIn`, PBKDF2, lockout after five tries); signing in gives
+      the device its own key; the admin turns them offered / not offered server-wide
+      (`ServerOptions`, `server.json`) and clears a forgotten one.
+- [ ] **Backlog: HTTPS** — passwords cross the network in the clear until then (DuckDNS +
+      Caddy is the free route).
 - [ ] **Backlog: sign in with Google and Facebook** — deferred until the server has a public
       domain: providers only redirect to registered HTTPS URLs (localhost aside), and
       cards.local is neither. Each needs an app registration (Google OAuth client;

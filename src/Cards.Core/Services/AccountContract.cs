@@ -10,6 +10,11 @@ public static class AccountContract
     public const string CodePath   = "/api/account/code";
     public const string SetupPath  = "/api/account/admin";
     public const string AdminPath  = "/api/admin/accounts";
+    /// <summary>The account's own username and password: set (PUT) or remove (DELETE).</summary>
+    public const string LoginPath  = "/api/account/login";
+    /// <summary>Signing in on a device with a username and password, for a key of its own.</summary>
+    public const string SignInPath = "/api/account/signin";
+    public const string OptionsPath = "/api/server/options";
     public const string CodeHeader = "X-Account-Code";
 }
 
@@ -43,6 +48,7 @@ public sealed class AccountSummary
     /// <summary>The name its settings carry — what the person calls themselves at a table.</summary>
     public string? Name { get; set; }
     public string Role { get; set; } = AccountRoles.Player;
+    public string? Username { get; set; }
     public DateTime Created { get; set; }
     public DateTime Updated { get; set; }
     public int SavedGames { get; set; }
@@ -87,6 +93,26 @@ public sealed class OfferChange
     public bool Offered { get; set; }
 }
 
+public sealed class LoginDetails
+{
+    public string Username { get; set; } = "";
+    public string Password { get; set; } = "";
+}
+
+/// <summary>A device signed in: the key it now uses for the account, in place of its code.</summary>
+public sealed class SignedIn
+{
+    public string Key { get; set; } = "";
+    public string Username { get; set; } = "";
+}
+
+/// <summary>Choices the admin makes for the whole server.</summary>
+public sealed class ServerOptionsView
+{
+    /// <summary>Players may give their account a username and password. On unless the admin turns it off.</summary>
+    public bool UsernamesOffered { get; set; } = true;
+}
+
 public sealed class RoleChange
 {
     public string Role { get; set; } = AccountRoles.Player;
@@ -115,4 +141,7 @@ public sealed class AccountData
 
     /// <summary>This server has no admin yet: the setup code in its log makes one.</summary>
     public bool AdminNeeded { get; set; }
+
+    /// <summary>The username this account signs in with, if it has one.</summary>
+    public string? Username { get; set; }
 }

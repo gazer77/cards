@@ -159,6 +159,21 @@ another device to carry the name, settings and saved games across. Each account 
   theirs, and deleting an account. The last admin cannot step down; nobody bans an admin,
   and only an admin bans a manager.
 
+**Usernames and passwords** are optional, on top of the code. In Settings a player adds a
+username (3–24 letters, digits, `.`, `_`, `-`; unique regardless of case) and a password
+(6 or more characters) to their account, and on another device signs in with them instead
+of typing the code. Signing in gives that device a key of its own (`dk_…`), since the
+server keeps only hashes and cannot hand the code back; removing the username and password
+signs out every device that used them. Passwords are PBKDF2-hashed; five wrong tries lock
+the name for a minute, and a wrong name and a wrong password get the same answer. An admin
+sees who has a username, clears a forgotten one (the person adds a new one with their
+code), and on the Manage page turns usernames and passwords **offered / not offered** for
+the whole server (`server.json` beside the accounts; offered by default). Not offered, codes
+are the only way in; names already set are kept for when it is turned back on.
+
+Until the server has HTTPS, passwords cross the network unencrypted — Settings says so,
+and asks people not to reuse one from anywhere else.
+
 ## Not yet
 
 - **The phone app** is not wired to the server yet. `TableConnection` (in `Cards.App`) is

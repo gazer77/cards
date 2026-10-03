@@ -42,7 +42,7 @@ builder.Services.AddSingleton(sp =>
                         sp.GetRequiredService<ISettingsStore>())
     {
         // A table knows which account sits at it, so a manager's ban reaches the person.
-        AccountCode = () => sp.GetRequiredService<AccountSync>().Code,
+        AccountCode = () => sp.GetRequiredService<AccountSync>().Key,
     });
 
 // The player's account lives on the same server as the tables.

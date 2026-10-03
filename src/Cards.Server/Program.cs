@@ -69,6 +69,8 @@ if (accountDirectory is not null)
 // Which games are offered here, beside the accounts; in memory where there is nowhere to keep it.
 builder.Services.AddSingleton(new GameCatalog(
     accountDirectory is null ? null : Path.Combine(Path.GetDirectoryName(accountDirectory)!, "catalog.json")));
+builder.Services.AddSingleton(new ServerOptions(
+    accountDirectory is null ? null : Path.Combine(Path.GetDirectoryName(accountDirectory)!, "server.json")));
 
 // Codes cannot be guessed, but nobody gets to try quickly either.
 builder.Services.AddRateLimiter(o =>

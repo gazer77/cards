@@ -31,7 +31,21 @@ public sealed class AccountSync(IJSRuntime js, HttpClient http)
     private CancellationTokenSource? _pending;
 
     /// <summary>The account's code, once there is one.</summary>
-    public string? Code => _record?.Code;
+    public string? Code => _record?.Code is { } key && !IsDeviceKey(key) ? key : null;
+
+    /// <summary>
+    /// What this device opens the account with: its code, or — signed in with a password —
+    /// a key of its own. Sent with every request; never shown.
+    /// </summary>
+    public string? Key => _record?.Code;
+
+    private static bool IsDeviceKey(string key) => key.StartsWith("dk_", StringComparison.Ordinal);
+
+    /// <summary>The username this account signs in with, if it has one.</summary>
+    public string? Username { get; private set; }
+
+    /// <summary>Whether this server lets players give their account a username and password.</summary>
+    public bool UsernamesOffered { get; private set; }
 
     /// <summary>Whether this server keeps accounts; false until it has answered.</summary>
     public bool Available { get; private set; }
@@ -61,6 +75,9 @@ public sealed class AccountSync(IJSRuntime js, HttpClient http)
             var module = await Module();
             var raw = await module.InvokeAsync<string?>("getRecord");
             _record = string.IsNullOrEmpty(raw) ? null : JsonSerializer.Deserialize<Record>(raw);
+
+            try { UsernamesOffered = (await http.GetFromJsonAsync<ServerOptionsView>(AccountContract.OptionsPath))?.UsernamesOffered ?? false; }
+            catch (Exception) { UsernamesOffered = false; }
 
             if (_record is null)
             {
@@ -98,6 +115,67 @@ public sealed class AccountSync(IJSRuntime js, HttpClient http)
         Available = true;
         await PushAsync();
         await Get(_record.Code);   // its role, and whether the server still wants an admin
+    }
+
+    // ── A username and password ───────────────────────────────────────────────
+
+    /// <summary>Gives this account a username and password, or changes them. The reason, when the server will not.</summary>
+    public async Task<string?> SetLoginAsync(string username, string password)
+    {
+        var response = await Send(HttpMethod.Put, AccountContract.LoginPath, new LoginDetails { Username = username, Password = password });
+        if (!response.IsSuccessStatusCode) return await Reason(response);
+        Username = (await response.Content.ReadFromJsonAsync<SignedIn>())!.Username;
+        Changed?.Invoke();
+        return null;
+    }
+
+    /// <summary>Takes the username and password off; devices that signed in with them are signed out.</summary>
+    public async Task<bool> RemoveLoginAsync()
+    {
+        var response = await Send(HttpMethod.Delete, AccountContract.LoginPath);
+        if (!response.IsSuccessStatusCode) return false;
+        // This device too, if it came in by the password: it carries on under a new account.
+        if (Key is { } key && IsDeviceKey(key)) { _record = null; await CreateAsync(); }
+        Username = null;
+        Changed?.Invoke();
+        return true;
+    }
+
+    /// <summary>
+    /// Signs this device in to another account by its username and password: that
+    /// account's settings and saved games replace this browser's. The reason when it cannot.
+    /// </summary>
+    public async Task<string?> SignInAsync(string username, string password)
+    {
+        var response = await http.PostAsJsonAsync(AccountContract.SignInPath, new LoginDetails { Username = username, Password = password });
+        if (!response.IsSuccessStatusCode) return await Reason(response);
+
+        var signedIn = (await response.Content.ReadFromJsonAsync<SignedIn>())!;
+        var (_, held) = await Get(signedIn.Key);
+        if (held is null) return "Signed in, but the account could not be read.";
+
+        await (await Module()).InvokeVoidAsync("write", held.Storage);
+        _record = new Record { Code = signedIn.Key, Version = held.Version };
+        await Remember();
+        Changed?.Invoke();
+        return null;
+    }
+
+    /// <summary>Turns usernames and passwords on or off for the whole server (the admin's choice).</summary>
+    public async Task<bool> SetUsernamesOfferedAsync(bool offered)
+    {
+        var response = await Send(HttpMethod.Put, AccountContract.OptionsPath, new ServerOptionsView { UsernamesOffered = offered });
+        if (response.IsSuccessStatusCode) UsernamesOffered = offered;
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> ClearLoginForAsync(string id)
+        => (await Send(HttpMethod.Delete, $"{AccountContract.AdminPath}/{id}/login")).IsSuccessStatusCode;
+
+    private static async Task<string> Reason(HttpResponseMessage response)
+    {
+        var text = await response.Content.ReadAsStringAsync();
+        return text is { Length: > 0 } ? text.Trim('"') : "That did not work.";
     }
 
     // ── Roles ─────────────────────────────────────────────────────────────────
@@ -274,6 +352,7 @@ public sealed class AccountSync(IJSRuntime js, HttpClient http)
         {
             Role        = AccountRoles.Of(data.Role);
             AdminNeeded = data.AdminNeeded;
+            Username    = data.Username;
         }
         return (response.StatusCode, data);
     }
