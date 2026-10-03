@@ -36,6 +36,15 @@ public sealed class AccountSync(IJSRuntime js, HttpClient http)
     /// <summary>Whether this server keeps accounts; false until it has answered.</summary>
     public bool Available { get; private set; }
 
+    /// <summary>What this account may do here, as the server last said.</summary>
+    public string Role { get; private set; } = AccountRoles.Player;
+
+    /// <summary>The server has no admin yet: Settings offers to claim it with the setup code.</summary>
+    public bool AdminNeeded { get; private set; }
+
+    public bool IsAdmin   => Role == AccountRoles.Admin;
+    public bool IsManager => AccountRoles.AtLeast(Role, AccountRoles.Manager);
+
     public event Action? Changed;
 
     private async Task<IJSObjectReference> Module()
@@ -88,6 +97,57 @@ public sealed class AccountSync(IJSRuntime js, HttpClient http)
         _record = new Record { Code = made!.Code, Version = made.Version, Dirty = true };
         Available = true;
         await PushAsync();
+        await Get(_record.Code);   // its role, and whether the server still wants an admin
+    }
+
+    // ── Roles ─────────────────────────────────────────────────────────────────
+
+    /// <summary>Claims the server's first admin with the setup code from its log.</summary>
+    public async Task<bool> ClaimAdminAsync(string setup)
+    {
+        if (_record is null) return false;
+        var response = await Send(HttpMethod.Post, AccountContract.SetupPath, new AdminSetup { Setup = setup });
+        if (!response.IsSuccessStatusCode) return false;
+        await Get(_record.Code);
+        Changed?.Invoke();
+        return true;
+    }
+
+    public async Task<List<AccountSummary>> AccountsAsync()
+    {
+        var response = await Send(HttpMethod.Get, AccountContract.AdminPath);
+        return response.IsSuccessStatusCode ? (await response.Content.ReadFromJsonAsync<List<AccountSummary>>())! : [];
+    }
+
+    /// <summary>Gives an account a role; the server's answer when it refuses (the last admin cannot step down).</summary>
+    public async Task<string?> SetRoleAsync(string id, string role)
+    {
+        var response = await Send(HttpMethod.Put, $"{AccountContract.AdminPath}/{id}/role", new RoleChange { Role = role });
+        if (response.IsSuccessStatusCode) return null;
+        return await response.Content.ReadAsStringAsync() is { Length: > 0 } why ? why.Trim('"') : "Not allowed.";
+    }
+
+    /// <summary>A new code for someone else's account, to give them; null when it cannot be done.</summary>
+    public async Task<string?> NewCodeForAsync(string id)
+    {
+        var response = await Send(HttpMethod.Post, $"{AccountContract.AdminPath}/{id}/code");
+        return response.IsSuccessStatusCode ? (await response.Content.ReadFromJsonAsync<AccountCreated>())!.Code : null;
+    }
+
+    public async Task<string?> DeleteAccountAsync(string id)
+    {
+        var response = await Send(HttpMethod.Delete, $"{AccountContract.AdminPath}/{id}");
+        if (response.IsSuccessStatusCode) return null;
+        return await response.Content.ReadAsStringAsync() is { Length: > 0 } why ? why.Trim('"') : "Not allowed.";
+    }
+
+    /// <summary>A request as this account: its code in the header.</summary>
+    public async Task<HttpResponseMessage> Send(HttpMethod method, string path, object? body = null)
+    {
+        using var request = new HttpRequestMessage(method, path);
+        if (_record is not null) request.Headers.Add(AccountContract.CodeHeader, _record.Code);
+        if (body is not null) request.Content = JsonContent.Create(body);
+        return await http.SendAsync(request);
     }
 
     /// <summary>Something the account carries changed here: send it up shortly, once.</summary>
@@ -165,7 +225,13 @@ public sealed class AccountSync(IJSRuntime js, HttpClient http)
         var response = await http.SendAsync(get);
         if (!response.IsSuccessStatusCode) return (response.StatusCode, null);
         Available = true;
-        return (response.StatusCode, await response.Content.ReadFromJsonAsync<AccountData>());
+        var data = await response.Content.ReadFromJsonAsync<AccountData>();
+        if (data is not null && code == _record?.Code)
+        {
+            Role        = AccountRoles.Of(data.Role);
+            AdminNeeded = data.AdminNeeded;
+        }
+        return (response.StatusCode, data);
     }
 
     private async Task Remember()

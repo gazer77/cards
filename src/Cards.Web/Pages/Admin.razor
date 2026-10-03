@@ -1,0 +1,115 @@
+@page "/admin"
+@inject Cards.Web.Platform.AccountSync Account
+@inject NavigationManager Nav
+
+@*
+    The people on this server, for its admin: who has which role, a new code for someone
+    who lost theirs, and an account removed for good. Every change is checked again by the
+    server against the caller's own role; this page only offers what it would allow.
+*@
+
+<PageTitle>People</PageTitle>
+
+<div class="setup">
+    <button class="link" @onclick="@(() => Nav.NavigateTo("/settings"))">&larr; Settings</button>
+
+    <h1>People</h1>
+
+    @if (!Account.IsAdmin)
+    {
+        <p class="muted">Only this server's admin can see who plays here.</p>
+    }
+    else if (_accounts is null)
+    {
+        <p class="muted">Loading…</p>
+    }
+    else
+    {
+        <p class="muted">
+            @_accounts.Count @(_accounts.Count == 1 ? "account" : "accounts"). Each is known by the
+            name its player uses at the table; nobody's code is ever shown here.
+        </p>
+
+        @foreach (var a in _accounts)
+        {
+            var account = a;
+            <section class="setup-block person">
+                <h2>@(account.Name ?? "No name yet")</h2>
+                <p class="muted">
+                    Since @account.Created.ToLocalTime().ToString("d MMM yyyy") · last saved
+                    @account.Updated.ToLocalTime().ToString("d MMM, HH:mm") ·
+                    @account.SavedGames saved @(account.SavedGames == 1 ? "game" : "games")
+                </p>
+                <div class="choices">
+                    @foreach (var role in Cards.Services.AccountRoles.All)
+                    {
+                        var captured = role;
+                        <button class="choice @(account.Role == captured ? "chosen" : "")"
+                                @onclick="() => SetRole(account, captured)">@RoleName(captured)</button>
+                    }
+                </div>
+                <div class="choices">
+                    <button class="choice" @onclick="() => NewCode(account)">New code</button>
+                    @if (_confirmDelete == account.Id)
+                    {
+                        <button class="choice" @onclick="() => Delete(account)">Yes — delete for good</button>
+                        <button class="choice" @onclick="() => _confirmDelete = null">Keep</button>
+                    }
+                    else
+                    {
+                        <button class="choice" @onclick="() => _confirmDelete = account.Id">Delete…</button>
+                    }
+                </div>
+                @if (_newCodes.TryGetValue(account.Id, out var issued))
+                {
+                    <p class="account-code">@issued</p>
+                    <p class="muted">Give them this code; their old one has stopped working. It is shown once.</p>
+                }
+                @if (_errors.TryGetValue(account.Id, out var error))
+                {
+                    <p class="error">@error</p>
+                }
+            </section>
+        }
+    }
+</div>
+
+@code {
+    private List<Cards.Services.AccountSummary>? _accounts;
+    private readonly Dictionary<string, string> _newCodes = [];
+    private readonly Dictionary<string, string> _errors = [];
+    private string? _confirmDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Account.IsAdmin) _accounts = await Account.AccountsAsync();
+    }
+
+    private static string RoleName(string role) => role switch
+    {
+        Cards.Services.AccountRoles.Admin   => "Admin",
+        Cards.Services.AccountRoles.Manager => "Manager",
+        _                                   => "Player",
+    };
+
+    private async Task SetRole(Cards.Services.AccountSummary account, string role)
+    {
+        _errors.Remove(account.Id);
+        if (await Account.SetRoleAsync(account.Id, role) is { } refused) _errors[account.Id] = refused;
+        else account.Role = role;
+    }
+
+    private async Task NewCode(Cards.Services.AccountSummary account)
+    {
+        _errors.Remove(account.Id);
+        if (await Account.NewCodeForAsync(account.Id) is { } code) _newCodes[account.Id] = code;
+        else _errors[account.Id] = "Could not make a new code.";
+    }
+
+    private async Task Delete(Cards.Services.AccountSummary account)
+    {
+        _confirmDelete = null;
+        if (await Account.DeleteAccountAsync(account.Id) is { } refused) _errors[account.Id] = refused;
+        else _accounts?.Remove(account);
+    }
+}

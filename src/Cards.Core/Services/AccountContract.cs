@@ -8,7 +8,54 @@ public static class AccountContract
 {
     public const string Path       = "/api/account";
     public const string CodePath   = "/api/account/code";
+    public const string SetupPath  = "/api/account/admin";
+    public const string AdminPath  = "/api/admin/accounts";
     public const string CodeHeader = "X-Account-Code";
+}
+
+/// <summary>
+/// What an account may do on its server. Every account is a player; a manager looks
+/// after the tables and the games on offer; an admin looks after the people, roles
+/// included.
+/// </summary>
+public static class AccountRoles
+{
+    public const string Player  = "player";
+    public const string Manager = "manager";
+    public const string Admin   = "admin";
+
+    public static readonly IReadOnlyList<string> All = [Player, Manager, Admin];
+
+    /// <summary>A known role, or player.</summary>
+    public static string Of(string? role) => role is Manager or Admin ? role : Player;
+
+    /// <summary>Whether <paramref name="role"/> may do what <paramref name="needed"/> may: an admin, all a manager can.</summary>
+    public static bool AtLeast(string? role, string needed)
+        => Rank(Of(role)) >= Rank(needed);
+
+    private static int Rank(string role) => role switch { Admin => 2, Manager => 1, _ => 0 };
+}
+
+/// <summary>An account as the admin page lists it: who it is to people, never its code.</summary>
+public sealed class AccountSummary
+{
+    public string Id { get; set; } = "";
+    /// <summary>The name its settings carry — what the person calls themselves at a table.</summary>
+    public string? Name { get; set; }
+    public string Role { get; set; } = AccountRoles.Player;
+    public DateTime Created { get; set; }
+    public DateTime Updated { get; set; }
+    public int SavedGames { get; set; }
+}
+
+public sealed class RoleChange
+{
+    public string Role { get; set; } = AccountRoles.Player;
+}
+
+public sealed class AdminSetup
+{
+    public string Setup { get; set; } = "";
 }
 
 /// <summary>A new account: its code, shown to the player once and kept on the device.</summary>
@@ -23,4 +70,10 @@ public sealed class AccountData
 {
     public long Version { get; set; }
     public Dictionary<string, string> Storage { get; set; } = [];
+
+    /// <summary>What this account may do here. Sent down, never taken from a client.</summary>
+    public string Role { get; set; } = AccountRoles.Player;
+
+    /// <summary>This server has no admin yet: the setup code in its log makes one.</summary>
+    public bool AdminNeeded { get; set; }
 }

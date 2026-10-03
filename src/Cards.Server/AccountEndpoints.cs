@@ -25,8 +25,63 @@ public static class AccountEndpoints
         {
             if (store is null) return Off();
             return Open(store, request) is { } account
-                ? Results.Ok(new AccountData { Version = account.Version, Storage = account.Storage })
+                ? Results.Ok(new AccountData
+                {
+                    Version = account.Version, Storage = account.Storage,
+                    Role = account.Role, AdminNeeded = store.AdminNeeded,
+                })
                 : Results.NotFound();
+        }).RequireRateLimiting("account");
+
+        // The first admin: whoever can read the server's log has the setup code.
+        app.MapPost(AccountContract.SetupPath, (HttpRequest request, AdminSetup setup) =>
+        {
+            if (store is null) return Off();
+            if (Open(store, request) is not { } account) return Results.NotFound();
+            return store.ClaimAdmin(account, setup.Setup)
+                ? Results.Ok(new RoleChange { Role = account.Role })
+                : Results.StatusCode(StatusCodes.Status403Forbidden);
+        }).RequireRateLimiting("account");
+
+        // ── Admin: the people ─────────────────────────────────────────────────
+
+        app.MapGet(AccountContract.AdminPath, (HttpRequest request) =>
+        {
+            if (store is null) return Off();
+            if (Require(store, request, AccountRoles.Admin) is { } refused) return refused;
+            return Results.Ok(store.All.OrderBy(a => a.Created).Select(a => new AccountSummary
+            {
+                Id = a.Id, Name = AccountStore.NameOf(a), Role = a.Role, Created = a.Created, Updated = a.Updated,
+                SavedGames = a.Storage.Keys.Count(k => k.StartsWith("cards.save.") && k != "cards.save.save_index"),
+            }).ToList());
+        }).RequireRateLimiting("account");
+
+        app.MapPut(AccountContract.AdminPath + "/{id}/role", (HttpRequest request, string id, RoleChange change) =>
+        {
+            if (store is null) return Off();
+            if (Require(store, request, AccountRoles.Admin) is { } refused) return refused;
+            if (store.ById(id) is not { } account) return Results.NotFound();
+            return store.SetRole(account, change.Role)
+                ? Results.Ok(new RoleChange { Role = account.Role })
+                : Results.Conflict("The last admin cannot step down.");
+        }).RequireRateLimiting("account");
+
+        // A person who lost their code: the admin gives them a new one to type in.
+        app.MapPost(AccountContract.AdminPath + "/{id}/code", (HttpRequest request, string id) =>
+        {
+            if (store is null) return Off();
+            if (Require(store, request, AccountRoles.Admin) is { } refused) return refused;
+            return store.ById(id) is { } account
+                ? Results.Ok(new AccountCreated { Code = store.NewCode(account), Version = account.Version })
+                : Results.NotFound();
+        }).RequireRateLimiting("account");
+
+        app.MapDelete(AccountContract.AdminPath + "/{id}", (HttpRequest request, string id) =>
+        {
+            if (store is null) return Off();
+            if (Require(store, request, AccountRoles.Admin) is { } refused) return refused;
+            if (store.ById(id) is not { } account) return Results.NotFound();
+            return store.Delete(account) ? Results.NoContent() : Results.Conflict("The last admin cannot be deleted.");
         }).RequireRateLimiting("account");
 
         app.MapPut(AccountContract.Path, (HttpRequest request, AccountData data) =>
@@ -49,6 +104,16 @@ public static class AccountEndpoints
 
     private static StoredAccount? Open(AccountStore store, HttpRequest request)
         => store.Find(request.Headers[AccountContract.CodeHeader].FirstOrDefault());
+
+    /// <summary>
+    /// Refuses a caller without the role: 404 for no account at all, 403 for one without
+    /// the standing. Null when they may go on. The role is the server's record, never the
+    /// client's word.
+    /// </summary>
+    public static IResult? Require(AccountStore store, HttpRequest request, string role)
+        => Open(store, request) is not { } caller ? Results.NotFound()
+         : !AccountRoles.AtLeast(caller.Role, role) ? Results.StatusCode(StatusCodes.Status403Forbidden)
+         : null;
 
     /// <summary>This server keeps no accounts — no folder for them. 501, so a client can tell it from a wrong code.</summary>
     private static IResult Off() => Results.StatusCode(StatusCodes.Status501NotImplemented);

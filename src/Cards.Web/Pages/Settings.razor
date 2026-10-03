@@ -62,6 +62,22 @@
             {
                 <p class="error">@_accountError</p>
             }
+
+            @if (Account.IsManager)
+            {
+                <p class="muted">
+                    You are this server's @(Account.IsAdmin ? "admin" : "manager").
+                    <a href="/admin">@(Account.IsAdmin ? "People and tables" : "Tables")</a>
+                </p>
+            }
+            else if (Account.AdminNeeded)
+            {
+                <label class="host-name">
+                    Setup code — the server prints it in its log until someone is admin
+                    <input placeholder="four words" @bind="_setup" @bind:event="oninput" />
+                </label>
+                <button class="start secondary" disabled="@(_setup.Trim().Length == 0)" @onclick="ClaimAdmin">Become admin</button>
+            }
         </section>
     }
 
@@ -221,6 +237,16 @@
     private string  _typed = "";
     private bool    _using, _copied, _confirmNew;
     private string? _accountError;
+
+    private string _setup = "";
+
+    private async Task ClaimAdmin()
+    {
+        _accountError = await Account.ClaimAdminAsync(_setup)
+            ? null
+            : "That is not the setup code — copy it from the server's log as it appears there.";
+        _setup = "";
+    }
 
     private async Task CopyCode()
     {

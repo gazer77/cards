@@ -39,6 +39,81 @@ public sealed class AccountStore
 
     public int Count => _byHash.Count;
 
+    public IEnumerable<StoredAccount> All => _byHash.Values;
+
+    public StoredAccount? ById(string id) => _byHash.Values.FirstOrDefault(a => a.Id == id);
+
+    // ── Roles ─────────────────────────────────────────────────────────────────
+
+    private string? _setupCode;
+
+    /// <summary>Whether no account here is an admin — so nobody can give out roles yet.</summary>
+    public bool AdminNeeded => !_byHash.Values.Any(a => a.Role == AccountRoles.Admin);
+
+    /// <summary>
+    /// While there is no admin, a one-time code that makes one: the server writes it to its
+    /// log at start, so only someone who can read the server's log can claim the role.
+    /// Kept in memory only, new each start, and gone once used.
+    /// </summary>
+    public string? SetupCode => AdminNeeded ? _setupCode ??= string.Join(' ', AccountCode.New().Split(' ').Take(4)) : null;
+
+    /// <summary>Makes the account an admin, given the setup code. False for a wrong code, or once there is an admin.</summary>
+    public bool ClaimAdmin(StoredAccount account, string? setup)
+    {
+        if (!AdminNeeded || _setupCode is null) return false;
+        var typed = string.Join(' ', (setup ?? "").ToLowerInvariant()
+            .Split([' ', '-', '.', ','], StringSplitOptions.RemoveEmptyEntries));
+        if (typed != _setupCode) return false;
+
+        SetRole(account, AccountRoles.Admin);
+        _setupCode = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Gives an account a role. Refused when it would leave the server without an admin —
+    /// the last admin cannot step down, or nobody could give roles out again.
+    /// </summary>
+    public bool SetRole(StoredAccount account, string role)
+    {
+        role = AccountRoles.Of(role);
+        if (account.Role == AccountRoles.Admin && role != AccountRoles.Admin
+            && _byHash.Values.Count(a => a.Role == AccountRoles.Admin) == 1)
+            return false;
+
+        lock (_write)
+        {
+            account.Role = role;
+            Write(account);
+        }
+        return true;
+    }
+
+    /// <summary>Removes an account for good, unless it is the last admin.</summary>
+    public bool Delete(StoredAccount account)
+    {
+        if (account.Role == AccountRoles.Admin && _byHash.Values.Count(a => a.Role == AccountRoles.Admin) == 1)
+            return false;
+        lock (_write)
+        {
+            _byHash.TryRemove(account.CodeHash, out _);
+            File.Delete(Path.Combine(_directory, account.Id + ".json"));
+        }
+        return true;
+    }
+
+    /// <summary>The name the account's settings carry, for people to recognise it by — never its code.</summary>
+    public static string? NameOf(StoredAccount account)
+    {
+        if (!account.Storage.TryGetValue("cards.settings", out var raw)) return null;
+        try
+        {
+            var settings = JsonSerializer.Deserialize<Dictionary<string, string>>(raw);
+            return settings?.GetValueOrDefault("player_name") is { Length: > 0 } name && name != "Player" ? name : null;
+        }
+        catch (JsonException) { return null; }
+    }
+
     /// <summary>A new account, and its code — the only time the code exists on the server.</summary>
     public (string Code, StoredAccount Account) Create()
     {
@@ -101,6 +176,9 @@ public sealed class StoredAccount
     public string CodeHash { get; set; } = "";
     public DateTime Created { get; set; } = DateTime.UtcNow;
     public DateTime Updated { get; set; } = DateTime.UtcNow;
+
+    /// <summary>What the account may do here — <see cref="AccountRoles"/>.</summary>
+    public string Role { get; set; } = AccountRoles.Player;
 
     /// <summary>Bumped on every save, so a device can tell it is behind.</summary>
     public long Version { get; set; }

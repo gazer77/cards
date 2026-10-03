@@ -98,6 +98,10 @@ app.MapGet("/health", () => "ok");
 app.UseRateLimiter();
 AccountEndpoints.Map(app);
 
+// No admin yet: the code that makes one goes to the log, where only the server's owner looks.
+if (app.Services.GetService<AccountStore>() is { SetupCode: { } setup })
+    app.Logger.LogWarning("No admin yet. To become one, open Settings and enter this setup code: {Setup}", setup);
+
 if (serveWebClient) app.MapFallbackToFile("index.html");
 else                app.MapGet("/", () => "Cards table server. The hub is at " + TableHubContract.Path + ".");
 
