@@ -52,6 +52,31 @@ var roomDirectory = builder.Configuration["Tables:RoomDirectory"] is { Length: >
         : null;
 if (roomDirectory is not null)
     builder.Services.AddSingleton<IRoomStore>(new FileRoomStore(roomDirectory));
+
+// Accounts without details (a six-word code each), kept beside the rooms. In development
+// with nothing configured, under the user's local app data; with no folder at all, the
+// account endpoints answer that accounts are off and the app plays on without them.
+var accountDirectory = builder.Configuration["Accounts:Directory"] is { Length: > 0 } accountsConfigured
+    ? Path.GetFullPath(accountsConfigured, builder.Environment.ContentRootPath)
+    : Environment.GetEnvironmentVariable("STATE_DIRECTORY") is { Length: > 0 } stateDir
+        ? Path.Combine(stateDir.Split(':')[0], "accounts")
+        : builder.Environment.IsDevelopment()
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cards", "dev-accounts")
+            : null;
+if (accountDirectory is not null)
+    builder.Services.AddSingleton(new AccountStore(accountDirectory));
+
+// Codes cannot be guessed, but nobody gets to try quickly either.
+builder.Services.AddRateLimiter(o =>
+{
+    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    o.AddPolicy("account", http => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        http.Connection.RemoteIpAddress?.ToString() ?? "?",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1) }));
+    o.AddPolicy("account-create", http => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        http.Connection.RemoteIpAddress?.ToString() ?? "?",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromHours(1) }));
+});
 builder.Services.AddHostedService<RoomHousekeeping>();
 
 var app = builder.Build();
@@ -69,6 +94,9 @@ if (serveWebClient)
 
 app.MapHub<TableHub>(TableHubContract.Path);
 app.MapGet("/health", () => "ok");
+
+app.UseRateLimiter();
+AccountEndpoints.Map(app);
 
 if (serveWebClient) app.MapFallbackToFile("index.html");
 else                app.MapGet("/", () => "Cards table server. The hub is at " + TableHubContract.Path + ".");

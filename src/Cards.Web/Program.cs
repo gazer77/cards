@@ -33,16 +33,25 @@ builder.Services.AddTransient<GameTableViewModel>();
 // Shared tables. The table server also serves this app, so its hub is at the address the
 // page came from; "TableServer" in wwwroot/appsettings.json points elsewhere when the
 // app is run on its own (the dev server) against a server running separately.
+var tableServer = builder.Configuration["TableServer"] is { Length: > 0 } configured
+    ? new Uri(configured)
+    : new Uri(builder.HostEnvironment.BaseAddress);
+
 builder.Services.AddSingleton(sp =>
-{
-    var server = builder.Configuration["TableServer"] is { Length: > 0 } configured
-        ? new Uri(configured)
-        : new Uri(builder.HostEnvironment.BaseAddress);
-    return new TableConnection(new Uri(server, Cards.Engine.Shared.TableHubContract.Path.TrimStart('/')),
-                               sp.GetRequiredService<ISettingsStore>());
-});
+    new TableConnection(new Uri(tableServer, Cards.Engine.Shared.TableHubContract.Path.TrimStart('/')),
+                        sp.GetRequiredService<ISettingsStore>()));
+
+// The player's account lives on the same server as the tables.
+builder.Services.AddSingleton(sp => new AccountSync(
+    sp.GetRequiredService<Microsoft.JSInterop.IJSRuntime>(),
+    new HttpClient { BaseAddress = tableServer, Timeout = TimeSpan.FromSeconds(6) }));
 
 var host = builder.Build();
+
+// The account first: what another device saved comes down into this browser's storage
+// before the settings and saves below read it.
+var account = host.Services.GetRequiredService<AccountSync>();
+await account.StartAsync();
 
 // localStorage is async but the settings and save surfaces are synchronous, so both
 // stores are primed once here before anything reads them.
@@ -51,5 +60,9 @@ await settingsStore.LoadAsync();
 
 // The list of saved games is read once here so screens can show it without awaiting.
 await host.Services.GetRequiredService<GameSaveService>().EnsureLoadedAsync();
+
+// From here on, what changes goes up to the account.
+settingsStore.Changed += account.NoteChange;
+host.Services.GetRequiredService<BrowserSaveStore>().Changed += account.NoteChange;
 
 await host.RunAsync();

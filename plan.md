@@ -372,6 +372,18 @@ See `docs/shared-tables.md`.
       (`GameState.BotNames`), so the engine's own seeded runs stay "Bot 1", "Bot 2". Saves
       keep everyone's names, so a resumed game's log still matches its table. Plain
       names for now — bot-flavoured ones ("Robo Rita", "Deal-E") would be a list change.
+- [x] **Accounts without details** — the first visit makes an account; its code is six
+      plain words (`AccountCode`, ~55 bits), shown in Settings with Copy, typed on another
+      device to bring the name, settings and saved games across, and replaceable with
+      "Make a new code". The server keeps one file per account under `/var/lib/cards/accounts`
+      (`AccountStore`) with the code's hash only, behind rate limits; the browser syncs a
+      moment after each change (`AccountSync`, `js/account.js`), keeping device-only
+      settings (its id, seats at shared tables, sizes, diagnostics) to itself. No HTTPS
+      yet: the code crosses the LAN in the clear, which is a game key, not a password.
+- [ ] **Backlog: password accounts** — a name and password on the same account, once the
+      server has HTTPS (DuckDNS + Caddy is the free route); ASP.NET Core Identity's API
+      endpoints with SQLite in the state folder. Seats tied to accounts, so bans stick and
+      a table can be reopened with the same people, belong with it.
 - [ ] **Backlog: sign in with Google and Facebook** — deferred until the server has a public
       domain: providers only redirect to registered HTTPS URLs (localhost aside), and
       cards.local is neither. Each needs an app registration (Google OAuth client;

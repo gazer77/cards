@@ -644,6 +644,21 @@ html, body {
 }
 .host-name + .start.secondary { margin-top: 0.6rem; }
 
+/* The account's code: six words, large and spaced, to read out or copy by hand. */
+.account-code {
+    margin: 0.4rem 0 0.6rem;
+    padding: 0.7rem 0.9rem;
+    background: var(--surface);
+    border: 1px solid #ffffff30;
+    border-radius: 0.45rem;
+    font-size: 1.25rem;
+    letter-spacing: 0.02em;
+    word-spacing: 0.35em;
+    line-height: 1.6;
+    color: var(--ink);
+    user-select: all;
+}
+
 /* ── The table and its footer ────────────────────────────────────────────────
    The table fills the page and the status line and buttons float over its bottom
    edge on a see-through band. The renderer is told the band's height and lays the

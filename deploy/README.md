@@ -62,6 +62,10 @@ above, then `sudo systemctl restart cards`); until then it runs, but forgets its
 on each deploy. Away from a checkout, the runner's own copy is the one to take:
 `/home/ghrunner/actions-runner/_work/cards/cards/deploy/cards.service`. The log says which: `Rooms are kept in /var/lib/cards/rooms`.
 
+Players' accounts live there too, one small file each under `accounts/`: whatever their
+six-word codes carry (settings, saved games). Nothing else holds them, so back that
+folder up if the codes matter to anyone.
+
 ## 4. Names and the front door
 
 ```bash

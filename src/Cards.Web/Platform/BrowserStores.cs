@@ -19,6 +19,9 @@ public sealed class BrowserSettingsStore : ISettingsStore
 
     public BrowserSettingsStore(IJSRuntime js) => _js = js;
 
+    /// <summary>A setting changed — the account carries it to the player's other devices.</summary>
+    public event Action? Changed;
+
     public async Task LoadAsync()
     {
         try
@@ -46,6 +49,7 @@ public sealed class BrowserSettingsStore : ISettingsStore
     {
         _values[key] = value;
         Flush();
+        Changed?.Invoke();
     }
 
     public void Set(string key, bool value) => Set(key, value.ToString());
@@ -73,6 +77,9 @@ public sealed class BrowserSaveStore : ISaveStore
 
     public BrowserSaveStore(IJSRuntime js) => _js = js;
 
+    /// <summary>A save written or deleted — the account carries it to the player's other devices.</summary>
+    public event Action? Changed;
+
     /// <summary>
     /// Whether a key was written or read in this session.
     ///
@@ -88,6 +95,7 @@ public sealed class BrowserSaveStore : ISaveStore
     {
         _known.Remove(key);
         _ = _js.InvokeVoidAsync("localStorage.removeItem", Prefix + key);
+        Changed?.Invoke();
     }
 
     public async Task WriteAsync(string key, string contents)
@@ -96,6 +104,7 @@ public sealed class BrowserSaveStore : ISaveStore
         {
             await _js.InvokeVoidAsync("localStorage.setItem", Prefix + key, contents);
             _known.Add(key);
+            Changed?.Invoke();
         }
         catch { /* quota exceeded or storage blocked — the game continues unsaved */ }
     }

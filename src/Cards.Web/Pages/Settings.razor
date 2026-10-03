@@ -1,6 +1,8 @@
 @page "/settings"
 @inject Cards.Services.SettingsService Prefs
 @inject NavigationManager Nav
+@inject Cards.Web.Platform.AccountSync Account
+@inject IJSRuntime JS
 
 @*
     Somewhere to change the things the app already knew how to do.
@@ -16,6 +18,52 @@
     <button class="link" @onclick="@(() => Nav.NavigateTo("/"))">&larr; Games</button>
 
     <h1>Settings</h1>
+
+    @* The account: nothing to fill in, only a code to carry. *@
+    @if (Account.Available && Account.Code is { } accountCode)
+    {
+        <section class="setup-block">
+            <h2>Your code</h2>
+            <p class="account-code">@accountCode</p>
+            <p class="muted">
+                Your name, settings and saved games, kept on the table server. Type this code
+                on another phone or computer to bring them there. There is no password: keep it
+                to yourself, and make a new one if it gets out.
+            </p>
+            <div class="choices">
+                <button class="choice" @onclick="CopyCode">@(_copied ? "Copied" : "Copy")</button>
+                @if (_confirmNew)
+                {
+                    <button class="choice" @onclick="NewCode">Yes — the old code stops working</button>
+                    <button class="choice" @onclick="() => _confirmNew = false">Keep this one</button>
+                }
+                else
+                {
+                    <button class="choice" @onclick="() => _confirmNew = true">Make a new code</button>
+                }
+            </div>
+
+            <label class="host-name">
+                A code from another device
+                <input placeholder="six words" @bind="_typed" @bind:event="oninput" />
+            </label>
+            @if (_typed.Trim().Length > 0 && Cards.Services.AccountCode.Normalize(_typed) is null)
+            {
+                <p class="muted">Six words, as the other device shows them.</p>
+            }
+            else if (Cards.Services.AccountCode.Normalize(_typed) is not null)
+            {
+                <p class="muted">This device's settings and saved games will be replaced by that account's.</p>
+                <button class="start secondary" disabled="@_using" @onclick="UseCode">
+                    @(_using ? "Fetching…" : "Use this code")
+                </button>
+            }
+            @if (_accountError is not null)
+            {
+                <p class="error">@_accountError</p>
+            }
+        </section>
+    }
 
     <section class="setup-block">
         <h2>Cards</h2>
@@ -166,6 +214,43 @@
     {
         _cardValues = e.Value is true;
         Prefs.ShowCardValues = _cardValues;
+    }
+
+    // ── Account ──────────────────────────────────────────────────────────────
+
+    private string  _typed = "";
+    private bool    _using, _copied, _confirmNew;
+    private string? _accountError;
+
+    private async Task CopyCode()
+    {
+        if (Account.Code is not { } code) return;
+        var module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/export.js");
+        _copied = await module.InvokeAsync<bool>("copy", code);
+    }
+
+    private async Task NewCode()
+    {
+        _confirmNew   = false;
+        _accountError = await Account.NewCodeAsync() ? null : "Could not reach the server for a new code.";
+        _copied       = false;
+    }
+
+    /// <summary>
+    /// Takes this device over to the account behind the code, then reloads, so every
+    /// screen reads that account's settings and saves from the start.
+    /// </summary>
+    private async Task UseCode()
+    {
+        _using = true;
+        _accountError = null;
+        if (await Account.UseCodeAsync(_typed))
+        {
+            Nav.NavigateTo("/settings", forceLoad: true);
+            return;
+        }
+        _accountError = "No account has that code — check the words against the other device.";
+        _using = false;
     }
 
     private bool   _soundOn = true;
