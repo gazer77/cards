@@ -180,6 +180,80 @@ public sealed class AccountTests : IDisposable
         Assert.Null(store.Find(issued.Code));
     }
 
+    // ── Managers at the tables ────────────────────────────────────────────────
+
+    private async Task<string> Manager(HttpClient http, string admin)
+    {
+        string code = await NewAccount(http);
+        var id = _server.Services.GetRequiredService<AccountStore>().Find(code)!.Id;
+        await http.SendAsync(With(HttpMethod.Put, $"{AccountContract.AdminPath}/{id}/role", admin, new RoleChange { Role = AccountRoles.Manager }));
+        return code;
+    }
+
+    [Fact]
+    public async Task A_manager_sees_the_tables_takes_someone_off_and_bans_them_and_a_player_cannot()
+    {
+        var http  = _server.CreateClient();
+        var rooms = _server.Services.GetRequiredService<RoomService>();
+        var store = _server.Services.GetRequiredService<AccountStore>();
+        string admin = await Admin(http), manager = await Manager(http, admin), troll = await NewAccount(http);
+
+        var ana = await rooms.CreateAsync("c-ana", "hearts", 4, [], null, "Ana", accountCode: manager);
+        var bo  = await rooms.JoinAsync("c-bo", ana.Code, "Bo", accountCode: troll);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await http.SendAsync(With(HttpMethod.Get, ManagerContract.RoomsPath, troll))).StatusCode);
+
+        var tables = await (await http.SendAsync(With(HttpMethod.Get, ManagerContract.RoomsPath, manager))).Content.ReadFromJsonAsync<List<RoomSummary>>();
+        var seat = tables!.Single(r => r.Code == ana.Code).Seats.Single(s => s.Name == "Bo");
+        Assert.Equal(store.Find(troll)!.Id, seat.AccountId);
+
+        var removed = await http.SendAsync(With(HttpMethod.Post, $"{ManagerContract.RoomsPath}/{ana.Code}/seats/{seat.Id}/remove?ban=true", manager));
+        Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
+
+        // Off this table — the token is spent — and off every other.
+        await Assert.ThrowsAsync<TableRefusal>(() => rooms.RejoinAsync("c-bo2", ana.Code, bo.Token));
+        var refusal = await Assert.ThrowsAsync<TableRefusal>(() => rooms.CreateAsync("c-bo3", "war", 2, [], null, "Bo", accountCode: troll));
+        Assert.Contains("can't play", refusal.Message);
+
+        var bans = await (await http.SendAsync(With(HttpMethod.Get, ManagerContract.BansPath, manager))).Content.ReadFromJsonAsync<List<AccountSummary>>();
+        Assert.Single(bans!);
+
+        // Let back.
+        Assert.Equal(HttpStatusCode.NoContent, (await http.SendAsync(With(HttpMethod.Delete, $"{ManagerContract.BansPath}/{bans![0].Id}", manager))).StatusCode);
+        await rooms.CreateAsync("c-bo4", "war", 2, [], null, "Bo", accountCode: troll);
+    }
+
+    [Fact]
+    public async Task A_manager_cannot_ban_an_admin_or_another_manager()
+    {
+        var http  = _server.CreateClient();
+        var rooms = _server.Services.GetRequiredService<RoomService>();
+        string admin = await Admin(http), manager = await Manager(http, admin), other = await Manager(http, admin);
+
+        var ana = await rooms.CreateAsync("m-ana", "hearts", 4, [], null, "Ana", accountCode: manager);
+        await rooms.JoinAsync("m-ad", ana.Code, "Admin", accountCode: admin);
+        await rooms.JoinAsync("m-ot", ana.Code, "Other", accountCode: other);
+
+        foreach (var seat in new[] { "player1", "player2" })
+        {
+            var tried = await http.SendAsync(With(HttpMethod.Post, $"{ManagerContract.RoomsPath}/{ana.Code}/seats/{seat}/remove?ban=true", manager));
+            Assert.Equal(HttpStatusCode.Conflict, tried.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task A_manager_closes_a_table_and_it_is_gone()
+    {
+        var http  = _server.CreateClient();
+        var rooms = _server.Services.GetRequiredService<RoomService>();
+        string admin = await Admin(http);
+
+        var ana = await rooms.CreateAsync("x-ana", "hearts", 4, [], null, "Ana");
+        Assert.Equal(HttpStatusCode.NoContent, (await http.SendAsync(With(HttpMethod.Delete, $"{ManagerContract.RoomsPath}/{ana.Code}", admin))).StatusCode);
+        Assert.Null(rooms.Find(ana.Code));
+        Assert.Equal(HttpStatusCode.NotFound, (await http.SendAsync(With(HttpMethod.Delete, $"{ManagerContract.RoomsPath}/{ana.Code}", admin))).StatusCode);
+    }
+
     [Fact]
     public void The_server_keeps_no_code_and_its_accounts_outlive_it()
     {

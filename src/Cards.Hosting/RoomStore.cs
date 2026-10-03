@@ -100,6 +100,7 @@ public sealed class SavedSeat
     public string? Token { get; set; }
     public bool IsComputer { get; set; }
     public bool StandIn { get; set; }
+    public string? AccountId { get; set; }
 }
 
 public sealed class SavedWording

@@ -131,6 +131,7 @@
     protected override async Task OnInitializedAsync()
     {
         Table.RoomChanged += OnRoomChanged;
+        Table.Dismissed   += OnDismissed;
         _name = Settings.PlayerName is var saved && saved != "Player" ? saved : "";   // "Player" is only the default
 
         try
@@ -201,5 +202,12 @@
             Nav.NavigateTo($"/table/{room.Code}");
     }
 
-    public void Dispose() => Table.RoomChanged -= OnRoomChanged;
+    public void Dispose()
+    {
+        Table.RoomChanged -= OnRoomChanged;
+        Table.Dismissed   -= OnDismissed;
+    }
+
+    /// <summary>Taken off the table, or it was closed: home, where the reason is shown.</summary>
+    private void OnDismissed(string reason) => _ = InvokeAsync(() => Nav.NavigateTo("/"));
 }

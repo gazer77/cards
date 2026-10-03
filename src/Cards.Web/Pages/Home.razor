@@ -1,6 +1,7 @@
 @page "/"
 @inject GameLoader Loader
 @inject NavigationManager Nav
+@inject Cards.App.TableConnection Table
 
 <PageTitle>Cards</PageTitle>
 
@@ -9,6 +10,11 @@
         <h1>Cards</h1>
         <button class="link" @onclick="@(() => Nav.NavigateTo("/settings"))">Settings</button>
     </div>
+
+    @if (_dismissed is not null)
+    {
+        <p class="error">@_dismissed</p>
+    }
 
     @* A friend's table: their code is all it takes. Opening one of your own starts
        from a game's setup page, where the seats and rules are chosen. *@
@@ -42,8 +48,15 @@
     private List<Cards.Models.GameDefinition>? _games;
     private string _code = "";
 
+    /// <summary>Why the player was sent back from a table — said once, here.</summary>
+    private string? _dismissed;
+
     protected override async Task OnInitializedAsync()
-        => _games = await Loader.LoadAllAsync();
+    {
+        _dismissed = Table.LastDismissal;
+        Table.LastDismissal = null;
+        _games = await Loader.LoadAllAsync();
+    }
 
     private void Play(Cards.Models.GameDefinition game)
         => Nav.NavigateTo($"/setup/{game.Id}");

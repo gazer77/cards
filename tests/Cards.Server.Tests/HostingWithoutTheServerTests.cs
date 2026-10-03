@@ -22,6 +22,8 @@ public sealed class HostingWithoutTheServerTests
         public Task JoinRoomAsync(string connectionId, string roomCode)  { lock (this) Groups.Add((connectionId, roomCode)); return Task.CompletedTask; }
         public Task LeaveRoomAsync(string connectionId, string roomCode) { lock (this) Groups.Remove((connectionId, roomCode)); return Task.CompletedTask; }
         public Task SendRoomAsync(string roomCode, RoomInfo room)        { lock (this) Rooms.Add(room); return Task.CompletedTask; }
+        public readonly List<(string Connection, string Reason)> Dismissed = [];
+        public Task SendDismissedAsync(string connectionId, string reason) { lock (this) Dismissed.Add((connectionId, reason)); return Task.CompletedTask; }
 
         public Task SendViewAsync(string connectionId, TableView view)
         {
@@ -170,6 +172,31 @@ public sealed class HostingWithoutTheServerTests
         var restored = again.Find(ana.Code)!;
         Assert.Equal(Difficulty.Hard, restored.Difficulty);
         Assert.True(Assert.IsType<SmartDefaultAiAgent>(restored.State!.PlayerAgents["player1"]).Hard);
+    }
+
+    /// <summary>
+    /// Taken off a table, a person is told so — and only they are; the others carry on,
+    /// the computer playing the seat once the game has started.
+    /// </summary>
+    [Fact]
+    public async Task Whoever_is_taken_off_a_table_is_told_and_the_game_goes_on()
+    {
+        var clients = new Recorder();
+        var rooms   = Host(clients);
+        var ana = await rooms.CreateAsync("ana", "hearts", 4, [], null, "Ana");
+        await rooms.JoinAsync("bo", ana.Code, "Bo");
+        await rooms.StartAsync(ana.Code, ana.Token);
+
+        var (removed, _) = await rooms.RemoveSeatAsync(ana.Code, "player1");
+
+        Assert.True(removed);
+        Assert.Equal([("bo", "A manager took you off this table.")], clients.Dismissed);
+        Assert.True(rooms.Find(ana.Code)!.Seats[1].IsComputer);
+
+        // Closing the table tells whoever is left.
+        await rooms.CloseByManagerAsync(ana.Code);
+        Assert.Contains(("ana", "A manager closed this table."), clients.Dismissed);
+        Assert.Null(rooms.Find(ana.Code));
     }
 
     [Fact]

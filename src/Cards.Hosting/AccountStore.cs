@@ -102,6 +102,16 @@ public sealed class AccountStore
         return true;
     }
 
+    /// <summary>Bars an account from the tables on this server, or lets it back.</summary>
+    public void SetBanned(StoredAccount account, bool banned)
+    {
+        lock (_write)
+        {
+            account.BannedAt = banned ? DateTime.UtcNow : null;
+            Write(account);
+        }
+    }
+
     /// <summary>The name the account's settings carry, for people to recognise it by — never its code.</summary>
     public static string? NameOf(StoredAccount account)
     {
@@ -179,6 +189,12 @@ public sealed class StoredAccount
 
     /// <summary>What the account may do here — <see cref="AccountRoles"/>.</summary>
     public string Role { get; set; } = AccountRoles.Player;
+
+    /// <summary>When a manager barred it from this server's tables; null while it may play.</summary>
+    public DateTime? BannedAt { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Banned => BannedAt is not null;
 
     /// <summary>Bumped on every save, so a device can tell it is behind.</summary>
     public long Version { get; set; }

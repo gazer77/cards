@@ -35,6 +35,18 @@ public sealed class TableConnection(Uri hubUrl, ISettingsStore store) : IAsyncDi
 
     public bool IsConnected => _hub?.State == HubConnectionState.Connected;
 
+    /// <summary>
+    /// The player's account code, given to a table they sit at, so a manager's ban
+    /// reaches the person rather than one seat. Null when there is no account.
+    /// </summary>
+    public Func<string?>? AccountCode { get; set; }
+
+    /// <summary>The player was taken off their table, or it was closed — and why.</summary>
+    public event Action<string>? Dismissed;
+
+    /// <summary>The last time that happened, for the next screen to say, until it is read.</summary>
+    public string? LastDismissal { get; set; }
+
     // ── Seating ───────────────────────────────────────────────────────────────
 
     public async Task<SeatTicket> CreateAsync(
@@ -44,7 +56,7 @@ public sealed class TableConnection(Uri hubUrl, ISettingsStore store) : IAsyncDi
         var hub = await HubAsync();
         Reset();
         Ticket = await hub.InvokeAsync<SeatTicket>(TableHubContract.CreateRoom,
-            gameId, players, rules.ToList(), configuration, name, dropTimeoutSeconds, difficulty);
+            gameId, players, rules.ToList(), configuration, name, dropTimeoutSeconds, difficulty, AccountCode?.Invoke());
         Remember(Ticket);
         return Ticket;
     }
@@ -53,7 +65,8 @@ public sealed class TableConnection(Uri hubUrl, ISettingsStore store) : IAsyncDi
     {
         var hub = await HubAsync();
         Reset();
-        Ticket = await hub.InvokeAsync<SeatTicket>(TableHubContract.JoinRoom, code.Trim().ToUpperInvariant(), name);
+        Ticket = await hub.InvokeAsync<SeatTicket>(TableHubContract.JoinRoom, code.Trim().ToUpperInvariant(), name,
+                                                   AccountCode?.Invoke());
         Remember(Ticket);
         return Ticket;
     }
@@ -166,6 +179,14 @@ public sealed class TableConnection(Uri hubUrl, ISettingsStore store) : IAsyncDi
                     if (Ticket is not null && room.Code != Ticket.Code) return;
                     Room = room;
                     RoomChanged?.Invoke();
+                });
+                // Taken off the table, or the table closed: the seat is no longer ours.
+                _hub.On<string>(TableHubContract.Dismissed, reason =>
+                {
+                    if (Ticket is { } gone) Forget(gone.Code);
+                    Reset();
+                    LastDismissal = reason;
+                    Dismissed?.Invoke(reason);
                 });
                 _hub.On<TableView>(TableHubContract.ViewChanged, view =>
                 {

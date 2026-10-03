@@ -18,6 +18,9 @@ public sealed class SignalRTableClients(IHubContext<TableHub> hub) : ITableClien
 
     public Task SendViewAsync(string connectionId, TableView view)
         => hub.Clients.Client(connectionId).SendAsync(TableHubContract.ViewChanged, view);
+
+    public Task SendDismissedAsync(string connectionId, string reason)
+        => hub.Clients.Client(connectionId).SendAsync(TableHubContract.Dismissed, reason);
 }
 
 /// <summary>

@@ -67,7 +67,7 @@
             {
                 <p class="muted">
                     You are this server's @(Account.IsAdmin ? "admin" : "manager").
-                    <a href="/admin">@(Account.IsAdmin ? "People and tables" : "Tables")</a>
+                    <a href="/admin">Manage tables@(Account.IsAdmin ? " and people" : "")</a>
                 </p>
             }
             else if (Account.AdminNeeded)

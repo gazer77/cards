@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Cards.Engine;
 using Cards.Engine.Shared;
+using Cards.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Cards.Hosting;
@@ -18,7 +19,8 @@ namespace Cards.Hosting;
 /// copies of a game exist to disagree.
 /// </summary>
 public sealed class RoomService(
-    ITableClients clients, GameLoader loader, ILogger<RoomService> log, IRoomStore? store = null)
+    ITableClients clients, GameLoader loader, ILogger<RoomService> log, IRoomStore? store = null,
+    AccountStore? accounts = null)
 {
     private readonly ConcurrentDictionary<string, Room> _rooms = new(StringComparer.OrdinalIgnoreCase);
 
@@ -30,12 +32,114 @@ public sealed class RoomService(
 
     public Room? Find(string code) => _rooms.GetValueOrDefault(code.Trim());
 
+    private const string BannedWords = "You can't play at tables on this server.";
+
+    /// <summary>The account sitting down, if its device said which — refused at the door when it is barred.</summary>
+    private StoredAccount? Admit(string? accountCode)
+    {
+        var account = accounts?.Find(accountCode);
+        if (account is { Banned: true }) throw new TableRefusal(BannedWords);
+        return account;
+    }
+
+    // ── A manager's view ──────────────────────────────────────────────────────
+
+    /// <summary>Every open table, as a manager sees it: the game, who sits where, and how lately anyone played.</summary>
+    public IReadOnlyList<RoomSummary> Summaries()
+        => _rooms.Values.OrderByDescending(r => r.LastActivity).Select(r => new RoomSummary
+        {
+            Code         = r.Code,
+            GameName     = r.Definition.Name,
+            Started      = r.State is not null,
+            LastActivity = r.LastActivity,
+            Seats        = r.Seats.Select(s => new SeatSummary
+            {
+                Id = s.Id, Name = s.Name, IsComputer = s.IsComputer, IsConnected = s.ConnectionId is not null,
+                AccountId = s.AccountId,
+            }).ToList(),
+        }).ToList();
+
+    /// <summary>Closes a table at a manager's word, telling everyone at it why. False when there is no such table.</summary>
+    public async Task<bool> CloseByManagerAsync(string code)
+    {
+        if (Find(code) is not { } room) return false;
+
+        List<string> connected;
+        await room.Lock.WaitAsync();
+        try { connected = room.Seats.Where(s => s.ConnectionId is not null).Select(s => s.ConnectionId!).ToList(); }
+        finally { room.Lock.Release(); }
+
+        foreach (var connection in connected)
+        {
+            await clients.SendDismissedAsync(connection, "A manager closed this table.");
+            await clients.LeaveRoomAsync(connection, room.Code);
+        }
+        await CloseAsync(room.Code);
+        log.LogInformation("Room {Code} closed by a manager", room.Code);
+        return true;
+    }
+
+    /// <summary>
+    /// Takes someone off a table at a manager's word: before the deal their seat is freed,
+    /// once play has started the computer takes it for good. They are told, and their
+    /// token stops working. Returns the account that sat there, if known — so a ban can
+    /// follow — or null when there is no such seat.
+    /// </summary>
+    public async Task<(bool Removed, string? AccountId)> RemoveSeatAsync(string code, string seatId)
+    {
+        if (Find(code) is not { } room) return (false, null);
+
+        string? connection, accountId;
+        await room.Lock.WaitAsync();
+        try
+        {
+            var seat = room.Seats.FirstOrDefault(s => s.Id == seatId && s.IsTaken && !s.IsComputer);
+            if (seat is null) return (false, null);
+
+            connection = seat.ConnectionId;
+            accountId  = seat.AccountId;
+            if (room.Vote?.SeatId == seat.Id) room.Vote = null;
+
+            if (room.State is null)
+            {
+                seat.Name = null; seat.Token = null; seat.ConnectionId = null; seat.AccountId = null;
+                room.Ballots.Remove(seat.Id);
+            }
+            else
+            {
+                seat.Token = null; seat.ConnectionId = null; seat.AccountId = null;
+                seat.IsComputer = true; seat.StandIn = false;
+                room.State.PlayerAgents[seat.Id] = ComputerPlayers.For(room.State, seat.Id);
+            }
+            room.Dirty = true;
+        }
+        finally { room.Lock.Release(); }
+
+        if (connection is not null)
+        {
+            await clients.SendDismissedAsync(connection, "A manager took you off this table.");
+            await clients.LeaveRoomAsync(connection, room.Code);
+        }
+
+        if (room.Seats.All(s => !s.IsTaken))
+            await CloseAsync(room.Code);
+        else
+        {
+            await SendRoomAsync(room);
+            await SendViewsAsync(room);
+            _ = RunTableAsync(room);
+        }
+        return (true, accountId);
+    }
+
     // ── Seating ───────────────────────────────────────────────────────────────
 
     public async Task<SeatTicket> CreateAsync(
         string connectionId, string gameId, int playerCount, IReadOnlyList<string> rules,
-        string? configuration, string name, int dropTimeoutSeconds = 60, string? difficulty = null)
+        string? configuration, string name, int dropTimeoutSeconds = 60, string? difficulty = null,
+        string? accountCode = null)
     {
+        var account = Admit(accountCode);
         var definition = await loader.LoadAsync(gameId)
             ?? throw new TableRefusal($"There is no game called \"{gameId}\".");
 
@@ -67,6 +171,7 @@ public sealed class RoomService(
         _rooms[room.Code] = room;
 
         var ticket = Sit(room, room.Seats[0], connectionId, name);
+        room.Seats[0].AccountId = account?.Id;
 
         // The host's choices on the setup screen are their ballot; everyone else starts
         // from the game's own defaults.
@@ -77,8 +182,9 @@ public sealed class RoomService(
         return ticket;
     }
 
-    public async Task<SeatTicket> JoinAsync(string connectionId, string code, string name)
+    public async Task<SeatTicket> JoinAsync(string connectionId, string code, string name, string? accountCode = null)
     {
+        var account = Admit(accountCode);
         var room = Find(code) ?? throw new TableRefusal("No table has that code.");
 
         SeatTicket ticket;
@@ -88,6 +194,7 @@ public sealed class RoomService(
             if (room.State is not null) throw new TableRefusal("That game has already started.");
             var seat = room.Seats.FirstOrDefault(s => !s.IsTaken) ?? throw new TableRefusal("That table is full.");
             ticket = Sit(room, seat, connectionId, name);
+            seat.AccountId = account?.Id;
         }
         finally { room.Lock.Release(); }
 
@@ -109,6 +216,8 @@ public sealed class RoomService(
         try
         {
             seat = room.SeatByToken(token) ?? throw new TableRefusal("That seat is no longer yours.");
+            if (seat.AccountId is { } id && accounts?.ById(id) is { Banned: true })
+                throw new TableRefusal(BannedWords);
             seat.ConnectionId   = connectionId;
             seat.DisconnectedAt = null;
             room.LastActivity   = DateTime.UtcNow;
@@ -648,7 +757,7 @@ public sealed class RoomService(
             Difficulty         = room.Difficulty,
             Seats              = room.Seats.Select(s => new SavedSeat
             {
-                Id = s.Id, Name = s.Name, Token = s.Token, IsComputer = s.IsComputer, StandIn = s.StandIn,
+                Id = s.Id, Name = s.Name, Token = s.Token, IsComputer = s.IsComputer, StandIn = s.StandIn, AccountId = s.AccountId,
             }).ToList(),
             LastActivity = room.LastActivity,
             Version      = room.Version,
@@ -691,7 +800,7 @@ public sealed class RoomService(
             Offered       = GameConfiguration.Resolve(definition, saved.PlayerCount, saved.Configuration).HouseRules,
             Seats         = saved.Seats.Select(s => new RoomSeat
             {
-                Id = s.Id, Name = s.Name, Token = s.Token, IsComputer = s.IsComputer, StandIn = s.StandIn,
+                Id = s.Id, Name = s.Name, Token = s.Token, IsComputer = s.IsComputer, StandIn = s.StandIn, AccountId = s.AccountId,
                 // Away since the host came back: the drop timeout runs from now.
                 DisconnectedAt = s.Token is not null && !s.IsComputer ? DateTime.UtcNow : null,
             }).ToList(),

@@ -393,7 +393,15 @@ See `docs/shared-tables.md`.
       phone app. Guests stay as they are. Unlocks bans that stick, seats that follow a
       person between devices, and reopening a table with the same people. An iOS app
       offering it must offer Sign in with Apple too.
-- [ ] **Backlog: kicking and banning** — the host removes someone from the table: in the
+- [x] **Roles** — player, manager, admin. The first admin by a one-time setup code the
+      server writes to its log while it has none. Managers see every open table, close
+      one, take someone off one, and ban an account from all of them (seats now know
+      the account at them); admins also give roles, issue a new code for someone who
+      lost theirs, and delete accounts. The last admin cannot step down; nobody bans an
+      admin, and only an admin bans a manager. A ban is by account, so clearing a
+      browser's storage starts a fresh account — fine for a home server.
+- [ ] **Backlog: kicking and banning by the host** — the person who opened a table removing
+      someone from it, without being a manager. The manager's version is above. — the host removes someone from the table: in the
       lobby the seat opens again; during play it goes to the computer, as when someone
       leaves, and the seat's token is revoked so they cannot rejoin it. Banning keeps them
       out of that room for good. Worth deciding when picked up: whether kicking during

@@ -48,6 +48,32 @@ public sealed class AccountSummary
     public int SavedGames { get; set; }
 }
 
+/// <summary>An open table, as a manager sees it.</summary>
+public sealed class RoomSummary
+{
+    public string Code { get; set; } = "";
+    public string GameName { get; set; } = "";
+    public bool Started { get; set; }
+    public DateTime LastActivity { get; set; }
+    public List<SeatSummary> Seats { get; set; } = [];
+}
+
+public sealed class SeatSummary
+{
+    public string Id { get; set; } = "";
+    public string? Name { get; set; }
+    public bool IsComputer { get; set; }
+    public bool IsConnected { get; set; }
+    /// <summary>The account sitting here, when known — what a ban is applied to.</summary>
+    public string? AccountId { get; set; }
+}
+
+public static class ManagerContract
+{
+    public const string RoomsPath = "/api/manage/rooms";
+    public const string BansPath  = "/api/manage/bans";
+}
+
 public sealed class RoleChange
 {
     public string Role { get; set; } = AccountRoles.Player;

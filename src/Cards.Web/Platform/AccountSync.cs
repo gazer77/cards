@@ -141,6 +141,34 @@ public sealed class AccountSync(IJSRuntime js, HttpClient http)
         return await response.Content.ReadAsStringAsync() is { Length: > 0 } why ? why.Trim('"') : "Not allowed.";
     }
 
+    // ── Managing the tables ───────────────────────────────────────────────────
+
+    public async Task<List<RoomSummary>> RoomsAsync()
+    {
+        var response = await Send(HttpMethod.Get, ManagerContract.RoomsPath);
+        return response.IsSuccessStatusCode ? (await response.Content.ReadFromJsonAsync<List<RoomSummary>>())! : [];
+    }
+
+    public async Task<bool> CloseRoomAsync(string code)
+        => (await Send(HttpMethod.Delete, $"{ManagerContract.RoomsPath}/{code}")).IsSuccessStatusCode;
+
+    /// <summary>Takes someone off a table, and with <paramref name="ban"/> off every table here. The server's reason when it refuses.</summary>
+    public async Task<string?> RemoveSeatAsync(string code, string seatId, bool ban)
+    {
+        var response = await Send(HttpMethod.Post, $"{ManagerContract.RoomsPath}/{code}/seats/{seatId}/remove?ban={(ban ? "true" : "false")}");
+        if (response.IsSuccessStatusCode) return null;
+        return await response.Content.ReadAsStringAsync() is { Length: > 0 } why ? why.Trim('"') : "Not allowed.";
+    }
+
+    public async Task<List<AccountSummary>> BansAsync()
+    {
+        var response = await Send(HttpMethod.Get, ManagerContract.BansPath);
+        return response.IsSuccessStatusCode ? (await response.Content.ReadFromJsonAsync<List<AccountSummary>>())! : [];
+    }
+
+    public async Task<bool> UnbanAsync(string id)
+        => (await Send(HttpMethod.Delete, $"{ManagerContract.BansPath}/{id}")).IsSuccessStatusCode;
+
     /// <summary>A request as this account: its code in the header.</summary>
     public async Task<HttpResponseMessage> Send(HttpMethod method, string path, object? body = null)
     {

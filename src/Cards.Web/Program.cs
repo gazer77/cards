@@ -39,7 +39,11 @@ var tableServer = builder.Configuration["TableServer"] is { Length: > 0 } config
 
 builder.Services.AddSingleton(sp =>
     new TableConnection(new Uri(tableServer, Cards.Engine.Shared.TableHubContract.Path.TrimStart('/')),
-                        sp.GetRequiredService<ISettingsStore>()));
+                        sp.GetRequiredService<ISettingsStore>())
+    {
+        // A table knows which account sits at it, so a manager's ban reaches the person.
+        AccountCode = () => sp.GetRequiredService<AccountSync>().Code,
+    });
 
 // The player's account lives on the same server as the tables.
 builder.Services.AddSingleton(sp => new AccountSync(

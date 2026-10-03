@@ -438,6 +438,7 @@
         Table.ViewChanged       += OnSharedView;
         Table.Refused           += OnRefused;
         Table.ConnectionChanged += OnConnectionChanged;
+        Table.Dismissed         += OnDismissed;
 
         try
         {
@@ -769,5 +770,9 @@
         Table.ViewChanged       -= OnSharedView;
         Table.Refused           -= OnRefused;
         Table.ConnectionChanged -= OnConnectionChanged;
+        Table.Dismissed         -= OnDismissed;
     }
+
+    /// <summary>Taken off the table, or it was closed: home, where the reason is shown.</summary>
+    private void OnDismissed(string reason) => _ = InvokeAsync(() => Nav.NavigateTo("/"));
 }

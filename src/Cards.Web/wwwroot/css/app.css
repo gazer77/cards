@@ -787,3 +787,13 @@ html, body {
 .loading-progress-text::after {
     content: var(--blazor-load-percentage-text, "Shuffling…");
 }
+
+/* ── Manage ───────────────────────────────────────────────────────────────── */
+.seat-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.35rem 0;
+}
+.seat-line > span { flex: 1 1 8rem; }

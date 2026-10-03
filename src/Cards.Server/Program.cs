@@ -97,6 +97,7 @@ app.MapGet("/health", () => "ok");
 
 app.UseRateLimiter();
 AccountEndpoints.Map(app);
+ManagerEndpoints.Map(app);
 
 // No admin yet: the code that makes one goes to the log, where only the server's owner looks.
 if (app.Services.GetService<AccountStore>() is { SetupCode: { } setup })

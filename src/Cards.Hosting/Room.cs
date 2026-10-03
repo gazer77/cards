@@ -158,6 +158,9 @@ public sealed class RoomSeat
     /// <summary>Proves the seat is someone's; null while it is open.</summary>
     public string? Token { get; set; }
 
+    /// <summary>The account of whoever sits here, when their device said — so a manager's ban reaches them.</summary>
+    public string? AccountId { get; set; }
+
     /// <summary>The live connection, when the person here is connected.</summary>
     public string? ConnectionId { get; set; }
 

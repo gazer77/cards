@@ -3,27 +3,103 @@
 @inject NavigationManager Nav
 
 @*
-    The people on this server, for its admin: who has which role, a new code for someone
-    who lost theirs, and an account removed for good. Every change is checked again by the
-    server against the caller's own role; this page only offers what it would allow.
+    Looking after this server. A manager sees the open tables — closes one, takes someone
+    off one, bans them from every table — and the banned. The admin also sees the people:
+    who has which role, a new code for someone who lost theirs, an account removed for good.
+    Every change is checked again by the server against the caller's own role; this page
+    only offers what it would allow.
 *@
 
-<PageTitle>People</PageTitle>
+<PageTitle>Manage</PageTitle>
 
 <div class="setup">
     <button class="link" @onclick="@(() => Nav.NavigateTo("/settings"))">&larr; Settings</button>
 
-    <h1>People</h1>
-
-    @if (!Account.IsAdmin)
+    @if (!Account.IsManager)
     {
-        <p class="muted">Only this server's admin can see who plays here.</p>
+        <h1>Manage</h1>
+        <p class="muted">Only this server's managers and admin can look after its tables.</p>
     }
-    else if (_accounts is null)
+    else
+    {
+        <h1>Tables</h1>
+        @if (_rooms is null)
+        {
+            <p class="muted">Loading…</p>
+        }
+        else if (_rooms.Count == 0)
+        {
+            <p class="muted">No tables are open.</p>
+        }
+        else
+        {
+            @foreach (var r in _rooms)
+            {
+                var room = r;
+                <section class="setup-block person">
+                    <h2>@room.GameName · @room.Code</h2>
+                    <p class="muted">
+                        @(room.Started ? "Playing" : "Waiting to deal") · last move @room.LastActivity.ToLocalTime().ToString("HH:mm")
+                    </p>
+                    @foreach (var s in room.Seats.Where(s => s.Name is not null && !s.IsComputer))
+                    {
+                        var seat = s;
+                        <div class="seat-line">
+                            <span>@seat.Name@(seat.IsConnected ? "" : " (away)")</span>
+                            <button class="choice" @onclick="() => Remove(room, seat, ban: false)">Take off</button>
+                            @if (seat.AccountId is not null)
+                            {
+                                <button class="choice" @onclick="() => Remove(room, seat, ban: true)">Take off and ban</button>
+                            }
+                        </div>
+                    }
+                    <div class="choices">
+                        @if (_confirmClose == room.Code)
+                        {
+                            <button class="choice" @onclick="() => Close(room)">Yes — close it</button>
+                            <button class="choice" @onclick="() => _confirmClose = null">Leave it open</button>
+                        }
+                        else
+                        {
+                            <button class="choice" @onclick="() => _confirmClose = room.Code">Close table…</button>
+                        }
+                    </div>
+                    @if (_roomErrors.TryGetValue(room.Code, out var why))
+                    {
+                        <p class="error">@why</p>
+                    }
+                </section>
+            }
+        }
+
+        <h1>Banned</h1>
+        @if (_bans is { Count: > 0 })
+        {
+            @foreach (var b in _bans)
+            {
+                var banned = b;
+                <div class="seat-line">
+                    <span>@(banned.Name ?? "No name") · since @banned.Updated.ToLocalTime().ToString("d MMM")</span>
+                    <button class="choice" @onclick="() => Unban(banned)">Let back</button>
+                </div>
+            }
+        }
+        else
+        {
+            <p class="muted">Nobody is banned.</p>
+        }
+    }
+
+    @if (Account.IsAdmin)
+    {
+        <h1>People</h1>
+    }
+
+    @if (Account.IsAdmin && _accounts is null)
     {
         <p class="muted">Loading…</p>
     }
-    else
+    else if (Account.IsAdmin && _accounts is not null)
     {
         <p class="muted">
             @_accounts.Count @(_accounts.Count == 1 ? "account" : "accounts"). Each is known by the
@@ -80,9 +156,43 @@
     private readonly Dictionary<string, string> _errors = [];
     private string? _confirmDelete;
 
+    private List<Cards.Services.RoomSummary>? _rooms;
+    private List<Cards.Services.AccountSummary>? _bans;
+    private readonly Dictionary<string, string> _roomErrors = [];
+    private string? _confirmClose;
+
     protected override async Task OnInitializedAsync()
     {
+        if (Account.IsManager)
+        {
+            _rooms = await Account.RoomsAsync();
+            _bans  = await Account.BansAsync();
+        }
         if (Account.IsAdmin) _accounts = await Account.AccountsAsync();
+    }
+
+    private async Task Close(Cards.Services.RoomSummary room)
+    {
+        _confirmClose = null;
+        if (await Account.CloseRoomAsync(room.Code)) _rooms?.Remove(room);
+        else _roomErrors[room.Code] = "That table has already closed.";
+    }
+
+    private async Task Remove(Cards.Services.RoomSummary room, Cards.Services.SeatSummary seat, bool ban)
+    {
+        _roomErrors.Remove(room.Code);
+        if (await Account.RemoveSeatAsync(room.Code, seat.Id, ban) is { } refused)
+        {
+            _roomErrors[room.Code] = refused;
+            return;
+        }
+        _rooms = await Account.RoomsAsync();
+        if (ban) _bans = await Account.BansAsync();
+    }
+
+    private async Task Unban(Cards.Services.AccountSummary banned)
+    {
+        if (await Account.UnbanAsync(banned.Id)) _bans?.Remove(banned);
     }
 
     private static string RoleName(string role) => role switch

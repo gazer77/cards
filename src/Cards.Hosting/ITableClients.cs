@@ -22,6 +22,12 @@ public interface ITableClients
 
     /// <summary>Gives one person their own view of the table. Never broadcast: each seat's view is its own.</summary>
     Task SendViewAsync(string connectionId, TableView view);
+
+    /// <summary>
+    /// Tells one person they are no longer at the table, and why — a manager closed it, or
+    /// took them off it. Their client lets the table go and says so.
+    /// </summary>
+    Task SendDismissedAsync(string connectionId, string reason);
 }
 
 /// <summary>
