@@ -300,8 +300,10 @@ public partial class GameTablePage : ContentPage
         }
 
         // Nothing for the card itself: the gesture belongs to what it lies on, which is
-        // how a double tap on the deck has always drawn from it.
-        var zone = _state.Zones.Values.FirstOrDefault(z => z.Cards.Any(c => c.Id == cardId));
+        // how a double tap on the deck has always drawn from it. Found by the physical
+        // card: in a five-deck game the pile's top card has twins in the deck.
+        var zone = _state.Zones.Values.FirstOrDefault(z => z.Cards.Any(c => c.Uid == uid))
+                ?? _state.Zones.Values.FirstOrDefault(z => z.Cards.Any(c => c.Id == cardId));
         if (zone is not null) OnZoneActivated(zone.Id);
         else                  OnCardTapped(cardId, uid);
     }

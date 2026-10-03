@@ -665,14 +665,24 @@ public sealed class GameTableViewModel
         // lying on. A deck and a discard pile are read through their top card, and a
         // double tap there has always meant "draw from here" — it kept meaning that
         // right up until cards learned to answer the gesture first.
-        if (ZoneHolding(cardId) is { } zoneId) return ActivateZone(zoneId);
+        if (ZoneHolding(cardId, uid) is { } zoneId) return ActivateZone(zoneId);
 
         return TapCard(cardId, uid);
     }
 
     /// <summary>The zone a card is lying in, or null if the table does not hold it.</summary>
-    private string? ZoneHolding(string cardId)
-        => _state?.Zones.Values.FirstOrDefault(z => z.Cards.Any(c => c.Id == cardId))?.Id;
+    /// <remarks>
+    /// By the physical card where the tap names one. Hand and Foot shuffles five decks,
+    /// so the 7♥ on the discard pile has twins in the deck — and looking it up by
+    /// description found the deck first, and a double tap on the pile drew from the deck.
+    /// </remarks>
+    private string? ZoneHolding(string cardId, int uid = NoUid)
+    {
+        if (_state is null) return null;
+        var zones = _state.Zones.Values;
+        return (uid != NoUid ? zones.FirstOrDefault(z => z.Cards.Any(c => c.Uid == uid)) : null)?.Id
+            ?? zones.FirstOrDefault(z => z.Cards.Any(c => c.Id == cardId))?.Id;
+    }
     public Task DropCard(string cardId, string zoneId)
     {
         if (!CanAcceptInput()) return Task.CompletedTask;

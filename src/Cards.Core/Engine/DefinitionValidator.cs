@@ -46,6 +46,9 @@ public static class DefinitionValidator
             if (zone.GroupLayout == "slots" && zone.Slots.Count == 0)
                 problems.Add($"zone '{zone.Id}': group_layout slots needs a slots list.");
 
+            if (zone.SlotLabels is not ("empty" or "always"))
+                problems.Add($"zone '{zone.Id}': slot_labels '{zone.SlotLabels}' is not empty or always.");
+
             for (int i = 0; i < zone.Slots.Count; i++)
                 ValidateCardMatch($"zone '{zone.Id}'.slots[{i}].match", zone.Slots[i].Match, problems);
 
@@ -93,8 +96,6 @@ public static class DefinitionValidator
                 problems.Add($"score_card: view '{card.View}' is not total or detail.");
             if (card.By is not ("player" or "team"))
                 problems.Add($"score_card: by '{card.By}' is not player or team.");
-            if (card.By == "team" && definition.TeamsConfig is null)
-                problems.Add("score_card: by team, but this game has no teams.");
             if (card.MaxRounds < 1)
                 problems.Add("score_card: max_rounds must be at least 1.");
             if (card.Place is null)

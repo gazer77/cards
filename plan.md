@@ -477,6 +477,13 @@ See `docs/shared-tables.md`.
       could meld their last card short of the books and be left with no move.
       Not yet: the computer player does not weigh whether taking the pile is worth it
       beyond the existing rule, and never holds back a meld to go out in one turn.
+- [x] **Hand and Foot at the table** — the meld strip's ranks are headings above their
+      slots (`slot_labels: "always"`), so a full slot still says what it is; a score card
+      sits lower right, by team where there are teams and by player where there are not.
+      A double tap on a card in hand finishes the move: onto a meld already down, down
+      as a new meld with the cards picked, or — a lone card that melds nowhere — into
+      the discard. Fixed: a double tap on the discard pile drew from the deck, because
+      the pile's top card was looked up by description and five decks hold its twin.
 - [ ] **Hand and Foot at five seats** — the two side players' feet are drawn at the
       smallest size the table allows. Five seats put three players along the top, which
       leaves the sides a narrow band, and Hand and Foot asks each seat for a hand, a

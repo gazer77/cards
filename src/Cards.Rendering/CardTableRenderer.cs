@@ -1387,9 +1387,13 @@ public sealed class CardTableRenderer
         // Labels grow with LabelScale, and the room for them with it: slot labels placed
         // outside their slot fit the gap between rows at their own size, and ran into the
         // next row once doubled on a phone.
+        // Labels kept above full slots need their own room above the cards, or the row
+        // before lays its badges on them.
+        bool  always     = zone.Definition.SlotLabels == "always";
+        bool  labelAbove = always && slotDefs.Any(s => s.LabelPlace is { } p && Percent(HeadingPlace(p).Y, 0.5f) <= 0f);
         float extra  = (capTB ? cardW * 0.16f * 1.6f * stripScale : 0f)
                      + (badgeTB ? MathF.Max(cardW * 0.15f, 10f) * 1.8f * stripScale : 0f)
-                     + (stripScale > 1f && slotDefs.Any(s => s.LabelPlace is not null) ? cardW * 0.5f * stripScale : 0f);
+                     + (labelAbove || (stripScale > 1f && slotDefs.Any(s => s.LabelPlace is not null)) ? cardW * 0.5f * stripScale : 0f);
         float rowH   = cardH + extra;
         float rowGap = 8f;
 
@@ -1416,44 +1420,55 @@ public sealed class CardTableRenderer
             int   inRow = Math.Min(perRow, slots - row * perRow);
             float rowW = inRow * cardW + (inRow - 1) * slotGap;
             float x    = layout.Bounds.MidX - rowW / 2f + col * (cardW + slotGap);
-            float y    = y0 + row * (rowH + rowGap);
+            float y    = y0 + row * (rowH + rowGap) + (labelAbove ? cardW * 0.5f * stripScale : 0f);
             var   rect = new SKRect(x, y, x + cardW, y + cardH);
 
-            string name = slotDefs[s].Label ?? "";
+            string name   = slotDefs[s].Label ?? "";
+            bool   filled = bySlot.TryGetValue(s, out var meld);
 
-            if (bySlot.TryGetValue(s, out var meld))
+            if (filled)
             {
-                DrawCardRun(canvas, meld, rect, cardW, arrangement);
+                DrawCardRun(canvas, meld!, rect, cardW, arrangement);
                 if (caption is not null)
                     DrawPlacedLabel(canvas, rect,
-                        FillLabel(caption.Text, zone, slotDefs[s].Label ?? "", meld.Count),
+                        FillLabel(caption.Text, zone, slotDefs[s].Label ?? "", meld!.Count),
                         cardW * 0.16f * stripScale, caption);
-                DrawGroupBadges(canvas, zone, rect, meld.Count, cardW, stripScale);
             }
-            else
+
+            // An empty slot names its rank, faintly: a promise of where the meld will go,
+            // not a card. Kept once the meld is there when the definition says so.
+            if (name.Length > 0 && (!filled || always))
             {
-                // An empty slot names its rank, faintly: a promise of where the meld
-                // will go, not a card.
-                if (name.Length > 0)
+                if (slotDefs[s].LabelPlace is { } lp)
                 {
-                    if (slotDefs[s].LabelPlace is { } lp)
-                    {
-                        // Positioned like any other label: in the slot's proportions,
-                        // turned to the seat.
-                        var place = TurnPlace(lp);
-                        var box   = ResolvePlace(place, rect, rankFont.MeasureText(name) + cardW * 0.2f, cardW * 0.5f * stripScale);
-                        DrawTextInBox(canvas, name, box, rankFont, rankPaint, cardW * 0.42f * stripScale,
-                                      place.TextAlign, place.VerticalAlign, inset: cardW * 0.1f);
-                    }
-                    else
-                    {
-                        float tw = rankFont.MeasureText(name);
-                        canvas.DrawText(name, rect.MidX - tw / 2f, rect.MidY + cardW * 0.15f, rankFont, rankPaint);
-                    }
+                    // Positioned like any other label: in the slot's proportions,
+                    // turned to the seat.
+                    var place = always ? HeadingPlace(lp) : TurnPlace(lp);
+                    var box   = ResolvePlace(place, rect, rankFont.MeasureText(name) + cardW * 0.2f, cardW * 0.5f * stripScale);
+                    DrawTextInBox(canvas, name, box, rankFont, rankPaint, cardW * 0.42f * stripScale,
+                                  place.TextAlign, place.VerticalAlign, inset: cardW * 0.1f);
                 }
-                DrawGroupBadges(canvas, zone, rect, 0, cardW, stripScale);
+                else
+                {
+                    float tw = rankFont.MeasureText(name);
+                    canvas.DrawText(name, rect.MidX - tw / 2f, rect.MidY + cardW * 0.15f, rankFont, rankPaint);
+                }
             }
+
+            DrawGroupBadges(canvas, zone, rect, filled ? meld!.Count : 0, cardW, stripScale);
         }
+    }
+
+    /// <summary>
+    /// Where a label kept over full slots goes. Turned to the seat only when the turn
+    /// keeps it above or below the slot — a strip upside down to the viewer has its
+    /// badges on top, and the heading belongs opposite them. Turned a quarter, it would
+    /// land beside the slot, on the next slot's cards; there it stays above.
+    /// </summary>
+    private Cards.Models.PlaceDefinition HeadingPlace(Cards.Models.PlaceDefinition p)
+    {
+        var turned = TurnPlace(p);
+        return Percent(turned.Y, 0.5f) >= 1f ? turned : p;
     }
 
     private sealed class MeldRow

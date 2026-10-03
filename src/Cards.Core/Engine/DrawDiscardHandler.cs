@@ -409,8 +409,21 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
         if ((action.Type == "play_card" || action.Type == "discard") && action.CardId is { } discardId)
         {
-            DiscardCard(state, discardId);
+            DiscardCard(state, action.CardUid?.ToString() ?? discardId);
             return;
+        }
+
+        // A double tap's meld names the card it was made on: that card goes in with
+        // whatever else was picked, even if the gesture's first tap had just taken it out.
+        if (action.Type is "meld" or "add_to_meld" && action.CardId is { } meldId)
+        {
+            var current = SelectionTokens(state);
+            if (NamedCard(state, action.CardUid, meldId, current) is { } named
+                && !current.Contains(named.Uid.ToString()))
+            {
+                current.Add(named.Uid.ToString());
+                state.Metadata["selected_card"] = string.Join(",", current);
+            }
         }
 
         // A Discard button carries no card: the selection is the card. Without this the
@@ -778,7 +791,8 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     /// </summary>
     public GameAction? DefaultCardAction(GameState state, string cardId, int? uid)
     {
-        if (_targetZone != "grid" || TurnState(state) != "discard") return null;
+        if (TurnState(state) != "discard") return null;
+        if (_targetZone != "grid") return HandCardAction(state, cardId, uid);
 
         if (state.Metadata.ContainsKey("dd_must_flip"))
             return new GameAction("flip_card", CardId: cardId, CardUid: uid);
@@ -788,6 +802,68 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
         return null;   // a grid card already swaps on a single tap
     }
+
+    /// <summary>
+    /// A double tap on a card in hand finishes what the taps before it started: the
+    /// selection with this card in it goes onto a meld already down, or down as a new
+    /// one; failing both, a card picked alone is discarded. The card is counted in
+    /// even when the double tap's own first tap took it back out of the selection.
+    /// </summary>
+    private GameAction? HandCardAction(GameState state, string cardId, int? uid)
+    {
+        var current = SelectionTokens(state);
+
+        // A shared table names the first copy of a description, which may be one lying
+        // on a meld; the hand's own copy is the one meant.
+        var card = NamedCard(state, uid, cardId, current);
+        if (card is null) return null;
+
+        var with = current.Contains(card.Uid.ToString()) ? current : [.. current, card.Uid.ToString()];
+
+        if (_specialActions.Contains("meld") || _specialActions.Contains("add_to_meld"))
+        {
+            // Asked of the selection as it would be, then put back exactly as it was:
+            // state is hashed, and a question must not leave a mark.
+            string? before = state.Metadata.GetValueOrDefault("selected_card");
+            state.Metadata["selected_card"] = string.Join(",", with);
+            try
+            {
+                if (_specialActions.Contains("add_to_meld") && PlanMeld(state, addToExisting: true, out _) is not null)
+                    return new GameAction("add_to_meld", CardId: cardId, CardUid: card.Uid);
+                if (_specialActions.Contains("meld") && PlanMeld(state, addToExisting: false, out _) is not null)
+                    return new GameAction("meld", CardId: cardId, CardUid: card.Uid);
+            }
+            finally
+            {
+                if (before is null) state.Metadata.Remove("selected_card");
+                else                state.Metadata["selected_card"] = before;
+            }
+        }
+
+        if (with.Count == 1 && _discardCount == 1 && !state.Metadata.ContainsKey("dd_must_meld"))
+            return new GameAction("discard", CardId: cardId, CardUid: card.Uid);
+
+        return null;
+    }
+
+    /// <summary>
+    /// The card in hand a double tap was made on. A shared table names the first copy
+    /// of a description, which may be one lying on a meld; then the hand's own copy is
+    /// meant — the one already picked, if any, since the gesture's first tap picked it.
+    /// </summary>
+    private Card? NamedCard(GameState state, int? uid, string cardId, List<string> selected)
+    {
+        var cards = SelectableCards(state).ToList();
+        if (uid is int u && cards.FirstOrDefault(c => c.Uid == u) is { } exact) return exact;
+
+        var copies = cards.Where(c => c.Id == cardId).ToList();
+        return copies.FirstOrDefault(c => selected.Contains(c.Uid.ToString())) ?? copies.FirstOrDefault();
+    }
+
+    private static List<string> SelectionTokens(GameState state)
+        => (state.Metadata.GetValueOrDefault("selected_card") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
 
     /// <summary>
     /// Drops an obligation the player has no way of meeting.

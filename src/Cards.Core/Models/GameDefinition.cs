@@ -280,6 +280,13 @@ public class ZoneDefinition
     /// <summary>Where every empty slot's label sits unless the slot says otherwise. Omitted, centred.</summary>
     [JsonPropertyName("slot_label_place")]
     public PlaceDefinition? SlotLabelPlace { get; set; }
+
+    /// <summary>
+    /// "empty" (default): a slot's label shows only while nothing is in it. "always": it
+    /// stays once cards arrive — placed outside the slot, a heading the cards never cover.
+    /// </summary>
+    [JsonPropertyName("slot_labels")]
+    public string SlotLabels { get; set; } = "empty";
 }
 
 /// <summary>

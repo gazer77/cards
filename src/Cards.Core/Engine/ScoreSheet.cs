@@ -25,7 +25,9 @@ public sealed record ScoreSheet(
         bool declared = card is not null;
         if (!declared && state.Scores.Count == 0 && state.ScoreHistory.Count == 0) return null;
 
-        bool byTeam = card?.By == "team" || (!declared && state.Teams.Count > 0);
+        // By team only where this table has teams: a game whose teams come and go with the
+        // seat count (Hand and Foot pairs up at four and six) scores alone at three.
+        bool byTeam = (card?.By == "team" || !declared) && state.Teams.Count > 0;
         int  keep   = Math.Max(1, maxRounds ?? card?.MaxRounds ?? int.MaxValue);
         var  rounds = state.ScoreHistory.TakeLast(keep).ToList();
 

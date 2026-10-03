@@ -371,6 +371,16 @@ slot is empty; omitted, an empty slot shows nothing. Position it with a `place` 
 slot, or on the zone as `slot_label_place` for all of them — the same `place` every
 label and badge takes.
 
+`"slot_labels": "always"` keeps each label once its slot fills (the default, `"empty"`,
+hides it under the cards). Placed above the slot, it becomes a heading the cards never
+cover, and the strip leaves a line of room for it; a strip turned upside down to the
+viewer puts its headings below, opposite its badges. Hand and Foot does this:
+
+```json
+"slot_labels": "always",
+"slot_label_place": { "x": "50%", "y": "0%", "anchor": "bottom" }
+```
+
 A slot may hold cards that are not melds. Hand and Foot's red threes are filed into the
 `3` slot by an `on_receive` rule on the hand and scored by `scoring.bonus_cards`; a group
 of a rank the phase bars from melding is never a meld and never a book, whatever its size.
@@ -1615,7 +1625,7 @@ scored on the way there. Optional: a game with no `score_card` shows none.
 | `label` | Heading above the rows. `""` for none. Default `"Scores"`. |
 | `view` | `"total"` (default) — one number per side; `"detail"` — a column per round, total last. |
 | `collapsible` | `true` (default): a tap switches between the two views. The choice is the viewer's and is not saved into the game. Folding it to its badge is remembered from one game to the next. |
-| `by` | `"player"` (default) or `"team"`. `"team"` requires the game to have teams. |
+| `by` | `"player"` (default) or `"team"`. `"team"` gives a row per team at a table that has teams, and a row per player at one that does not (`only_when_players`, or a house rule that turns teams off). |
 | `round_label` | What a round column is called — `"H"` gives H1, H2 … Default `"R"`. |
 | `max_rounds` | How many round columns the detail view shows, most recent last. Default 9. |
 | `place` | Required. A `place` in table percentages, the same shape labels and badges use. |
