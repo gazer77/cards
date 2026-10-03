@@ -749,3 +749,41 @@ html, body {
 .score-table tr.me th,
 .score-table tr.me td { color: var(--ink); }
 .score-table tr.me th { color: #F2C54B; font-weight: 700; }
+
+/* ── Loading ──────────────────────────────────────────────────────────────────
+   The ring index.html shows while the app downloads. Blazor fills in how far it has
+   got (--blazor-load-percentage); without these rules the browser drew the ring's
+   two circles as a plain black disc. */
+.loading-progress {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 7rem;
+    height: 7rem;
+    margin: -5rem 0 0 -3.5rem;
+}
+.loading-progress circle {
+    fill: none;
+    stroke: #ffffff1f;
+    stroke-width: 0.5rem;
+    transform-origin: 50% 50%;
+    transform: rotate(-90deg);
+}
+.loading-progress circle:last-child {
+    stroke: var(--gold);
+    stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
+    transition: stroke-dasharray 0.05s ease-in-out;
+}
+.loading-progress-text {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    margin-top: -1.6rem;
+    text-align: center;
+    color: var(--ink);
+    font-weight: 600;
+}
+.loading-progress-text::after {
+    content: var(--blazor-load-percentage-text, "Shuffling…");
+}
