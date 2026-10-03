@@ -18,7 +18,11 @@ jobs:
     runs-on: [self-hosted, linux, jacktheripper]
     timeout-minutes: 60
     steps:
+      # The game definitions are the games/ submodule (gazer77/cards-games), which must
+      # be public for this token to fetch it.
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       # PaintCost measures timing and is too sensitive to a busy machine to gate a deploy.
       - name: Test the engine

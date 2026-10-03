@@ -1785,12 +1785,18 @@ Game-specific agents (e.g., `GoFishAiAgent`) are registered in the phase handler
 
 ## Adding a New Game
 
-1. Create `games/<id>.json` using this schema.
-2. Add the game id to `GameLoader.GameIds`.
-3. If the game needs a new phase type, implement `IPhaseHandler` and register it in `PhaseHandlerRegistry`.
-4. If the game needs a new scoring type, add a case to `ScoringEngine.Apply`.
-5. Add a help file at `games/help/<id>.md`.
-6. The game appears automatically in the game picker — no other app-layer changes needed.
+The definitions live in their own repository, [gazer77/cards-games](https://github.com/gazer77/cards-games),
+checked out here as the `games/` submodule. Its pull requests are checked by playing every
+game through this engine.
+
+1. Create `<id>.json` there (`games/<id>.json` here) using this schema. The file name is the id.
+2. Add its rules page at `help/<id>.md`.
+3. It appears in the game picker by itself — games are found, not listed
+   (`IGameAssetSource.GameIds`), and the picker lists them by name.
+4. Only a new phase type or scoring type needs the engine: implement `IPhaseHandler` and
+   register it in `PhaseHandlerRegistry`, or add a case to `ScoringEngine.Apply`.
+5. Here, move the submodule to the new commit (`git -C games pull`, then commit `games`)
+   and record its golden master (`RECORD_GOLDEN=1 dotnet test --filter GoldenMaster`).
 
 A definition is validated when it loads. An unknown deck name, an unreadable expression, a
 draw source naming no zone, or a condition term the engine does not recognise keeps the

@@ -1,0 +1,4 @@
+[submodule "games"]
+	path = games
+	url = https://github.com/gazer77/cards-games.git
+	branch = main

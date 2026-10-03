@@ -393,6 +393,13 @@ See `docs/shared-tables.md`.
       phone app. Guests stay as they are. Unlocks bans that stick, seats that follow a
       person between devices, and reopening a table with the same people. An iOS app
       offering it must offer Sign in with Apple too.
+- [x] **Game definitions in their own repository** — [gazer77/cards-games](https://github.com/gazer77/cards-games)
+      (MIT), with their history, checked out here as the `games/` submodule. Its checks play
+      every game through this engine on each pull request, so a submitted game is
+      validated and played out before it is merged; the engine finds games rather than
+      listing them. A fresh clone needs `git clone --recursive` (or
+      `git submodule update --init`); the deploy fetches it, so the repository must be
+      public — or the workflow given a token.
 - [x] **Roles** — player, manager, admin. The first admin by a one-time setup code the
       server writes to its log while it has none. Managers see every open table, close
       one, take someone off one, and ban an account from all of them (seats now know
