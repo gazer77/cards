@@ -17,6 +17,16 @@ public sealed class CribDiscardHandler(PhaseDefinition def, string nextPhaseId) 
     private readonly int    _cribSize = Cribbage.GetInt(def, "crib_size") ?? 4;
     private readonly string _to       = Cribbage.GetString(def, "to") ?? "crib";
 
+    /// <summary>Once a player has picked a card for the crib, the rest of their picks are one choice.</summary>
+    public bool ContinuesMove(GameState state)
+        => state.Metadata.GetValueOrDefault("crib_laying") is not null
+        && state.Metadata.GetValueOrDefault("selected_card") is { Length: > 0 };
+
+    public TimeSpan? GetAutoAdvanceDelay(GameState state)
+        => ContinuesMove(state) && state.PlayerAgents.ContainsKey(state.CurrentPlayer.Id)
+            ? TimeSpan.FromMilliseconds(250)
+            : null;
+
     private int Owed(GameState state) => Math.Max(0, (Cribbage.Hand(state, state.CurrentPlayer.Id)?.Count ?? 0) - _keep);
 
     public IReadOnlyList<GameAction> GetValidActions(GameState state)

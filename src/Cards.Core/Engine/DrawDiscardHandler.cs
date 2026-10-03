@@ -131,16 +131,25 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     public void OnPhaseEnter(GameState state) => EnsureInitialized(state);
 
     /// <summary>
-    /// A card turned because the draw was discarded is the end of the discard, not a move
-    /// of its own: the computer turns it a beat after the discard lands.
+    /// Everything after the draw is the rest of one turn: picking cards up for a meld,
+    /// laying it, discarding, and the card turned because the draw was discarded. The
+    /// table's pause between turns comes before the draw; the rest follows at a beat —
+    /// paced like turns of their own, a computer's Hand and Foot turn took half a minute.
     /// </summary>
     public bool ContinuesMove(GameState state)
-        => state.Metadata.GetValueOrDefault("dd_must_flip") == "true";
+        => state.Metadata.GetValueOrDefault("dd_must_flip") == "true"
+        || state.Metadata.GetValueOrDefault("dd_turn_state") == "discard";
 
     public TimeSpan? GetAutoAdvanceDelay(GameState state)
-        => ContinuesMove(state) && state.PlayerAgents.ContainsKey(state.CurrentPlayer.Id)
-            ? TimeSpan.FromMilliseconds(350)
-            : null;
+    {
+        if (!ContinuesMove(state) || !state.PlayerAgents.ContainsKey(state.CurrentPlayer.Id)) return null;
+        if (state.Metadata.GetValueOrDefault("dd_must_flip") == "true") return TimeSpan.FromMilliseconds(350);
+
+        // A card picked up for a meld is quick; laying it or discarding, long enough to see.
+        return state.Metadata.GetValueOrDefault("selected_card") is { Length: > 0 }
+            ? TimeSpan.FromMilliseconds(250)
+            : TimeSpan.FromMilliseconds(600);
+    }
 
     public IReadOnlyList<GameAction> GetValidActions(GameState state)
     {

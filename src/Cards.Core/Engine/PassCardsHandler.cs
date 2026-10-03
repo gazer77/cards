@@ -38,6 +38,15 @@ public sealed class PassCardsHandler : IPhaseHandler
 
     // ── IPhaseHandler ─────────────────────────────────────────────────────────
 
+    /// <summary>Once a player has picked a card to pass, the rest of their picks are one choice.</summary>
+    public bool ContinuesMove(GameState state)
+        => state.Players.Count > 0 && GetSelected(state, state.CurrentPlayer.Id).Count > 0;
+
+    public TimeSpan? GetAutoAdvanceDelay(GameState state)
+        => ContinuesMove(state) && state.PlayerAgents.ContainsKey(state.CurrentPlayer.Id)
+            ? TimeSpan.FromMilliseconds(250)
+            : null;
+
     public IReadOnlyList<GameAction> GetValidActions(GameState state)
     {
         EnsureInitialized(state);

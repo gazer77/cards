@@ -112,6 +112,12 @@ Chosen per game on the setup screen; a shared table's host chooses it for the ro
       tricks) measured worse against these opponents; needs a look at bags and sets
 - [ ] Hard for Golf, Gin Rummy, Hand and Foot, Poker, Blackjack, Go Fish — these play
       as normal at hard
+- [x] Pacing: a computer turn of many steps flows as one move (`ContinuesMove`): after
+      the draw in Hand and Foot, Gin and Golf; picks for a meld, a pass or the crib.
+      Hand and Foot's average computer turn went from 8.5 s to 3.6 s (worst 37 s to
+      11.5 s), Pinochle's meld from 22 s to 11 s. `PacingTests` holds the ceilings.
+- [ ] Pinochle's computer lays its meld a card at a time, every card it holds, since
+      one card passes as a meld there — look at what it should actually be laying
 - [ ] Pinochle with computer players runs long — they bid high and are set, so games
       can take a hundred deals. Bidding against the meld they hold would fix it
 - [ ] Insane — no mistakes and uses game-specific strategy

@@ -71,6 +71,20 @@ public sealed class MeldHandler : IPhaseHandler
         return actions;
     }
 
+    /// <summary>
+    /// Once a player has picked a card for a meld, or laid one, the rest of their melding
+    /// is the same move. Pinochle lays a card at a time; each paced as a turn of its own,
+    /// a computer's meld took twenty seconds to watch.
+    /// </summary>
+    public bool ContinuesMove(GameState state)
+        => state.Metadata.GetValueOrDefault("meld_selected") is { Length: > 0 }
+        || (state.Players.Count > 0 && state.FindZone($"meld:{state.CurrentPlayer.Id}") is { IsEmpty: false });
+
+    public TimeSpan? GetAutoAdvanceDelay(GameState state)
+        => ContinuesMove(state) && state.PlayerAgents.ContainsKey(state.CurrentPlayer.Id)
+            ? TimeSpan.FromMilliseconds(250)
+            : null;
+
     public IReadOnlyList<string> GetSelectableCardIds(GameState state)
     {
         EnsureInitialized(state);
