@@ -70,8 +70,21 @@ public sealed class SeatSummary
 
 public static class ManagerContract
 {
-    public const string RoomsPath = "/api/manage/rooms";
-    public const string BansPath  = "/api/manage/bans";
+    public const string RoomsPath   = "/api/manage/rooms";
+    public const string BansPath    = "/api/manage/bans";
+    /// <summary>Which games the server offers: anyone may read it, a manager changes it.</summary>
+    public const string CatalogPath = "/api/catalog";
+}
+
+public sealed class CatalogState
+{
+    /// <summary>Game ids turned off on this server; every other game is offered.</summary>
+    public List<string> Off { get; set; } = [];
+}
+
+public sealed class OfferChange
+{
+    public bool Offered { get; set; }
 }
 
 public sealed class RoleChange

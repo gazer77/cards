@@ -66,6 +66,10 @@ var accountDirectory = builder.Configuration["Accounts:Directory"] is { Length: 
 if (accountDirectory is not null)
     builder.Services.AddSingleton(new AccountStore(accountDirectory));
 
+// Which games are offered here, beside the accounts; in memory where there is nowhere to keep it.
+builder.Services.AddSingleton(new GameCatalog(
+    accountDirectory is null ? null : Path.Combine(Path.GetDirectoryName(accountDirectory)!, "catalog.json")));
+
 // Codes cannot be guessed, but nobody gets to try quickly either.
 builder.Services.AddRateLimiter(o =>
 {

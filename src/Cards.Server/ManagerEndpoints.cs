@@ -44,6 +44,17 @@ public static class ManagerEndpoints
                 Id = a.Id, Name = AccountStore.NameOf(a), Role = a.Role, Created = a.Created, Updated = a.BannedAt ?? a.Updated,
             }).ToList())).RequireRateLimiting("account");
 
+        var catalog = app.Services.GetRequiredService<GameCatalog>();
+
+        app.MapGet(ManagerContract.CatalogPath, () => Results.Ok(new CatalogState { Off = [.. catalog.Off] }));
+
+        app.MapPut(ManagerContract.CatalogPath + "/{gameId}", (HttpRequest request, string gameId, OfferChange change) =>
+        {
+            if (Gate(store, request) is { } refused) return refused;
+            catalog.SetOffered(gameId, change.Offered);
+            return Results.Ok(new CatalogState { Off = [.. catalog.Off] });
+        }).RequireRateLimiting("account");
+
         app.MapDelete(ManagerContract.BansPath + "/{id}", (HttpRequest request, string id) =>
         {
             if (Gate(store, request) is { } refused) return refused;

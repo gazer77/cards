@@ -14,7 +14,8 @@ namespace Cards.Server.Tests;
 /// </summary>
 public sealed class AccountTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "cards-accounts-" + Guid.NewGuid().ToString("N"));
+    // Each test its own state folder: the accounts in it, and the game catalog beside them.
+    private readonly string _directory = Path.Combine(Path.GetTempPath(), "cards-state-" + Guid.NewGuid().ToString("N"), "accounts");
     private readonly WebApplicationFactory<Program> _server;
 
     public AccountTests()
@@ -24,7 +25,7 @@ public sealed class AccountTests : IDisposable
     public void Dispose()
     {
         _server.Dispose();
-        try { Directory.Delete(_directory, recursive: true); } catch { }
+        try { Directory.Delete(Path.GetDirectoryName(_directory)!, recursive: true); } catch { }
     }
 
     private static HttpRequestMessage With(HttpMethod method, string path, string code, object? body = null)
@@ -252,6 +253,32 @@ public sealed class AccountTests : IDisposable
         Assert.Equal(HttpStatusCode.NoContent, (await http.SendAsync(With(HttpMethod.Delete, $"{ManagerContract.RoomsPath}/{ana.Code}", admin))).StatusCode);
         Assert.Null(rooms.Find(ana.Code));
         Assert.Equal(HttpStatusCode.NotFound, (await http.SendAsync(With(HttpMethod.Delete, $"{ManagerContract.RoomsPath}/{ana.Code}", admin))).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_manager_turns_a_game_off_and_no_table_can_be_opened_for_it()
+    {
+        var http  = _server.CreateClient();
+        var rooms = _server.Services.GetRequiredService<RoomService>();
+        string admin = await Admin(http), manager = await Manager(http, admin), player = await NewAccount(http);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await http.SendAsync(With(HttpMethod.Put, $"{ManagerContract.CatalogPath}/war", player,
+                                                                           new OfferChange { Offered = false }))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await http.SendAsync(With(HttpMethod.Put, $"{ManagerContract.CatalogPath}/war", manager,
+                                                                    new OfferChange { Offered = false }))).StatusCode);
+
+        // Anyone may ask what is off — the home page does, before anyone is a manager.
+        var catalog = await http.GetFromJsonAsync<CatalogState>(ManagerContract.CatalogPath);
+        Assert.Equal(["war"], catalog!.Off);
+
+        var refused = await Assert.ThrowsAsync<TableRefusal>(() => rooms.CreateAsync("w", "war", 2, [], null, "Ana"));
+        Assert.Contains("not offered", refused.Message);
+
+        // Kept: a restart offers the same games.
+        Assert.Equal(["war"], new GameCatalog(Path.Combine(Path.GetDirectoryName(_directory)!, "catalog.json")).Off);
+
+        await http.SendAsync(With(HttpMethod.Put, $"{ManagerContract.CatalogPath}/war", manager, new OfferChange { Offered = true }));
+        await rooms.CreateAsync("w2", "war", 2, [], null, "Ana");
     }
 
     [Fact]

@@ -2,6 +2,7 @@
 @inject GameLoader Loader
 @inject NavigationManager Nav
 @inject Cards.App.TableConnection Table
+@inject Cards.Web.Platform.AccountSync Account
 
 <PageTitle>Cards</PageTitle>
 
@@ -55,7 +56,9 @@
     {
         _dismissed = Table.LastDismissal;
         Table.LastDismissal = null;
-        _games = await Loader.LoadAllAsync();
+        // Only the games this server offers; all of them when it cannot say.
+        var off = await Account.GamesOffAsync();
+        _games = (await Loader.LoadAllAsync()).Where(g => !off.Contains(g.Id)).ToList();
     }
 
     private void Play(Cards.Models.GameDefinition game)

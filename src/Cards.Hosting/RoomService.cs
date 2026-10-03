@@ -20,7 +20,7 @@ namespace Cards.Hosting;
 /// </summary>
 public sealed class RoomService(
     ITableClients clients, GameLoader loader, ILogger<RoomService> log, IRoomStore? store = null,
-    AccountStore? accounts = null)
+    AccountStore? accounts = null, GameCatalog? catalog = null)
 {
     private readonly ConcurrentDictionary<string, Room> _rooms = new(StringComparer.OrdinalIgnoreCase);
 
@@ -142,6 +142,8 @@ public sealed class RoomService(
         var account = Admit(accountCode);
         var definition = await loader.LoadAsync(gameId)
             ?? throw new TableRefusal($"There is no game called \"{gameId}\".");
+        if (catalog is not null && !catalog.IsOffered(definition.Id))
+            throw new TableRefusal($"{definition.Name} is not offered on this server.");
 
         int min = definition.Players?.Min ?? 1, max = definition.Players?.Max ?? 8;
         if (playerCount < min || playerCount > max)

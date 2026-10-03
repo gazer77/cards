@@ -397,7 +397,8 @@ See `docs/shared-tables.md`.
       server writes to its log while it has none. Managers see every open table, close
       one, take someone off one, and ban an account from all of them (seats now know
       the account at them); admins also give roles, issue a new code for someone who
-      lost theirs, and delete accounts. The last admin cannot step down; nobody bans an
+      lost theirs, and delete accounts; managers also choose which games the server
+      offers. The last admin cannot step down; nobody bans an
       admin, and only an admin bans a manager. A ban is by account, so clearing a
       browser's storage starts a fresh account — fine for a home server.
 - [ ] **Backlog: kicking and banning by the host** — the person who opened a table removing

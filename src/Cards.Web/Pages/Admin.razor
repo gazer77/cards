@@ -1,6 +1,7 @@
 @page "/admin"
 @inject Cards.Web.Platform.AccountSync Account
 @inject NavigationManager Nav
+@inject Cards.Engine.GameLoader Loader
 
 @*
     Looking after this server. A manager sees the open tables — closes one, takes someone
@@ -69,6 +70,21 @@
                         <p class="error">@why</p>
                     }
                 </section>
+            }
+        }
+
+        <h1>Games</h1>
+        <p class="muted">A game turned off is left off the home page and cannot be opened as a table here.</p>
+        @if (_allGames is not null)
+        {
+            @foreach (var g in _allGames)
+            {
+                var game = g;
+                <label class="rule">
+                    <input type="checkbox" checked="@(!_gamesOff.Contains(game.Id))"
+                           @onchange="e => SetOffered(game.Id, e.Value is true)" />
+                    <span><span class="rule-name">@game.Name</span></span>
+                </label>
             }
         }
 
@@ -156,6 +172,15 @@
     private readonly Dictionary<string, string> _errors = [];
     private string? _confirmDelete;
 
+    private List<Cards.Models.GameDefinition>? _allGames;
+    private HashSet<string> _gamesOff = [];
+
+    private async Task SetOffered(string gameId, bool offered)
+    {
+        if (!await Account.SetOfferedAsync(gameId, offered)) return;
+        if (offered) _gamesOff.Remove(gameId); else _gamesOff.Add(gameId);
+    }
+
     private List<Cards.Services.RoomSummary>? _rooms;
     private List<Cards.Services.AccountSummary>? _bans;
     private readonly Dictionary<string, string> _roomErrors = [];
@@ -165,8 +190,10 @@
     {
         if (Account.IsManager)
         {
-            _rooms = await Account.RoomsAsync();
-            _bans  = await Account.BansAsync();
+            _rooms    = await Account.RoomsAsync();
+            _bans     = await Account.BansAsync();
+            _gamesOff = await Account.GamesOffAsync();
+            _allGames = (await Loader.LoadAllAsync()).OrderBy(g => g.Name).ToList();
         }
         if (Account.IsAdmin) _accounts = await Account.AccountsAsync();
     }

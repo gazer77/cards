@@ -166,6 +166,22 @@ public sealed class AccountSync(IJSRuntime js, HttpClient http)
         return response.IsSuccessStatusCode ? (await response.Content.ReadFromJsonAsync<List<AccountSummary>>())! : [];
     }
 
+    /// <summary>Game ids this server has turned off; empty when it cannot say, so every game shows.</summary>
+    public async Task<HashSet<string>> GamesOffAsync()
+    {
+        try
+        {
+            var response = await http.GetAsync(ManagerContract.CatalogPath);
+            return response.IsSuccessStatusCode
+                ? new HashSet<string>((await response.Content.ReadFromJsonAsync<CatalogState>())!.Off, StringComparer.OrdinalIgnoreCase)
+                : [];
+        }
+        catch (Exception) { return []; }
+    }
+
+    public async Task<bool> SetOfferedAsync(string gameId, bool offered)
+        => (await Send(HttpMethod.Put, $"{ManagerContract.CatalogPath}/{gameId}", new OfferChange { Offered = offered })).IsSuccessStatusCode;
+
     public async Task<bool> UnbanAsync(string id)
         => (await Send(HttpMethod.Delete, $"{ManagerContract.BansPath}/{id}")).IsSuccessStatusCode;
 

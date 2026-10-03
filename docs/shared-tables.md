@@ -144,6 +144,21 @@ connected is asked: *let the computer play for them until they're back?*
 
 Leaving on purpose (the menu's Leave game) hands the seat to the computer for good.
 
+## Accounts and roles
+
+Every browser gets an account on its first visit — a six-word code in Settings, typed on
+another device to carry the name, settings and saved games across. Each account is a
+**player**, **manager** or **admin**:
+
+- The first **admin** is made with a one-time setup code the server writes to its log
+  (`journalctl -u cards`) while it has none; it is entered in Settings.
+- A **manager** opens Settings → *Manage tables*: every open table, with *Take off*,
+  *Take off and ban* and *Close table*; the banned, with *Let back*; and which games the
+  server offers. A banned account cannot open, join or return to a table here.
+- The **admin** sees all that and the people: roles, a new code for someone who lost
+  theirs, and deleting an account. The last admin cannot step down; nobody bans an admin,
+  and only an admin bans a manager.
+
 ## Not yet
 
 - **The phone app** is not wired to the server yet. `TableConnection` (in `Cards.App`) is
