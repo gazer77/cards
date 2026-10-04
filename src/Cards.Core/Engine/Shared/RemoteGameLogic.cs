@@ -33,6 +33,13 @@ public sealed class RemoteGameLogic(TableView view, Func<GameAction, Task> send)
     public IReadOnlyList<string> GetDropZoneIds(GameState state, string cardId)
         => View.DropZones.TryGetValue(cardId, out var zones) ? zones : [];
 
+    /// <summary>
+    /// The shortcut for this card — and only for the very card it names, when it names
+    /// one: a twin on the pile answers to the same description as the card in hand.
+    /// </summary>
     public GameAction? GetDefaultCardAction(GameState state, string cardId, int? uid)
-        => View.DefaultCardActions.GetValueOrDefault(cardId);
+        => View.DefaultCardActions.GetValueOrDefault(cardId) is { } action
+           && (action.CardUid is null || uid is null || action.CardUid == uid)
+            ? action
+            : null;
 }

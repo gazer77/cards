@@ -847,14 +847,16 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     }
 
     /// <summary>
-    /// The card in hand a double tap was made on. A shared table names the first copy
-    /// of a description, which may be one lying on a meld; then the hand's own copy is
-    /// meant — the one already picked, if any, since the gesture's first tap picked it.
+    /// The card in hand a double tap was made on. A tap names the physical card, and a
+    /// physical card not in the hand is not this card: the deck's top card, under its
+    /// back, can be the twin of one in hand, and looking past the uid to the description
+    /// discarded the hand's king for a double tap on the deck. Only a caller naming no
+    /// card (an agent) gets a copy by description — the one already picked, if any.
     /// </summary>
     private Card? NamedCard(GameState state, int? uid, string cardId, List<string> selected)
     {
         var cards = SelectableCards(state).ToList();
-        if (uid is int u && cards.FirstOrDefault(c => c.Uid == u) is { } exact) return exact;
+        if (uid is int u) return cards.FirstOrDefault(c => c.Uid == u);
 
         var copies = cards.Where(c => c.Id == cardId).ToList();
         return copies.FirstOrDefault(c => selected.Contains(c.Uid.ToString())) ?? copies.FirstOrDefault();

@@ -93,14 +93,19 @@ public static class TableProjection
             foreach (var card in state.Zones.Values.SelectMany(z => z.Cards).Where(c => c.Id == id))
             {
                 string viewId = hidden.TryGetValue(card.Uid, out var a) ? $"hidden{a}" : card.Id;
+
+                // A double tap's shortcut belongs to the copy that answers it — the one
+                // in hand, not a twin on a meld or the pile that happens to come first.
+                // It carries that copy's uid, so the client offers it for that card only.
+                if (!view.DefaultCardActions.ContainsKey(viewId)
+                    && logic.GetDefaultCardAction(state, id, card.Uid) is { } d)
+                    view.DefaultCardActions[viewId] = Translate(state, d, hidden);
+
                 if (view.SelectableCardIds.Contains(viewId)) continue;
                 view.SelectableCardIds.Add(viewId);
 
                 var zones = logic.GetDropZoneIds(state, id);
                 if (zones.Count > 0) view.DropZones[viewId] = [.. zones];
-
-                if (logic.GetDefaultCardAction(state, id, card.Uid) is { } d)
-                    view.DefaultCardActions[viewId] = Translate(state, d, hidden);
             }
         }
 

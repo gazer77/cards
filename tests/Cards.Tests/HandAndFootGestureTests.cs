@@ -135,6 +135,69 @@ public sealed class HandAndFootGestureTests
     }
 
     [Fact]
+    public void A_double_tap_on_the_decks_top_card_leaves_its_twin_in_hand_alone()
+    {
+        // The report: after drawing, a double tap on the deck discarded a king from hand.
+        // The deck's top card, under its back, was that king's twin.
+        var (state, logic) = Discarding();
+        var king = Give(Hand(state), (Rank.Four, Suit.Clubs), (Rank.King, Suit.Diamonds))[1];
+        state.Zones[$"meld:{state.CurrentPlayer.Id}"].Clear();   // nowhere for the king to go either
+        var twin = Give(state.Zones["deck"], (Rank.King, Suit.Diamonds))[0];
+        twin.IsFaceUp = false;
+
+        Assert.Null(logic.GetDefaultCardAction(state, twin.Id, twin.Uid));
+        Assert.Equal("discard", logic.GetDefaultCardAction(state, king.Id, king.Uid)?.Type);
+    }
+
+    [Fact]
+    public async Task A_double_tap_on_the_deck_after_drawing_does_nothing()
+    {
+        var vm = new Cards.App.GameTableViewModel(
+            new GameLoader(new EmbeddedGameAssetSource()),
+            new Cards.Services.GameSaveService(new NoSaveStore()));
+        vm.TurnPace = 0;
+        vm.MinimumTurnPause = TimeSpan.Zero;
+        await vm.StartAsync("hand-and-foot", 2, resume: false, seed: 8);
+
+        var state = vm.State!;
+        string me = state.CurrentPlayer.Id;
+        await vm.Invoke(new GameAction("draw_from_deck"));
+        Assert.Equal("discard", state.Metadata["dd_turn_state"]);
+
+        // Every card in hand has a twin on top of the deck, one after another.
+        var hand = state.Zones[$"hand:{me}"];
+        int before = hand.Count;
+        foreach (var card in hand.Cards.ToList())
+        {
+            var twin = Give(state.Zones["deck"], (card.Rank, card.Suit))[0];
+            twin.IsFaceUp = false;
+            await vm.ActivateCard(twin.Id, twin.Uid);
+            Assert.Equal(before, hand.Count);
+            Assert.Equal(me, state.CurrentPlayer.Id);
+        }
+    }
+
+    [Fact]
+    public void A_shared_table_offers_the_shortcut_for_the_card_in_hand_not_its_twin_on_the_pile()
+    {
+        var (state, logic) = Discarding();
+        string me = state.CurrentPlayer.Id;
+        state.Zones[$"meld:{me}"].Clear();
+        var king = Give(Hand(state), (Rank.Four, Suit.Clubs), (Rank.King, Suit.Diamonds))[1];
+        var twin = Give(state.Zones["discard"], (Rank.King, Suit.Diamonds))[0];
+
+        // The pile's king comes first in the table's zones; the shortcut is still the hand's.
+        var view = Cards.Engine.Shared.TableProjection.For(state, logic, me, 2, [],
+            state.Players.Select(p => new Cards.Engine.Shared.SeatView { Id = p.Id, Name = p.Name }).ToList(),
+            uid => -1000 - uid * 7 % 991, version: 1, busy: false, announcements: []);
+        Assert.Equal(king.Uid, view.DefaultCardActions[king.Id].CardUid);
+
+        var remote = new Cards.Engine.Shared.RemoteGameLogic(view, _ => Task.CompletedTask);
+        Assert.Equal("discard", remote.GetDefaultCardAction(state, king.Id, king.Uid)?.Type);
+        Assert.Null(remote.GetDefaultCardAction(state, twin.Id, twin.Uid));
+    }
+
+    [Fact]
     public void The_score_card_is_by_team_at_four_and_by_player_at_three()
     {
         var definition = TestGames.Load(new GameLoader(new EmbeddedGameAssetSource()), "hand-and-foot")!;
