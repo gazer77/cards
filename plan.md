@@ -480,7 +480,8 @@ See `docs/shared-tables.md`.
 - [x] **Hand and Foot at the table** — the meld strip's ranks are headings above their
       slots (`slot_labels: "always"`), so a full slot still says what it is; a score card
       sits lower right, by team where there are teams and by player where there are not.
-      Each meld wears a green "clean" or orange "dirty" badge. A double tap on a card in
+      Under each slot, green counts its clean books and orange its dirty ones; the strip
+      sizes its slots for the row count that draws them biggest. A double tap on a card in
       hand finishes the move: down as a new meld (joining its rank), onto a meld already
       down (never guessing a meld for wilds picked alone), or — a lone card that melds
       nowhere — into the discard. Fixed: a double tap on the discard pile drew from the

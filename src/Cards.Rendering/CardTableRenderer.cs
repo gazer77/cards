@@ -1377,35 +1377,43 @@ public sealed class CardTableRenderer
         bool  capTB   = caption?.Placement is "top" or "bottom";
         bool  badgeTB = zone.Definition!.GroupBadges.Any(b => b.Placement is "top" or "bottom");
 
-        // Fit as many slots per row as the width allows at the layout's card width,
-        // shrinking only when even one row of them will not fit.
-        float cardW  = layout.CardWidth;
-        int   perRow = Math.Max(1, (int)((layout.Bounds.Width + slotGap) / (cardW + slotGap)));
-        int   rows   = (slots + perRow - 1) / perRow;
-
-        float cardH  = cardW * 1.4f;
         // Labels grow with LabelScale, and the room for them with it: slot labels placed
         // outside their slot fit the gap between rows at their own size, and ran into the
-        // next row once doubled on a phone.
-        // Labels kept above full slots need their own room above the cards, or the row
-        // before lays its badges on them.
+        // next row once doubled on a phone. Labels kept over full slots get their room
+        // whichever side they sit on — above for the viewer's strip, below for one turned
+        // to face across — so the two strips come out the same size. The turned strip
+        // left it out, and drew its cards bigger than the viewer's own.
         bool  always     = zone.Definition.SlotLabels == "always";
         bool  labelAbove = always && slotDefs.Any(s => s.LabelPlace is { } p && Percent(HeadingPlace(p).Y, 0.5f) <= 0f);
-        float extra  = (capTB ? cardW * 0.16f * 1.6f * stripScale : 0f)
-                     + (badgeTB ? MathF.Max(cardW * 0.15f, 10f) * 1.8f * stripScale : 0f)
-                     + (labelAbove || (stripScale > 1f && slotDefs.Any(s => s.LabelPlace is not null)) ? cardW * 0.5f * stripScale : 0f);
-        float rowH   = cardH + extra;
-        float rowGap = 8f;
+        bool  labelRoom  = always || (stripScale > 1f && slotDefs.Any(s => s.LabelPlace is not null));
+        float LabelH(float w) => labelRoom ? w * 0.5f * stripScale : 0f;
+        float BadgeH(float w) => badgeTB ? MathF.Max(w * 0.15f, 10f) * 1.8f * stripScale : 0f;
+        float Extra(float w)  => (capTB ? w * 0.16f * 1.6f * stripScale : 0f) + BadgeH(w) + LabelH(w);
+        const float rowGap = 8f;
+        float BlockH(float w, int r) => r * (w * 1.4f + Extra(w)) + (r - 1) * rowGap;
 
-        float blockH = rows * rowH + (rows - 1) * rowGap;
-        if (blockH > layout.Bounds.Height)
+        // Every row count, each at the largest card that fits it both ways; the biggest
+        // card wins. Sizing for the layout's card first and shrinking to fit the height
+        // left a strip drawn for three rows once it had shrunk to fit on one.
+        float cardW  = 0f;
+        int   perRow = slots, rows = 1;
+        for (int r = 1; r <= slots; r++)
         {
-            float shrink = layout.Bounds.Height / blockH;
-            cardW *= shrink; cardH *= shrink; extra *= shrink; rowH = cardH + extra;
-            perRow = Math.Max(1, (int)((layout.Bounds.Width + slotGap) / (cardW + slotGap)));
-            rows   = (slots + perRow - 1) / perRow;
-            blockH = rows * rowH + (rows - 1) * rowGap;
+            int   per = (slots + r - 1) / r;
+            float w   = MathF.Min(layout.CardWidth, (layout.Bounds.Width - (per - 1) * slotGap) / per);
+            for (int i = 0; i < 4 && w > 0f && BlockH(w, r) > layout.Bounds.Height; i++)
+                w *= layout.Bounds.Height / BlockH(w, r);
+            if (w > cardW) { cardW = w; perRow = per; rows = (slots + per - 1) / per; }
         }
+        if (cardW <= 0f) return;
+
+        float cardH  = cardW * 1.4f;
+        float rowH   = cardH + Extra(cardW);
+        float blockH = BlockH(cardW, rows);
+
+        // Above the cards: the heading where it sits there, or — on a strip turned to face
+        // across, whose badges are on top — the badges.
+        float lead = labelAbove ? LabelH(cardW) : always ? BadgeH(cardW) : 0f;
 
         float y0 = layout.Bounds.MidY - blockH / 2f
                  + (caption?.Placement == "top" ? cardW * 0.16f * 1.6f : 0f);
@@ -1420,7 +1428,7 @@ public sealed class CardTableRenderer
             int   inRow = Math.Min(perRow, slots - row * perRow);
             float rowW = inRow * cardW + (inRow - 1) * slotGap;
             float x    = layout.Bounds.MidX - rowW / 2f + col * (cardW + slotGap);
-            float y    = y0 + row * (rowH + rowGap) + (labelAbove ? cardW * 0.5f * stripScale : 0f);
+            float y    = y0 + row * (rowH + rowGap) + lead;
             var   rect = new SKRect(x, y, x + cardW, y + cardH);
 
             string name   = slotDefs[s].Label ?? "";
@@ -2360,9 +2368,9 @@ public sealed class CardTableRenderer
 
         int bookSize = ScoringEngine.BookSize(_state.Definition);
 
-        // Clean or dirty: a meld with no wild in it, or one with wilds among naturals.
-        // Cards filed in a slot that are not a meld (red threes) are neither, and so is
-        // a meld of wilds alone — its own kind, which its slot names.
+        // Clean or dirty books: a meld of book_size or more with no wild in it, or with
+        // wilds among its naturals — one book a meld, as going out and scoring count them.
+        // Filed cards (red threes) are neither, and so is a meld of wilds alone.
         var  wilds   = MeldRules.WildRanks(_state.Definition);
         bool isMeld  = cards is { Count: > 0 } && MeldRules.IsMeldGroup(cards, wilds, MeldRules.UnmeldableRanks(_state))
                     && !MeldRules.IsAllWild(cards, wilds);
@@ -2389,8 +2397,8 @@ public sealed class CardTableRenderer
                     {
                         "books" => cardCount / bookSize,
                         "loose" => cardCount % bookSize,
-                        "clean" => isMeld && !isDirty ? 1 : 0,
-                        "dirty" => isDirty ? 1 : 0,
+                        "clean" => isMeld && !isDirty && cardCount >= bookSize ? 1 : 0,
+                        "dirty" => isDirty && cardCount >= bookSize ? 1 : 0,
                         _       => cardCount,
                     }
                     : cardCount;
@@ -2710,6 +2718,9 @@ public sealed class CardTableRenderer
     /// test can ask whether it lands on top of somebody's cards.
     /// </summary>
     public SKRect? ScoreCardBounds => _scoreCardRect;
+
+    /// <summary>Where each card was drawn by the last paint, for hit tests — and for tests that measure the table.</summary>
+    public IReadOnlyList<(int Uid, string CardId, SKRect Rect)> CardRects => _cardRects;
 
     /// <summary>
     /// Which view the player is looking at, once they have said. Null means the view
