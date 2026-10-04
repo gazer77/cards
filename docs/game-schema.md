@@ -285,7 +285,7 @@ zone itself, and every counting `shows` means the cards that are there: a deck w
 
 | Field | Values |
 |---|---|
-| `shows` | `cards` (in the group), `books` (complete sets of `scoring.book_size`), `loose` (cards beyond the last complete book — the working stack), `clean` and `dirty` (1 when the group is a meld with no wild in it, or with one — cards filed in a slot that are not a meld, such as red threes, are neither), `score` (see below) |
+| `shows` | `cards` (in the group), `books` (complete sets of `scoring.book_size`), `loose` (cards beyond the last complete book — the working stack), `clean` and `dirty` (1 when the group is a meld with no wild in it, or with wilds among its naturals — cards filed in a slot that are not a meld, such as red threes, are neither, and so is a meld of wilds alone), `score` (see below) |
 | `color`, `text_color` | `#RRGGBB`. Text colour is picked for contrast when omitted |
 | `zero` | `hide` (default), or text to show instead of `0` — a dash, typically |
 | `text` | Words shown in place of the number when it is not zero: `"clean"` says what a bare `1` would leave to be guessed |
@@ -874,6 +874,15 @@ wilds, not by their printed rank. An entry that is not a rank fails the definiti
 Which ranks are *wild* is not declared here — it comes from `scoring.wild_cards`, so the
 cards that score as wilds and the cards that meld as wilds are always the same ones.
 
+#### `wild_melds`
+
+`true` lets wilds be melded on their own: three or more start a wild meld, wilds laid or
+added later join it, and at `scoring.book_size` it is a wild book, paid
+`scoring.wild_canasta_bonus`. Off (the default), a meld needs naturals and wilds are only
+their stand-ins. Hand and Foot turns it on with its *Wild Books* house rule, which also
+asks `go_out_condition` for `{ "books_at_least": 1, "kind": "all_wild" }`. A wild meld is
+neither clean nor dirty: `kind: "dirty"` counts wilds among naturals only.
+
 #### `initial_meld_requirement`
 
 What a side's *first* meld of a round must be worth before it may lay anything down. Tiers
@@ -1147,7 +1156,7 @@ A condition is a term name, an object naming a term, or a combinator:
 | `{ "meld_value_at_least": n }` | This side's melds are worth `n`+ points, valued as scoring values them |
 | `can_open_with_top_discard` | This side has not melded, and could lay an opening worth what this round demands using the top card of the discard |
 | `top_discard_is_meldable` | The discard's top card could be melded: not a wild (a wild is never a meld by itself) and not a rank the phase bars. A wild or a 3 on top freezes the pile |
-| `{ "books_at_least": n, "kind": "natural" }` | This side has `n`+ complete books (groups of `scoring.book_size`). `kind` is `natural` (no wilds), `wild`, or `any` (default) |
+| `{ "books_at_least": n, "kind": "natural" }` | This side has `n`+ complete books (groups of `scoring.book_size`). `kind` is `natural` (no wilds), `dirty` (wilds and naturals), `all_wild` (wilds alone — see `wild_melds`), `wild` (any wild in it: dirty or all-wild), or `any` (default) |
 
 | Combinator | Meaning |
 |---|---|
@@ -1488,6 +1497,24 @@ Gin Rummy — score based on unmelded card values.
   "accumulate": true
 }
 ```
+
+### `meld_points`
+Hand and Foot — melded cards at their `card_values`, a bonus per book, cards left in hand
+and foot against you, and `go_out_bonus` to the side that went out.
+```json
+"scoring": {
+  "type": "meld_points",
+  "book_size": 7,
+  "natural_canasta_bonus": 500,
+  "mixed_canasta_bonus": 300,
+  "wild_canasta_bonus": 1000,
+  "go_out_bonus": 100
+}
+```
+A book is a meld of `book_size` or more: **natural** (no wilds) earns
+`natural_canasta_bonus`, **mixed** (wilds among naturals) `mixed_canasta_bonus`, and
+**wild** (wilds alone, where [`wild_melds`](#wild_melds) allows them)
+`wild_canasta_bonus`. Defaults 500, 300 and 1,000.
 
 ### `blackjack`
 Per-hand chip gain/loss vs. dealer.

@@ -749,6 +749,9 @@ public static class ScoringEngine
                               && state.Teams.Count > 0;
         int natCanBonus     = GetInt(scoring, "natural_canasta_bonus") ?? 500;
         int wildCanBonus    = GetInt(scoring, "wild_canasta_bonus")    ?? 1000;
+        // A book with wilds among its naturals. It was paid the wild bonus — 1000 in Hand and
+        // Foot, whose rules say 300 — while a book of wilds alone could not be laid at all.
+        int mixedCanBonus   = GetInt(scoring, "mixed_canasta_bonus")   ?? 300;
         int goOutBonus      = GetInt(scoring, "go_out_bonus")          ?? 100;
         var cardValues      = ParseMeldCardValues(scoring);
         var wildCards       = ParseMeldWildCards(scoring);
@@ -780,7 +783,7 @@ public static class ScoringEngine
                 var meldZone = state.FindZone($"meld:{team.Id}");
                 if (meldZone is not null)
                 {
-                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus, BookSize(state.Definition), scoring, MeldRules.UnmeldableRanks(state));
+                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, mixedCanBonus, wildCanBonus, BookSize(state.Definition), scoring, MeldRules.UnmeldableRanks(state));
                 }
 
                 pts += ScoreBonusCards(state, scoring, team.Id);
@@ -812,7 +815,7 @@ public static class ScoringEngine
 
                 var meldZone = state.FindZone($"meld:{p.Id}") ?? state.FindZone("meld");
                 if (meldZone is not null)
-                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, wildCanBonus, BookSize(state.Definition), scoring, MeldRules.UnmeldableRanks(state));
+                    pts += ScoreMeldZone(meldZone, cardValues, wildCards, natCanBonus, mixedCanBonus, wildCanBonus, BookSize(state.Definition), scoring, MeldRules.UnmeldableRanks(state));
 
                 pts += ScoreBonusCards(state, scoring, p.Id);
 
@@ -856,7 +859,7 @@ public static class ScoringEngine
 
     /// <summary>
     /// Scores cards in a meld zone: card point values, natural canasta bonuses,
-    /// and wild canasta bonuses.
+    /// mixed canasta bonuses (wilds among naturals), and wild canasta bonuses (wilds alone).
     ///
     /// Canasta detection: wild cards (jokers/twos) supplement the largest natural
     /// rank groups.  A pile of 4 Aces + 3 wild Twos = 7-card mixed canasta.
@@ -864,7 +867,7 @@ public static class ScoringEngine
     /// </summary>
     private static int ScoreMeldZone(
         Zone zone, MeldCardValues values, HashSet<string> wildCards,
-        int natCanBonus, int wildCanBonus, int bookSize, ScoringDefinition scoring,
+        int natCanBonus, int mixedCanBonus, int wildCanBonus, int bookSize, ScoringDefinition scoring,
         HashSet<Rank> unmeldable)
     {
         // Cards a bonus rule pays for are not meld value as well.
@@ -887,13 +890,17 @@ public static class ScoringEngine
             {
                 var meld = zone.GroupCards(i);
                 if (meld.Count < bookSize) continue;
+
+                // A book of wilds alone, where the game lets wilds be melded by themselves.
+                if (meld.All(IsWildCard)) { pts += wildCanBonus; continue; }
+
                 // A group of filed cards (red threes in their slot) is not a meld, so not a book.
                 if (!meld.Any(c => !IsWildCard(c) && !unmeldable.Contains(c.Rank))) continue;
 
                 int wildsInMeld = meld.Count(IsWildCard);
                 if (wildsInMeld > maxWildsPerCanasta) continue;
 
-                pts += wildsInMeld > 0 ? wildCanBonus : natCanBonus;
+                pts += wildsInMeld > 0 ? mixedCanBonus : natCanBonus;
             }
 
             return pts;
@@ -921,7 +928,7 @@ public static class ScoringEngine
             if (count + canUse < 7) continue;  // can't reach canasta size
 
             wildsRemaining -= canUse;
-            pts += canUse > 0 ? wildCanBonus : natCanBonus;
+            pts += canUse > 0 ? mixedCanBonus : natCanBonus;
         }
 
         // Pure wild canasta (7+ wilds with no natural cards assigned above).

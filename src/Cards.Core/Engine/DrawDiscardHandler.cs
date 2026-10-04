@@ -67,6 +67,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     /// <summary>Ranks the definition forbids melding — Hand and Foot's 3s.</summary>
     private readonly HashSet<Rank> _unmeldableRanks = [];
 
+    /// <summary>Whether wilds may be melded on their own (<c>wild_melds</c>) — three to start, a book at seven.</summary>
+    private readonly bool _wildMelds;
+
     public DrawDiscardHandler(PhaseDefinition def, string nextPhaseId)
     {
         _nextPhaseId     = nextPhaseId;
@@ -85,6 +88,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         foreach (var name in ParseStringArray(def, "unmeldable_ranks"))
             if (MeldRules.ParseRank(name) is { } rank)
                 _unmeldableRanks.Add(rank);
+
+        _wildMelds = def.Extra?.TryGetValue("wild_melds", out var wm) == true
+                  && wm.ValueKind == System.Text.Json.JsonValueKind.True;
 
         // draw_count: integer (same for all zones) or object { "from_deck": 2, "from_discard": "pile" }
         if (def.Extra?.TryGetValue("draw_count", out var dcEl) == true)
@@ -832,12 +838,14 @@ public sealed class DrawDiscardHandler : IPhaseHandler
                 // A new meld first: one of a rank already down joins it anyway.
                 if (_specialActions.Contains("meld") && PlanMeld(state, addToExisting: false, out _) is not null)
                     return new GameAction("meld", CardId: cardId, CardUid: card.Uid);
-                // Wilds alone have no meld of their own to go to: adding them picks one,
-                // and a shortcut must not guess — nor throw a wild away. The buttons stay
-                // for a player who means either.
+                // Wilds alone go onto a wild meld where there is one. Otherwise adding
+                // them picks a meld, and a shortcut must not guess — nor throw a wild
+                // away. The buttons stay for a player who means either.
                 var picked = with.Select(t => CardFromToken(state, t)).OfType<Card>().ToList();
                 var wildRanks = MeldRules.WildRanks(state.Definition);
-                if (picked.Count > 0 && picked.All(c => MeldRules.IsWild(c, wildRanks))) return null;
+                if (MeldRules.IsAllWild(picked, wildRanks)
+                    && !(_wildMelds && SideMelds(state) is { } side && FindWildGroup(side, wildRanks) >= 0))
+                    return null;
 
                 if (_specialActions.Contains("add_to_meld") && PlanMeld(state, addToExisting: true, out _) is not null)
                     return new GameAction("add_to_meld", CardId: cardId, CardUid: card.Uid);
@@ -1070,11 +1078,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             .ToList();
         if (selectedCards.Count == 0) return null;
 
-        var team     = state.GetPlayerTeam(state.CurrentPlayer.Id);
-        var meldZone = (team is not null ? state.FindZone($"meld:{team.Id}") : null)
-                    ?? state.FindZone($"meld:{state.CurrentPlayer.Id}")
-                    ?? state.FindZone("meld");
-        if (meldZone is null) return null;
+        if (SideMelds(state) is not { } meldZone) return null;
 
         // What is wild comes from the definition (scoring.wild_cards), not from the
         // handler: 2s are wild in Hand and Foot because its rules say so, not because
@@ -1097,7 +1101,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         if (addToExisting)
         {
             // Adding stays one meld per action: the action targets one group.
-            addTarget = FindAdditionTarget(state, meldZone, selectedCards, wilds, out reason);
+            addTarget = FindAdditionTarget(state, meldZone, selectedCards, wilds, _wildMelds, out reason);
             if (addTarget < 0) return null;
             melds = [selectedCards];
         }
@@ -1107,7 +1111,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         // the moment it applied. Each part is validated as a meld in its own right —
         // this was documented as validated and was not: any three selected cards were
         // accepted, so a "meld" of unrelated cards was legal and scored as if it counted.
-        else if (MeldRules.PartitionIntoMelds(selectedCards, wilds) is { } parts)
+        else if (MeldRules.PartitionIntoMelds(selectedCards, wilds, _wildMelds) is { } parts)
         {
             melds = parts;
         }
@@ -1206,7 +1210,9 @@ public sealed class DrawDiscardHandler : IPhaseHandler
         {
             int existing = addToExisting
                 ? addTarget
-                : FindGroupOfRank(meldZone, MeldRules.MeldRankOf(meld, wilds), wilds);
+                : MeldRules.IsAllWild(meld, wilds)
+                    ? FindWildGroup(meldZone, wilds)
+                    : FindGroupOfRank(meldZone, MeldRules.MeldRankOf(meld, wilds), wilds);
             if (existing >= 0)
             {
                 foreach (var card in meld) meldZone.AddToGroup(existing, card);
@@ -1246,7 +1252,7 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     /// once a meld was down.
     /// </summary>
     private static int FindAdditionTarget(
-        GameState state, Zone meldZone, IReadOnlyList<Card> selection, HashSet<Rank> wilds,
+        GameState state, Zone meldZone, IReadOnlyList<Card> selection, HashSet<Rank> wilds, bool wildMelds,
         out string? reason)
     {
         reason = null;
@@ -1277,6 +1283,11 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             return target;
         }
 
+        // All wilds, where wilds meld on their own: a wild meld already down is where
+        // they belong, and it takes any number.
+        if (wildMelds && FindWildGroup(meldZone, wilds) is >= 0 and var wildGroup)
+            return wildGroup;
+
         // All wilds: the choice of meld is the player's in principle, but with no way
         // to point at a group yet, the biggest legal taker is the least surprising.
         int best = -1;
@@ -1299,6 +1310,25 @@ public sealed class DrawDiscardHandler : IPhaseHandler
     }
 
     /// <summary>Index of the meld already holding this rank, or -1.</summary>
+    /// <summary>Where the current player's side lays its melds: the team's strip, or their own.</summary>
+    private static Zone? SideMelds(GameState state)
+    {
+        var team = state.GetPlayerTeam(state.CurrentPlayer.Id);
+        return (team is not null ? state.FindZone($"meld:{team.Id}") : null)
+            ?? state.FindZone($"meld:{state.CurrentPlayer.Id}")
+            ?? state.FindZone("meld");
+    }
+
+    /// <summary>The side's meld of wilds alone, or -1.</summary>
+    private static int FindWildGroup(Zone zone, HashSet<Rank> wilds)
+    {
+        for (int i = 0; i < zone.Groups.Count; i++)
+            if (MeldRules.IsAllWild(zone.GroupCards(i), wilds))
+                return i;
+
+        return -1;
+    }
+
     private static int FindGroupOfRank(Zone zone, Rank rank, HashSet<Rank> wilds)
     {
         for (int i = 0; i < zone.Groups.Count; i++)

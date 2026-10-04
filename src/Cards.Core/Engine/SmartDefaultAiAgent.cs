@@ -201,6 +201,10 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         bool canGoOut = SideCanGoOut(state);
         bool Keeps(int laying) => footLeft || canGoOut || hand.Count - laying >= 2;
 
+        // Where wilds meld on their own and the side has no wild meld yet, wilds are held
+        // back for one: spent one at a time on pairs and dirty melds, three never gather.
+        bool hoardWilds = MeldRules.WildMeldsAllowed(state) && !groups.Any(g => MeldRules.IsAllWild(g, wilds));
+
         if (opened)
         {
             // Naturals that belong on a meld already down.
@@ -210,9 +214,28 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
                 if (same.Count > 0 && Keeps(same.Count)) return same;
             }
 
+            // Where wilds meld on their own, they build toward a wild book: started with
+            // three or more, fed until it is a book. Where going out asks for one, it is
+            // the scarcest thing on the table, so it comes before the dirty books.
+            if (MeldRules.WildMeldsAllowed(state) && wildCards.Count > 0)
+            {
+                var wildMeld = groups.FirstOrDefault(g => MeldRules.IsAllWild(g, wilds));
+                if (wildMeld is not null && wildMeld.Count < bookSize)
+                {
+                    int n = Math.Min(wildCards.Count, bookSize - wildMeld.Count);
+                    if (Keeps(n)) return wildCards.Take(n).ToList();
+                }
+                if (wildMeld is null && wildCards.Count >= 3)
+                {
+                    int n = Math.Min(wildCards.Count, bookSize);
+                    if (Keeps(n)) return wildCards.Take(n).ToList();
+                }
+            }
+
             // Wilds, when they finish a book or go on a meld already dirty. The table puts
             // an all-wild addition on its biggest legal meld, so that is the one judged.
-            if (wildCards.Count > 0)
+            // Not while they are being gathered for a wild meld.
+            if (wildCards.Count > 0 && !hoardWilds)
             {
                 var target = groups
                     .Where(g => g.Count(IsWild) < g.Count(c => !IsWild(c)) && g.Count < bookSize)
@@ -240,7 +263,8 @@ public sealed class SmartDefaultAiAgent : IPlayerAgent
         int required = !opened && int.TryParse(state.Metadata.GetValueOrDefault("dd_opening_requirement"), out var r) ? r : 0;
         int Worth(List<Card> cards) => ScoringEngine.CardPointValue(def, cards);
 
-        var spare = new Queue<Card>(wildCards);
+        // Wilds gathered for a wild meld are spent here only to meet an opening.
+        var spare = new Queue<Card>(hoardWilds && required == 0 ? [] : wildCards);
         foreach (var pair in byRank.Where(g => g.Count() == 2))
         {
             bool shortOfOpening = required > 0 && Worth(lay) < required;

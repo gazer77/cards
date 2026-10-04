@@ -31,6 +31,24 @@ public static class MeldRules
     public static bool IsWild(Card card, HashSet<Rank> wildRanks)
         => card.IsWild || wildRanks.Contains(card.Rank);
 
+    /// <summary>A group made of wilds and nothing else — a wild meld, where the phase allows them.</summary>
+    public static bool IsAllWild(IReadOnlyList<Card> cards, HashSet<Rank> wildRanks)
+        => cards.Count > 0 && cards.All(c => IsWild(c, wildRanks));
+
+    /// <summary>
+    /// Whether the phase lets wilds be melded on their own (<c>wild_melds</c>): three
+    /// to start one, a book at <c>scoring.book_size</c> like any other. Read off the
+    /// definition, as <see cref="UnmeldableRanks"/> is, so conditions and the computer
+    /// players — which see only the state — agree with the handler.
+    /// </summary>
+    public static bool WildMeldsAllowed(GameState state)
+    {
+        var phase = state.Definition?.Phases.FirstOrDefault(p => p.Id == state.CurrentPhaseId)
+                 ?? state.Definition?.Phases.FirstOrDefault();
+        return phase?.Extra?.TryGetValue("wild_melds", out var el) == true
+            && el.ValueKind == JsonValueKind.True;
+    }
+
     /// <summary>"3" → Three, "J"/"jack" → Jack, "A"/"ace" → Ace; null for anything else.</summary>
     public static Rank? ParseRank(string text) => text.Trim().ToLowerInvariant() switch
     {
@@ -54,15 +72,15 @@ public static class MeldRules
     /// <summary>
     /// A meld is three or more cards of one rank, wilds allowed as stand-ins but never
     /// outnumbering the real cards. Returns the rank the meld is of; a selection that is
-    /// all wilds has no rank and is not a meld.
+    /// all wilds has no rank, and is a meld only where <paramref name="wildMelds"/> allows.
     /// </summary>
-    public static bool IsValidMeld(IReadOnlyList<Card> cards, HashSet<Rank> wildRanks, out Rank rank)
+    public static bool IsValidMeld(IReadOnlyList<Card> cards, HashSet<Rank> wildRanks, out Rank rank, bool wildMelds = false)
     {
         rank = Rank.Joker;
         if (cards.Count < 3) return false;
 
         var naturals = cards.Where(c => !IsWild(c, wildRanks)).ToList();
-        if (naturals.Count == 0) return false;
+        if (naturals.Count == 0) return wildMelds;   // a wild meld, where the phase allows one
 
         rank = naturals[0].Rank;
         if (naturals.Any(c => c.Rank != naturals[0].Rank)) return false;
@@ -77,14 +95,15 @@ public static class MeldRules
     /// each is dealt to whichever meld is furthest from being legal, which fills every
     /// deficit before padding, so a distribution is found whenever one exists.
     /// </summary>
-    public static List<List<Card>>? PartitionIntoMelds(IReadOnlyList<Card> cards, HashSet<Rank> wildRanks)
+    public static List<List<Card>>? PartitionIntoMelds(IReadOnlyList<Card> cards, HashSet<Rank> wildRanks, bool wildMelds = false)
     {
         var wilds = cards.Where(c => IsWild(c, wildRanks)).ToList();
         var melds = cards.Where(c => !IsWild(c, wildRanks))
                          .GroupBy(c => c.Rank)
                          .Select(g => g.ToList())
                          .ToList();
-        if (melds.Count == 0) return null;   // all wilds is a pile of substitutes
+        // All wilds is a pile of substitutes — or, where the phase allows, a wild meld.
+        if (melds.Count == 0) return wildMelds && wilds.Count >= 3 ? [wilds] : null;
 
         foreach (var wild in wilds)
         {
@@ -95,11 +114,11 @@ public static class MeldRules
             target.Add(wild);
         }
 
-        return melds.All(m => IsValidMeld(m, wildRanks, out _)) ? melds : null;
+        return melds.All(m => IsValidMeld(m, wildRanks, out _, wildMelds)) ? melds : null;
     }
 
     public static Rank MeldRankOf(IReadOnlyList<Card> meld, HashSet<Rank> wildRanks)
-        => meld.First(c => !IsWild(c, wildRanks)).Rank;
+        => meld.FirstOrDefault(c => !IsWild(c, wildRanks))?.Rank ?? Rank.Joker;   // a wild meld has none
 
     /// <summary>
     /// Ranks the current phase bars from melding, read off the definition so that
@@ -131,12 +150,13 @@ public static class MeldRules
         if (melds is null || melds.Count == 0) return false;
         var wilds      = WildRanks(state.Definition);
         var unmeldable = UnmeldableRanks(state);
-        return melds.Cards.Any(c => !IsWild(c, wilds) && !unmeldable.Contains(c.Rank));
+        return melds.Cards.Any(c => !IsWild(c, wilds) && !unmeldable.Contains(c.Rank))
+            || Enumerable.Range(0, melds.Groups.Count).Any(i => IsAllWild(melds.GroupCards(i), wilds));
     }
 
-    /// <summary>Whether a group is a meld at all: it has a natural card of a rank that may be melded.</summary>
+    /// <summary>Whether a group is a meld at all: it has a natural card of a rank that may be melded, or is all wilds.</summary>
     public static bool IsMeldGroup(IReadOnlyList<Card> group, HashSet<Rank> wilds, HashSet<Rank> unmeldable)
-        => group.Any(c => !IsWild(c, wilds) && !unmeldable.Contains(c.Rank));
+        => group.Any(c => !IsWild(c, wilds) && !unmeldable.Contains(c.Rank)) || IsAllWild(group, wilds);
 
     /// <summary>A rank the way a player says it: "4", "Jack", "Ace".</summary>
     public static string RankDisplayName(Rank rank) => rank switch

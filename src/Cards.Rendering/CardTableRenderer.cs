@@ -2360,10 +2360,12 @@ public sealed class CardTableRenderer
 
         int bookSize = ScoringEngine.BookSize(_state.Definition);
 
-        // Clean or dirty: a meld with no wild in it, or one with. Cards filed in a slot
-        // that are not a meld (red threes) are neither.
+        // Clean or dirty: a meld with no wild in it, or one with wilds among naturals.
+        // Cards filed in a slot that are not a meld (red threes) are neither, and so is
+        // a meld of wilds alone — its own kind, which its slot names.
         var  wilds   = MeldRules.WildRanks(_state.Definition);
-        bool isMeld  = cards is { Count: > 0 } && MeldRules.IsMeldGroup(cards, wilds, MeldRules.UnmeldableRanks(_state));
+        bool isMeld  = cards is { Count: > 0 } && MeldRules.IsMeldGroup(cards, wilds, MeldRules.UnmeldableRanks(_state))
+                    && !MeldRules.IsAllWild(cards, wilds);
         bool isDirty = isMeld && cards!.Any(c => MeldRules.IsWild(c, wilds));
         float size   = MathF.Max(cardW * 0.15f, 10f) * (scale ?? LabelScale);
 

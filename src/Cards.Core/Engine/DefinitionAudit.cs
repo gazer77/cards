@@ -58,7 +58,7 @@ public static class DefinitionAudit
                                    "gin_condition", "go_out_condition", "initial_meld_requirement",
                                    "knock_condition", "remaining_players_get_one_more_turn",
                                    "round_ends_when", "special_actions", "target_zone",
-                                   "unmeldable_ranks", "confirm"],
+                                   "unmeldable_ranks", "confirm", "wild_melds"],
         ["meld"]                = ["layoff_allowed", "max_wilds_per_meld", "meld_types", "min_meld_size",
                                    "return_to_hand", "wilds_allowed"],
         ["poker_betting"]       = ["bring_in", "bring_in_amount", "can_check", "post_blinds",
@@ -83,7 +83,7 @@ public static class DefinitionAudit
         "accumulate", "bag_penalty", "bid_set_penalty", "blind_nil", "bonus_cards", "book_size",
         "book", "card_values", "count_by", "count_from", "euchred", "evaluator", "face_down_penalty",
         "gin_bonus", "go_out_bonus", "grid", "knock_bonus", "last_trick_bonus", "loner_win",
-        "makers_win", "matching_columns", "natural_canasta_bonus", "nil", "per_bid_trick",
+        "makers_win", "matching_columns", "mixed_canasta_bonus", "natural_canasta_bonus", "nil", "per_bid_trick",
         "red_three_penalty", "shoot_the_moon", "special", "trick_points", "undercut_bonus",
         "wild_canasta_bonus", "wild_cards", "wilds",
     ];

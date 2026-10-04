@@ -350,7 +350,7 @@ public class BadgeDefinition
     /// <summary>
     /// What it shows: "cards" (in the group), "books" (complete sets of book_size),
     /// "loose" (cards beyond the last complete book — the working stack), "clean" and
-    /// "dirty" (1 when the group is a meld without, or with, a wild in it), or "score"
+    /// "dirty" (1 when the group is a meld without, or with, wilds among its naturals), or "score"
     /// (what the zone would score if the round ended now, by this game's own scoring —
     /// not a count, so a zero is shown rather than hidden).
     /// </summary>

@@ -195,11 +195,14 @@ public static class RuleCondition
             if (!MeldRules.IsMeldGroup(group, wilds, unmeldable)) continue;   // filed cards, not a meld
 
             bool hasWild = group.Any(c => MeldRules.IsWild(c, wilds));
+            bool allWild = MeldRules.IsAllWild(group, wilds);
             bool counts = kind switch
             {
-                "natural" => !hasWild,
-                "wild"    => hasWild,
-                _         => true,
+                "natural"  => !hasWild,
+                "dirty"    => hasWild && !allWild,
+                "all_wild" => allWild,
+                "wild"     => hasWild,
+                _          => true,
             };
             if (counts) count++;
         }
@@ -258,8 +261,8 @@ public static class RuleCondition
                         // A kind the counter does not know would silently count nothing.
                         if (property.Name == "books_at_least"
                             && condition.TryGetProperty("kind", out var kind)
-                            && kind.GetString() is not ("natural" or "wild" or "any"))
-                            problems.Add($"books_at_least: kind '{kind}' is not natural, wild, or any.");
+                            && kind.GetString() is not ("natural" or "dirty" or "all_wild" or "wild" or "any"))
+                            problems.Add($"books_at_least: kind '{kind}' is not natural, dirty, all_wild, wild, or any.");
                         return;
                     }
                 }

@@ -486,10 +486,12 @@ See `docs/shared-tables.md`.
       nowhere — into the discard. Fixed: a double tap on the discard pile drew from the
       deck, and one on the deck discarded the twin of its top card from hand; both
       looked a card up by description, and five decks hold its twins.
-- [ ] **Wild melds in Hand and Foot?** — the definition is of two minds: its help says a
-      meld needs two naturals, yet it declares a W slot and a `wild_canasta_bonus`
-      nothing can earn. Allowing them reaches meld validation, `IsMeldGroup`, books and
-      going out, and scoring (which pools wilds across the side rather than per meld).
+- [x] **Wild Books (Hand and Foot house rule)** — `wild_melds` lets wilds meld on their
+      own: three to start, seven to a wild book paid `wild_canasta_bonus`; later wilds
+      join the wild meld. The house rule also asks going out for an `all_wild` book beside
+      the clean and `dirty` ones. Computer players gather wilds for it. Found on the way:
+      a dirty book was paid the wild bonus — 1,000, where the rules say 300 — now
+      `mixed_canasta_bonus`; a book of wilds alone could never score.
 - [ ] **Hand and Foot at five seats** — the two side players' feet are drawn at the
       smallest size the table allows. Five seats put three players along the top, which
       leaves the sides a narrow band, and Hand and Foot asks each seat for a hand, a
