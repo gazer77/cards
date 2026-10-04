@@ -27,8 +27,12 @@ public static class ZoneSlots
         var def = zone.Definition;
         if (def is null) return [];
 
+        // A slot with a condition exists only where it holds — a wild slot at a table
+        // whose rules let wilds meld, and nowhere else.
         if (def.GroupLayout == "slots")
-            return def.Slots.Select(s => new Slot(s.Match, s.Label, s.Place ?? def.SlotLabelPlace)).ToList();
+            return def.Slots
+                .Where(s => s.When is not { } when || RuleCondition.Evaluate(when, state))
+                .Select(s => new Slot(s.Match, s.Label, s.Place ?? def.SlotLabelPlace)).ToList();
 
         if (def.GroupLayout != "by_rank") return [];
 
@@ -49,7 +53,7 @@ public static class ZoneSlots
         var slots = ranks.Where(r => !wilds.Contains(r))
             .Select(r => new Slot(new CardMatch { Rank = RankToken(r) }, MeldRules.RankDisplayName(r), def.SlotLabelPlace))
             .ToList();
-        if (jokers > 0 || wilds.Count > 0)
+        if ((jokers > 0 || wilds.Count > 0) && MeldRules.WildMeldsAllowed(state))
             slots.Add(new Slot(new CardMatch { Wild = true }, "W", def.SlotLabelPlace));
         return slots;
     }

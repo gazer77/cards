@@ -918,6 +918,13 @@ public class SlotDefinition
     /// </summary>
     [JsonPropertyName("place")]
     public PlaceDefinition? Place { get; set; }
+
+    /// <summary>
+    /// A condition the slot exists under; absent, always. Hand and Foot's
+    /// wild slot is <c>"wild_melds"</c>: only at a table whose house rule lets wilds meld.
+    /// </summary>
+    [JsonPropertyName("when")]
+    public JsonElement? When { get; set; }
 }
 
 /// <summary>

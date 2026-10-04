@@ -10,7 +10,7 @@ namespace Cards.Tests;
 /// </summary>
 public sealed class ZoneSlotTests
 {
-    private static (GameState State, IGameLogic Logic) HandAndFoot()
+    private static (GameState State, IGameLogic Logic) HandAndFoot(params string[] houseRules)
     {
         var loader = new GameLoader(new EmbeddedGameAssetSource());
         var definition = TestGames.Load(loader, "hand-and-foot")!;
@@ -20,16 +20,16 @@ public sealed class ZoneSlotTests
             Rng = new SeededRandomSource(9),
         };
         var logic = LogicRegistry.Create(definition);
-        logic.Initialize(state, 2, []);
+        logic.Initialize(state, 2, houseRules);
         return (state, logic);
     }
 
     private static Zone Melds(GameState state) => ZoneIntake.SideZone(state, "meld", state.CurrentPlayer.Id)!;
 
     [Fact]
-    public void Hand_and_foot_declares_its_strip_in_full()
+    public void Hand_and_foot_declares_its_strip_in_full_with_wild_books()
     {
-        var (state, _) = HandAndFoot();
+        var (state, _) = HandAndFoot("wild_books");   // the strip in full has its wild slot
         var slots = ZoneSlots.For(Melds(state), state);
 
         Assert.Equal(13, slots.Count);
@@ -41,7 +41,7 @@ public sealed class ZoneSlotTests
     [Fact]
     public void A_meld_goes_by_its_natural_rank_wilds_and_all()
     {
-        var (state, _) = HandAndFoot();
+        var (state, _) = HandAndFoot("wild_books");   // the strip in full has its wild slot
         var slots = ZoneSlots.For(Melds(state), state);
         var wilds = MeldRules.WildRanks(state.Definition);
 

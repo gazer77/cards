@@ -370,7 +370,9 @@ wilds. A group with no natural card matches by `wild: true`; that is how a wilds
 is declared. A group no slot claims is not drawn in the strip. `label` is shown while the
 slot is empty; omitted, an empty slot shows nothing. Position it with a `place` on the
 slot, or on the zone as `slot_label_place` for all of them — the same `place` every
-label and badge takes.
+label and badge takes. A slot with a `when` [condition](#conditions) exists only while it
+holds — Hand and Foot's `W` slot has `"when": "wild_melds"`, so it is there only at a table
+playing the Wild Books house rule.
 
 `"slot_labels": "always"` keeps each label once its slot fills (the default, `"empty"`,
 hides it under the cards). Placed above the slot, it becomes a heading the cards never
@@ -521,7 +523,7 @@ How groups are placed within a grouped zone:
 | Value | Layout |
 |---|---|
 | `"flow"` | In the order laid, wrapping onto rows (default) |
-| `"by_rank"` | Shorthand for `slots`: one slot per natural rank in the deck, in deck order, labelled with the rank, and a `W` slot last when the game has wilds |
+| `"by_rank"` | Shorthand for `slots`: one slot per natural rank in the deck, in deck order, labelled with the rank, and a `W` slot last when the game has wilds and lets them meld on their own ([`wild_melds`](#wild_melds)) |
 | `"slots"` | The strip as the definition writes it — see below |
 
 `by_rank` pairs naturally with `"arrangement": "stack"`, giving one card's width per rank
@@ -1151,6 +1153,7 @@ A condition is a term name, an object naming a term, or a combinator:
 | `stock_exhausted` | The draw pile is empty |
 | `team_has_melded` | This side has laid a real meld this round (filed red threes do not count) |
 | `hand_empty` | The player to act holds no cards |
+| `wild_melds` | This game lets wilds meld on their own ([`wild_melds`](#wild_melds)) — what Hand and Foot's wild slot is shown under |
 | `always` / `never` | Unconditionally true / false |
 | `{ "hand_count_of_rank": <rank>, "at_least": n }` | The player holds `n`+ of that rank. The rank is a literal (`"K"`) or `"top_discard"` |
 | `{ "meld_value_at_least": n }` | This side's melds are worth `n`+ points, valued as scoring values them |

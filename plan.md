@@ -491,7 +491,8 @@ See `docs/shared-tables.md`.
       join the wild meld. The house rule also asks going out for an `all_wild` book beside
       the clean and `dirty` ones. Computer players gather wilds for it. Found on the way:
       a dirty book was paid the wild bonus — 1,000, where the rules say 300 — now
-      `mixed_canasta_bonus`; a book of wilds alone could never score.
+      `mixed_canasta_bonus`; a book of wilds alone could never score. The W slot shows
+      only with the rule (a slot's `when`, and the `wild_melds` condition).
 - [ ] **Hand and Foot at five seats** — the two side players' feet are drawn at the
       smallest size the table allows. Five seats put three players along the top, which
       leaves the sides a narrow band, and Hand and Foot asks each seat for a hand, a

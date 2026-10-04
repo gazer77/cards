@@ -39,15 +39,12 @@ public static class MeldRules
     /// Whether the phase lets wilds be melded on their own (<c>wild_melds</c>): three
     /// to start one, a book at <c>scoring.book_size</c> like any other. Read off the
     /// definition, as <see cref="UnmeldableRanks"/> is, so conditions and the computer
-    /// players — which see only the state — agree with the handler.
+    /// players — which see only the state — agree with the handler. Asked of the game,
+    /// not the phase in play: the strip still shows its wild meld while a round is scored.
     /// </summary>
     public static bool WildMeldsAllowed(GameState state)
-    {
-        var phase = state.Definition?.Phases.FirstOrDefault(p => p.Id == state.CurrentPhaseId)
-                 ?? state.Definition?.Phases.FirstOrDefault();
-        return phase?.Extra?.TryGetValue("wild_melds", out var el) == true
-            && el.ValueKind == JsonValueKind.True;
-    }
+        => state.Definition?.Phases.Any(p => p.Extra?.TryGetValue("wild_melds", out var el) == true
+                                          && el.ValueKind == JsonValueKind.True) == true;
 
     /// <summary>"3" → Three, "J"/"jack" → Jack, "A"/"ace" → Ace; null for anything else.</summary>
     public static Rank? ParseRank(string text) => text.Trim().ToLowerInvariant() switch

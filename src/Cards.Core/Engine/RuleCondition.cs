@@ -28,6 +28,7 @@ public static class RuleCondition
     [
         "stock_exhausted",
         "team_has_melded",
+        "wild_melds",
         "hand_empty",
         "can_open_with_top_discard",
         "top_discard_is_meldable",
@@ -100,6 +101,10 @@ public static class RuleCondition
         "stock_exhausted" => state.FindZone("deck") is null or { IsEmpty: true },
 
         "hand_empty" => CurrentHand(state) is null or { IsEmpty: true },
+
+        // Whether this table lets wilds meld on their own — a house rule in Hand and Foot,
+        // so its wild slot shows only where something can go in it.
+        "wild_melds" => MeldRules.WildMeldsAllowed(state),
 
         // "Has this side put anything down yet" — the gate on picking up the discard
         // pile in Hand and Foot, and on laying off in most rummy games.

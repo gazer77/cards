@@ -50,7 +50,12 @@ public static class DefinitionValidator
                 problems.Add($"zone '{zone.Id}': slot_labels '{zone.SlotLabels}' is not empty or always.");
 
             for (int i = 0; i < zone.Slots.Count; i++)
+            {
                 ValidateCardMatch($"zone '{zone.Id}'.slots[{i}].match", zone.Slots[i].Match, problems);
+                if (zone.Slots[i].When is { } when)
+                    foreach (var problem in RuleCondition.Validate(when))
+                        problems.Add($"zone '{zone.Id}'.slots[{i}].when: {problem}");
+            }
 
             for (int i = 0; i < zone.GroupBadges.Count; i++)
                 ValidateBadge(zone.Id, i, zone.GroupBadges[i], problems);

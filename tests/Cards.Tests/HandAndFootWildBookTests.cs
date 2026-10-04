@@ -70,6 +70,23 @@ public sealed class HandAndFootWildBookTests
         Assert.Equal(3, Melds(state).GroupCards(0).Count);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_wild_slot_is_there_only_with_the_house_rule(bool wildBooks)
+    {
+        var (state, _) = Discarding(wildBooks);
+        var slots = ZoneSlots.For(Melds(state), state);
+
+        Assert.Equal(wildBooks, slots.Any(s => s.Label == "W"));
+        Assert.Equal(wildBooks ? 13 : 12, slots.Count);
+
+        // Still there while the round is scored, when the phase in play is not the one
+        // that declares the rule.
+        state.CurrentPhaseId = "score";
+        Assert.Equal(wildBooks, ZoneSlots.For(Melds(state), state).Any(s => s.Label == "W"));
+    }
+
     [Fact]
     public void Two_wilds_do_not_start_one()
     {
