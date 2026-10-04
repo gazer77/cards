@@ -477,6 +477,9 @@ See `docs/shared-tables.md`.
       could meld their last card short of the books and be left with no move.
       Not yet: the computer player does not weigh whether taking the pile is worth it
       beyond the existing rule, and never holds back a meld to go out in one turn.
+- [x] **Back to setup** — the table bar's back button (now "← Setup") and the menu's Leave
+      return to the game's setup page, saving the game as before; the game-over card's
+      Games button still goes out to the list.
 - [x] **Hand and Foot at the table** — the meld strip's ranks are headings above their
       slots (`slot_labels: "always"`), so a full slot still says what it is; a score card
       sits lower right, by team where there are teams and by player where there are not.

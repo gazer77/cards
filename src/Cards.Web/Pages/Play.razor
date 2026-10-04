@@ -15,7 +15,7 @@
 
 <div class="table-page">
     <header class="table-bar">
-        <button class="link" @onclick="GoHome">&larr; Games</button>
+        <button class="link" @onclick="GoBack">&larr; Setup</button>
         <span class="table-title">@_title</span>
         <button class="link @(_diagnostics ? "on" : "")"
                 title="Frame timings"
@@ -701,7 +701,7 @@
         if (Vm.IsShared)
         {
             _confirmMessage = "Leave this table? The computer will play your seat for the others.";
-            _confirm        = LeaveSharedTableAsync;
+            _confirm        = () => LeaveSharedTableAsync(SetupPage);
             return;
         }
         _confirmMessage = "Leave this game? Your progress is saved and you can resume it later.";
@@ -715,7 +715,7 @@
         if (action is not null) await action();
     }
 
-    private void LeaveGame() => _ = GoHome();
+    private void LeaveGame() => _ = GoBack();
 
     private void ToggleDiagnostics()
     {
@@ -738,19 +738,32 @@
                             configuration: Variant);
     }
 
-    private async Task LeaveSharedTableAsync()
+    /// <summary>
+    /// Where leaving a game goes: back to its setup, where the player chose it — to play
+    /// it again another way, or resume it — rather than all the way out to the list.
+    /// </summary>
+    private string SetupPage
+        => (Vm.State?.GameId ?? GameId) is { Length: > 0 } id ? $"/setup/{id}" : "/";
+
+    private async Task LeaveSharedTableAsync(string to)
     {
         await Table.LeaveAsync();
-        Nav.NavigateTo("/");
+        Nav.NavigateTo(to);
     }
 
-    private async Task GoHome()
+    /// <summary>The table bar's back button and the menu's Leave: back to the game's setup.</summary>
+    private Task GoBack() => LeaveAsync(SetupPage);
+
+    /// <summary>The game-over card's Games button: out to the list of games.</summary>
+    private Task GoHome() => LeaveAsync("/");
+
+    private async Task LeaveAsync(string to)
     {
         // Walking away from a shared table mid-game leaves the others waiting on this
         // seat, so it is asked about; a finished one is simply left.
         if (Vm.IsShared)
         {
-            if (Vm.IsGameOver) await LeaveSharedTableAsync();
+            if (Vm.IsGameOver) await LeaveSharedTableAsync(to);
             else ConfirmLeave();
             return;
         }
@@ -760,7 +773,7 @@
         if (!Vm.IsGameOver) await Vm.SaveAsync();
         else                await Vm.DeleteSaveAsync();
 
-        Nav.NavigateTo("/");
+        Nav.NavigateTo(to);
     }
 
     public void Dispose()
