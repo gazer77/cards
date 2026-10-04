@@ -480,10 +480,16 @@ See `docs/shared-tables.md`.
 - [x] **Hand and Foot at the table** — the meld strip's ranks are headings above their
       slots (`slot_labels: "always"`), so a full slot still says what it is; a score card
       sits lower right, by team where there are teams and by player where there are not.
-      A double tap on a card in hand finishes the move: onto a meld already down, down
-      as a new meld with the cards picked, or — a lone card that melds nowhere — into
-      the discard. Fixed: a double tap on the discard pile drew from the deck, because
-      the pile's top card was looked up by description and five decks hold its twin.
+      Each meld wears a green "clean" or orange "dirty" badge. A double tap on a card in
+      hand finishes the move: down as a new meld (joining its rank), onto a meld already
+      down (never guessing a meld for wilds picked alone), or — a lone card that melds
+      nowhere — into the discard. Fixed: a double tap on the discard pile drew from the
+      deck, and one on the deck discarded the twin of its top card from hand; both
+      looked a card up by description, and five decks hold its twins.
+- [ ] **Wild melds in Hand and Foot?** — the definition is of two minds: its help says a
+      meld needs two naturals, yet it declares a W slot and a `wild_canasta_bonus`
+      nothing can earn. Allowing them reaches meld validation, `IsMeldGroup`, books and
+      going out, and scoring (which pools wilds across the side rather than per meld).
 - [ ] **Hand and Foot at five seats** — the two side players' feet are drawn at the
       smallest size the table allows. Five seats put three players along the top, which
       leaves the sides a narrow band, and Hand and Foot asks each seat for a hand, a

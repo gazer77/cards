@@ -278,16 +278,17 @@ zone itself, and every counting `shows` means the cards that are there: a deck w
 
 ```json
 "group_badges": [
-  { "shows": "loose", "color": "#A5D66F", "text_color": "#1B4D1B", "zero": "–" },
-  { "shows": "books", "color": "#F28C28" }
+  { "shows": "clean", "text": "clean", "color": "#A5D66F", "text_color": "#1B4D1B" },
+  { "shows": "dirty", "text": "dirty", "color": "#F28C28" }
 ]
 ```
 
 | Field | Values |
 |---|---|
-| `shows` | `cards` (in the group), `books` (complete sets of `scoring.book_size`), `loose` (cards beyond the last complete book — the working stack), `score` (see below) |
+| `shows` | `cards` (in the group), `books` (complete sets of `scoring.book_size`), `loose` (cards beyond the last complete book — the working stack), `clean` and `dirty` (1 when the group is a meld with no wild in it, or with one — cards filed in a slot that are not a meld, such as red threes, are neither), `score` (see below) |
 | `color`, `text_color` | `#RRGGBB`. Text colour is picked for contrast when omitted |
 | `zero` | `hide` (default), or text to show instead of `0` — a dash, typically |
+| `text` | Words shown in place of the number when it is not zero: `"clean"` says what a bare `1` would leave to be guessed |
 | `placement`, `orientation`, `when` | As for [`label`](#label-and-group_label) |
 
 

@@ -349,7 +349,8 @@ public class BadgeDefinition
 
     /// <summary>
     /// What it shows: "cards" (in the group), "books" (complete sets of book_size),
-    /// "loose" (cards beyond the last complete book — the working stack), or "score"
+    /// "loose" (cards beyond the last complete book — the working stack), "clean" and
+    /// "dirty" (1 when the group is a meld without, or with, a wild in it), or "score"
     /// (what the zone would score if the round ended now, by this game's own scoring —
     /// not a count, so a zero is shown rather than hidden).
     /// </summary>
@@ -370,6 +371,13 @@ public class BadgeDefinition
     /// </summary>
     [JsonPropertyName("zero")]
     public string Zero { get; set; } = "hide";
+
+    /// <summary>
+    /// Words to show in place of the number when it is not zero — "clean" on a badge
+    /// that is 1 for a clean meld says what a bare 1 would leave to be guessed.
+    /// </summary>
+    [JsonPropertyName("text")]
+    public string? Text { get; set; }
 
     [JsonPropertyName("placement")]
     public string Placement { get; set; } = "bottom";

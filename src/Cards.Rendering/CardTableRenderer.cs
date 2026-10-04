@@ -1327,7 +1327,7 @@ public sealed class CardTableRenderer
                         capSz, caption);
                 }
 
-                DrawGroupBadges(canvas, zone, rect, meld.Count, cardW);
+                DrawGroupBadges(canvas, zone, rect, meld.Count, cardW, cards: meld);
 
                 x += w + groupGap;
             }
@@ -1455,7 +1455,7 @@ public sealed class CardTableRenderer
                 }
             }
 
-            DrawGroupBadges(canvas, zone, rect, filled ? meld!.Count : 0, cardW, stripScale);
+            DrawGroupBadges(canvas, zone, rect, filled ? meld!.Count : 0, cardW, stripScale, filled ? meld : null);
         }
     }
 
@@ -2352,12 +2352,19 @@ public sealed class CardTableRenderer
     /// on the side each asks for. Badges sharing a side sit in a row, in declaration
     /// order, so "cards | books" reads left to right the way a player thinks of it.
     /// </summary>
-    private void DrawGroupBadges(SKCanvas canvas, Zone zone, SKRect group, int cardCount, float cardW, float? scale = null)
+    private void DrawGroupBadges(SKCanvas canvas, Zone zone, SKRect group, int cardCount, float cardW,
+                                 float? scale = null, IReadOnlyList<Card>? cards = null)
     {
         var badges = zone.Definition?.GroupBadges;
         if (badges is null || badges.Count == 0 || _state is null) return;
 
         int bookSize = ScoringEngine.BookSize(_state.Definition);
+
+        // Clean or dirty: a meld with no wild in it, or one with. Cards filed in a slot
+        // that are not a meld (red threes) are neither.
+        var  wilds   = MeldRules.WildRanks(_state.Definition);
+        bool isMeld  = cards is { Count: > 0 } && MeldRules.IsMeldGroup(cards, wilds, MeldRules.UnmeldableRanks(_state));
+        bool isDirty = isMeld && cards!.Any(c => MeldRules.IsWild(c, wilds));
         float size   = MathF.Max(cardW * 0.15f, 10f) * (scale ?? LabelScale);
 
         // Per side, how far along the row the next badge starts.
@@ -2380,6 +2387,8 @@ public sealed class CardTableRenderer
                     {
                         "books" => cardCount / bookSize,
                         "loose" => cardCount % bookSize,
+                        "clean" => isMeld && !isDirty ? 1 : 0,
+                        "dirty" => isDirty ? 1 : 0,
                         _       => cardCount,
                     }
                     : cardCount;
@@ -2395,7 +2404,7 @@ public sealed class CardTableRenderer
                 if (badge.Zero == "hide") continue;
                 text = badge.Zero;
             }
-            else text = value.ToString();
+            else text = badge.Text ?? value.ToString();
 
             var fill = ParseColor(badge.Color) ?? _theme.PlayerNameColor.WithAlpha(0x66);
             var ink  = ParseColor(badge.TextColor) ?? ContrastingInk(fill);

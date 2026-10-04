@@ -805,9 +805,10 @@ public sealed class DrawDiscardHandler : IPhaseHandler
 
     /// <summary>
     /// A double tap on a card in hand finishes what the taps before it started: the
-    /// selection with this card in it goes onto a meld already down, or down as a new
-    /// one; failing both, a card picked alone is discarded. The card is counted in
-    /// even when the double tap's own first tap took it back out of the selection.
+    /// selection with this card in it goes down as a new meld (joining its rank if one is
+    /// down), or else onto a meld already there; failing both, a card picked alone is
+    /// discarded. The card is counted in even when the double tap's own first tap took
+    /// it back out of the selection.
     /// </summary>
     private GameAction? HandCardAction(GameState state, string cardId, int? uid)
     {
@@ -828,10 +829,18 @@ public sealed class DrawDiscardHandler : IPhaseHandler
             state.Metadata["selected_card"] = string.Join(",", with);
             try
             {
-                if (_specialActions.Contains("add_to_meld") && PlanMeld(state, addToExisting: true, out _) is not null)
-                    return new GameAction("add_to_meld", CardId: cardId, CardUid: card.Uid);
+                // A new meld first: one of a rank already down joins it anyway.
                 if (_specialActions.Contains("meld") && PlanMeld(state, addToExisting: false, out _) is not null)
                     return new GameAction("meld", CardId: cardId, CardUid: card.Uid);
+                // Wilds alone have no meld of their own to go to: adding them picks one,
+                // and a shortcut must not guess — nor throw a wild away. The buttons stay
+                // for a player who means either.
+                var picked = with.Select(t => CardFromToken(state, t)).OfType<Card>().ToList();
+                var wildRanks = MeldRules.WildRanks(state.Definition);
+                if (picked.Count > 0 && picked.All(c => MeldRules.IsWild(c, wildRanks))) return null;
+
+                if (_specialActions.Contains("add_to_meld") && PlanMeld(state, addToExisting: true, out _) is not null)
+                    return new GameAction("add_to_meld", CardId: cardId, CardUid: card.Uid);
             }
             finally
             {

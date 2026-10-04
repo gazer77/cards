@@ -82,6 +82,26 @@ public sealed class HandAndFootGestureTests
     }
 
     [Fact]
+    public void A_double_tap_on_wilds_alone_neither_guesses_a_meld_nor_throws_one_away()
+    {
+        // The report: three picked wilds went onto the kings — a meld the shortcut chose.
+        var (state, logic) = Discarding();
+        var wilds = Give(Hand(state), (Rank.Two, Suit.Clubs), (Rank.Two, Suit.Hearts), (Rank.Two, Suit.Spades),
+                                      (Rank.Four, Suit.Clubs), (Rank.Seven, Suit.Hearts));
+
+        state.Metadata["selected_card"] = $"{wilds[0].Uid},{wilds[1].Uid}";
+        Assert.Null(logic.GetDefaultCardAction(state, wilds[2].Id, wilds[2].Uid));
+
+        state.Metadata.Remove("selected_card");
+        Assert.Null(logic.GetDefaultCardAction(state, wilds[0].Id, wilds[0].Uid));
+
+        // With a natural picked, the wild goes where the natural names.
+        var king = Give(Hand(state), (Rank.King, Suit.Diamonds))[0];
+        state.Metadata["selected_card"] = $"{king.Uid}";
+        Assert.Equal("add_to_meld", logic.GetDefaultCardAction(state, wilds[0].Id, wilds[0].Uid)?.Type);
+    }
+
+    [Fact]
     public void A_double_tap_on_a_lone_card_that_melds_nowhere_discards_it()
     {
         var (state, logic) = Discarding();
